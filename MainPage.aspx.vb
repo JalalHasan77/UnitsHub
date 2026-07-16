@@ -9,29 +9,35 @@ Partial Class MainPage
     'Dim DT As DataTable
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
-            Dim DT As New DataTable
-            DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_PROJECTS")
-
-            For Each DR As DataRow In DT.Rows
-                Dim I As New ListItem
-                I.Text = DR("PROJECT_NAME_EN").ToString
-                I.Value = DR("PROJECT_ID").ToString
-                DropDownList1.Items.Add(I)
-            Next
-
-
-
+            PopulateDropDownList(ddl:=DropDownList1,
+                                 sql:="Select PROJECT_NAME_EN,PROJECT_ID from UNITSHUB_PROJECTS",
+                                 DataConnection:=EBDB_CS,
+                                 firstItemIs:="Select A Project")
         End If
+    End Sub
 
-        VendorPopupHelper.RegisterVendorPopup(Me,
-           btnColumns,
-           "ColumnsList.aspx",
-           400,
-           600,
-           PopupPlacement.Center,
-           "Select Adj",
-   VendorPopupHelper.PopupDisplayMode.FrameOnly)
+    Private Sub PopulateDropDownList(ByRef ddl As DropDownList,
+                                     sql As Object,
+                                     DataConnection As String,
+                                     Optional firstItemIs As String = "",
+                                     Optional SelectedItemIs As String = "")
 
+        Dim DT As New DataTable
+        DT = GetDataTable(DataConnection, sql)
+
+        For Each DR As DataRow In DT.Rows
+            Dim I As New ListItem
+            I.Text = DR(0).ToString
+            I.Value = DR(1).ToString
+            ddl.Items.Add(I)
+        Next
+
+        If firstItemIs <> "" Then
+            Dim I As New ListItem
+            I.Text = firstItemIs
+            I.Value = "##"
+            ddl.Items.Insert(0, I)
+        End If
     End Sub
 
     Protected Sub DropDownList1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles DropDownList1.SelectedIndexChanged
@@ -39,6 +45,21 @@ Partial Class MainPage
         Dim DT As New DataTable
 
         Dim ProjectID As String = DropDownList1.SelectedItem.Value
+
+        If ProjectID = "##" Then
+            GridView1.DataSource = Nothing
+            GridView1.DataBind()
+
+            GridView2.DataSource = Nothing
+            GridView2.DataBind()
+
+            DataList2.DataSource = Nothing
+            DataList2.DataBind()
+
+            Label2.Text = ""
+
+            Exit Sub
+        End If
 
         SQL = SQL + vbCrLf + " SELECT PROJECT_ID, "
         SQL = SQL + vbCrLf + "        TYPE_NAME, "
@@ -112,43 +133,8 @@ Partial Class MainPage
 
         '===============================================================================
         '===============================================================================
-        SQL = ""
-        SQL = SQL + vbCrLf + " SELECT a.DISPLAY_ORDER, a.ATTRIBUTE_NAME "
-        SQL = SQL + vbCrLf + " FROM UNITSHUB_ATTRIBUTES a "
-        SQL = SQL + vbCrLf + " JOIN UNITSHUB_PROJECTSHIERARCHY h "
-        SQL = SQL + vbCrLf + "    ON a.PROJECT_ID = h.PROJECT_ID "
-        SQL = SQL + vbCrLf + "   AND a.NODE_TYPE_ID = h.NODE_TYPE_ID "
-        SQL = SQL + vbCrLf + " WHERE h.PROJECT_ID = '001' "
-        SQL = SQL + vbCrLf + "   AND h.TREELEVEL = ( "
-        SQL = SQL + vbCrLf + "         SELECT MAX(TREELEVEL) "
-        SQL = SQL + vbCrLf + "         FROM UNITSHUB_PROJECTSHIERARCHY "
-        SQL = SQL + vbCrLf + "         WHERE PROJECT_ID = '001' "
-        SQL = SQL + vbCrLf + "       ) "
-        SQL = SQL + vbCrLf + " ORDER BY a.DISPLAY_ORDER; "
 
-
-        Dim ColumnListParameters As New clsListProperties
-        With ColumnListParameters
-            .SQL = SQL '"Select MemberID as ID, MemberName as [Name] from Members order by CInt(NoOfMovement) desc"
-            .FormTitle = "Select Columns"
-            .ColumnHideAndShow = "YN"
-            .EditableColumns = "NN"
-            .ColumnsWidth = New Double() {1, 3}
-            .HoverableList = "Y"
-        End With
-        Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(ColumnListParameters)
-
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      btnColumns,
-                                      "AddMultipleItemsFromList.aspx?Parameters=" & SelectMembersParameters,
-                                      400,
-                                      600,
-                                      PopupPlacement.Center,
-                                      "Select Adj",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
-
-
-
+        AddDialogueToColumns() 'add dialogue to Columns Button
     End Sub
 
     Private Function MakeTwoColumnGrid(source As DataTable) As DataTable
@@ -214,7 +200,52 @@ Partial Class MainPage
         litFields.Text = sb.ToString()
     End Sub
 
+    Protected Sub btnColumns_Click(sender As Object, e As EventArgs) Handles btnColumns.Click
+        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
+                           TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedItems"),
+                            List(Of Dictionary(Of String, Object)))
+        Dim DT As New DataTable
+        DT = PF.ConvertSelectedItemsToDataTable(selectedItems)
+        'Dim DR As DataRow
+        'DR = DT.Rows(0)
+
+        'Dim Text As String = ""
+        'For Each DC As DataColumn In DT.Columns
+        '    Text = Text & vbCrLf & DR(DC.ColumnName).ToString
+        'Next
+        PF.ApplyColumnVisibility(GridView1, DT)
+        '===============================================================================
+        '===============================================================================
+        AddDialogueToColumns()
+
+
+
+    End Sub
+
+    Private Sub AddDialogueToColumns()
+        Dim ColumnListParameters As New clsListPropertiesNoSQL
+        With ColumnListParameters
+            .WholeList = PF.GetAllColumnNames(GridView1)
+            .CheckedList = PF.GetVisibleColumnNames(GridView1)
+            .FormTitle = "Select Columns"
+            .ColumnHideAndShow = "YN"
+            .EditableColumns = "NN"
+            .ColumnsWidth = New Double() {1, 3}
+            .HoverableList = "Y"
+        End With
+        Dim ParamsKey As String = Guid.NewGuid().ToString("N")
+        Session("PopupParams_" & ParamsKey) = ColumnListParameters
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      btnColumns,
+                                      "AddMultipleItemsFromList.aspx?Parameters=" & ParamsKey,
+                                      400,
+                                      600,
+                                      PopupPlacement.Center,
+                                      "Select Adj",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+    End Sub
 End Class
+
 
 
 

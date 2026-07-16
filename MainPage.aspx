@@ -314,7 +314,7 @@
 </asp:DataList>
                                         <br />
 
-                                        <div style="gap: 8px;width:100%;background-color:yellow; align-content:flex-end">
+                                        <div style="gap: 8px;width:100%;align-content:flex-end">
                                             <asp:Button ID="btnColumns"
     runat="server"
     Text="Columns"

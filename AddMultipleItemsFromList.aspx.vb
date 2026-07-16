@@ -15,6 +15,9 @@ Partial Class AddMultipleItemsFromList
     Private Const ViewStateHideMaskKey As String = "AddMultipleItemsFromList_HideColumnsMask"
     Private Const ViewStateEditableMaskKey As String = "AddMultipleItemsFromList_EditableColumnsMask"
     Private Const ViewStateColumnsWidthsKey As String = "AddMultipleItemsFromList_ColumnsWidths"
+    Private Const ViewStateIsNoSqlModeKey As String = "AddMultipleItemsFromList_IsNoSqlMode"
+    Private Const ViewStateWholeListKey As String = "AddMultipleItemsFromList_WholeList"
+    Private Const ViewStateCheckedListKey As String = "AddMultipleItemsFromList_CheckedList"
 
     Private Property SqlText As String
         Get
@@ -52,6 +55,33 @@ Partial Class AddMultipleItemsFromList
         End Set
     End Property
 
+    Private Property IsNoSqlMode As Boolean
+        Get
+            Return Convert.ToBoolean(If(ViewState(ViewStateIsNoSqlModeKey), False))
+        End Get
+        Set(value As Boolean)
+            ViewState(ViewStateIsNoSqlModeKey) = value
+        End Set
+    End Property
+
+    Private Property WholeListItems As List(Of String)
+        Get
+            Return DeserializeStringList(Convert.ToString(ViewState(ViewStateWholeListKey)))
+        End Get
+        Set(value As List(Of String))
+            ViewState(ViewStateWholeListKey) = SerializeStringList(value)
+        End Set
+    End Property
+
+    Private Property CheckedListItems As List(Of String)
+        Get
+            Return DeserializeStringList(Convert.ToString(ViewState(ViewStateCheckedListKey)))
+        End Get
+        Set(value As List(Of String))
+            ViewState(ViewStateCheckedListKey) = SerializeStringList(value)
+        End Set
+    End Property
+
     Protected Sub Page_Load(sender As Object, e As EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
             InitializeFromParameters()
@@ -61,32 +91,77 @@ Partial Class AddMultipleItemsFromList
     End Sub
 
     Private Sub InitializeFromParameters()
-        Dim encryptedParameters As String = Request("Parameters")
+        Dim paramsKey As String = Request("Parameters")
+        Dim NoSqlListParameters As clsListPropertiesNoSQL = Nothing
         Dim ListParameters As clsListProperties = Nothing
 
-        If Not String.IsNullOrEmpty(encryptedParameters) Then
-            ListParameters = EncryNDecry.DecryptObject(Of clsListProperties)(encryptedParameters)
+        If Not String.IsNullOrEmpty(paramsKey) Then
+            Dim sessionValue As Object = Session("PopupParams_" & paramsKey)
+            NoSqlListParameters = TryCast(sessionValue, clsListPropertiesNoSQL)
+
+            If NoSqlListParameters Is Nothing Then
+                ListParameters = TryCast(sessionValue, clsListProperties)
+            End If
+
+            ' Optional: clear it once consumed so it doesn't linger in Session
+            Session.Remove("PopupParams_" & paramsKey)
         End If
 
-        If ListParameters IsNot Nothing Then
+        If NoSqlListParameters IsNot Nothing Then
+            IsNoSqlMode = True
+            SqlText = String.Empty
+            Label1.Text = If(NoSqlListParameters.FormTitle, String.Empty)
+
+            ' The synthetic single "Value" column carries both the checkbox value and the
+            ' visible text, so it must never be hidden or made editable - a hide/edit mask
+            ' from the caller was designed for multi-column SQL result sets, not this case.
+            HideColumnsMask = String.Empty
+            EditableColumnsMask = String.Empty
+            ColumnsWidths = Nothing
+
+            WholeListItems = NoSqlListParameters.WholeList
+            CheckedListItems = If(NoSqlListParameters.CheckedList, New List(Of String)())
+        ElseIf ListParameters IsNot Nothing Then
+            IsNoSqlMode = False
             SqlText = If(ListParameters.SQL, String.Empty)
             Label1.Text = If(ListParameters.FormTitle, String.Empty)
             HideColumnsMask = ListParameters.ColumnHideAndShow
             EditableColumnsMask = ListParameters.EditableColumns
             ColumnsWidths = ListParameters.ColumnsWidth
+            WholeListItems = New List(Of String)()
+            CheckedListItems = New List(Of String)()
         Else
+            IsNoSqlMode = False
             SqlText = String.Empty
             Label1.Text = String.Empty
             HideColumnsMask = String.Empty
             EditableColumnsMask = String.Empty
             ColumnsWidths = Nothing
+            WholeListItems = New List(Of String)()
+            CheckedListItems = New List(Of String)()
         End If
     End Sub
+
+    Private Function TryDecrypt(Of T As Class)(ByVal encryptedParameters As String) As T
+        Try
+            Return EncryNDecry.DecryptObject(Of T)(encryptedParameters)
+        Catch
+            Return Nothing
+        End Try
+    End Function
 
     Private Sub LoadOptions(ByVal selectedIds As HashSet(Of String))
         Dim dt As DataTable
 
-        If String.IsNullOrWhiteSpace(SqlText) Then
+        If IsNoSqlMode Then
+            dt = BuildDataTableFromWholeList(WholeListItems)
+
+            ' Only apply the default CheckedList on the initial (non-postback) load.
+            ' On postback, the checkbox states already posted by the browser are authoritative.
+            If Not Page.IsPostBack Then
+                MergeIntoSelection(selectedIds, CheckedListItems)
+            End If
+        ElseIf String.IsNullOrWhiteSpace(SqlText) Then
             dt = New DataTable()
         Else
             dt = DB.GetDataTable(DB.EBDB, SqlText)
@@ -94,6 +169,31 @@ Partial Class AddMultipleItemsFromList
 
         Session(SessionDataKey) = dt
         litMembersTable.Text = BuildMembersTableHtml(dt, selectedIds)
+    End Sub
+
+    Private Function BuildDataTableFromWholeList(ByVal items As List(Of String)) As DataTable
+        Dim dt As New DataTable()
+        dt.Columns.Add("Value")
+
+        If items IsNot Nothing Then
+            For Each item As String In items
+                dt.Rows.Add(item)
+            Next
+        End If
+
+        Return dt
+    End Function
+
+    Private Sub MergeIntoSelection(ByVal selectedIds As HashSet(Of String), ByVal itemsToAdd As List(Of String))
+        If selectedIds Is Nothing OrElse itemsToAdd Is Nothing Then
+            Return
+        End If
+
+        For Each item As String In itemsToAdd
+            If Not String.IsNullOrEmpty(item) Then
+                selectedIds.Add(item)
+            End If
+        Next
     End Sub
 
     Private Function BuildMembersTableHtml(ByVal dt As DataTable, ByVal selectedIds As HashSet(Of String)) As String
@@ -317,6 +417,36 @@ Partial Class AddMultipleItemsFromList
         Return result.ToArray()
     End Function
 
+    Private Function SerializeStringList(ByVal values As List(Of String)) As String
+        If values Is Nothing OrElse values.Count = 0 Then
+            Return String.Empty
+        End If
+
+        Dim parts As New List(Of String)()
+
+        For Each value As String In values
+            parts.Add(HttpUtility.UrlEncode(If(value, String.Empty)))
+        Next
+
+        Return String.Join("|", parts.ToArray())
+    End Function
+
+    Private Function DeserializeStringList(ByVal value As String) As List(Of String)
+        Dim result As New List(Of String)()
+
+        If String.IsNullOrEmpty(value) Then
+            Return result
+        End If
+
+        Dim tokens As String() = value.Split("|"c)
+
+        For Each token As String In tokens
+            result.Add(HttpUtility.UrlDecode(token))
+        Next
+
+        Return result
+    End Function
+
     Private Function NormalizeMask(ByVal value As String) As String
         If String.IsNullOrEmpty(value) Then
             Return String.Empty
@@ -433,7 +563,9 @@ Partial Class AddMultipleItemsFromList
         Dim dt As DataTable = TryCast(Session(SessionDataKey), DataTable)
 
         If dt Is Nothing Then
-            If String.IsNullOrWhiteSpace(SqlText) Then
+            If IsNoSqlMode Then
+                dt = BuildDataTableFromWholeList(WholeListItems)
+            ElseIf String.IsNullOrWhiteSpace(SqlText) Then
                 dt = New DataTable()
             Else
                 dt = DB.GetDataTable(DB.InfoDB, SqlText)
