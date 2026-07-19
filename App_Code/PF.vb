@@ -175,3 +175,14 @@ Public Module PF
 
 
 End Module
+Public Enum FilterType
+    None
+    TextBox
+    AutoComplete
+    DropDownList
+    RadioButtonList
+    CheckBox
+    CheckBoxList
+    NumberRange
+    DateRange
+End Enum

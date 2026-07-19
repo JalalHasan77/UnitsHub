@@ -1,4 +1,5 @@
-﻿Imports System.Data
+﻿Imports System.Globalization
+Imports System.Data
 
 Partial Class MainPage
     Inherits System.Web.UI.Page
@@ -39,6 +40,203 @@ Partial Class MainPage
             ddl.Items.Insert(0, I)
         End If
     End Sub
+
+    Public Function AnalyzeTable(dt As DataTable) As List(Of ColumnStatistics)
+
+        Dim Results As New List(Of ColumnStatistics)
+
+        Dim Distinct As New Dictionary(Of String, HashSet(Of String))
+        Dim Frequency As New Dictionary(Of String, Dictionary(Of String, Integer))
+        Dim LengthTotals As New Dictionary(Of String, Integer)
+
+        'Initialize
+        For Each c As DataColumn In dt.Columns
+
+            Dim S As New ColumnStatistics
+
+            S.ColumnName = c.ColumnName
+            S.DataType = c.DataType
+            S.TotalRows = dt.Rows.Count
+
+            Results.Add(S)
+
+            Distinct(c.ColumnName) = New HashSet(Of String)
+            Frequency(c.ColumnName) = New Dictionary(Of String, Integer)
+            LengthTotals(c.ColumnName) = 0
+
+        Next
+
+        'Scan the table ONCE
+        For Each r As DataRow In dt.Rows
+
+            For Each S In Results
+
+                Dim Value = r(S.ColumnName)
+
+                If Value Is DBNull.Value Then
+
+                    S.ContainsNulls = True
+                    Continue For
+
+                End If
+
+                S.NonNullRows += 1
+
+                Dim txt As String = Value.ToString.Trim
+
+                Distinct(S.ColumnName).Add(txt)
+
+                Dim L As Integer = txt.Length
+
+                LengthTotals(S.ColumnName) += L
+
+                If L > S.MaxLength Then S.MaxLength = L
+                If L < S.MinLength Then S.MinLength = L
+
+                'Frequency
+                If Frequency(S.ColumnName).ContainsKey(txt) Then
+                    Frequency(S.ColumnName)(txt) += 1
+                Else
+                    Frequency(S.ColumnName).Add(txt, 1)
+                End If
+
+                'Numeric
+                Dim N As Double
+                If Double.TryParse(txt, NumberStyles.Any, CultureInfo.InvariantCulture, N) Then
+
+                    S.ContainsNumbers = True
+                    S.NumericCount += 1
+
+                    If Not S.MinNumber.HasValue OrElse N < S.MinNumber Then
+                        S.MinNumber = N
+                    End If
+
+                    If Not S.MaxNumber.HasValue OrElse N > S.MaxNumber Then
+                        S.MaxNumber = N
+                    End If
+
+                End If
+
+                'Date
+                Dim D As Date
+
+                If Date.TryParse(txt, D) Then
+
+                    S.ContainsDates = True
+                    S.DateCount += 1
+
+                    If Not S.MinDate.HasValue OrElse D < S.MinDate Then
+                        S.MinDate = D
+                    End If
+
+                    If Not S.MaxDate.HasValue OrElse D > S.MaxDate Then
+                        S.MaxDate = D
+                    End If
+
+                End If
+
+                'Boolean
+
+                Select Case txt.ToUpper
+
+                    Case "TRUE", "FALSE", "YES", "NO", "Y", "N", "1", "0"
+
+                        S.ContainsBoolean = True
+                        S.BooleanCount += 1
+
+                End Select
+
+            Next
+
+        Next
+
+        'Finalize
+        For Each S In Results
+
+            S.NullRows = S.TotalRows - S.NonNullRows
+
+            If S.TotalRows > 0 Then
+                S.NullPercent = S.NullRows / S.TotalRows
+            End If
+
+            S.DistinctValues = Distinct(S.ColumnName).Count
+
+            If S.TotalRows > 0 Then
+                S.DistinctRatio = S.DistinctValues / S.TotalRows
+            End If
+
+            If S.NonNullRows > 0 Then
+                S.AverageLength = LengthTotals(S.ColumnName) / S.NonNullRows
+            End If
+
+            If S.MinLength = Integer.MaxValue Then
+                S.MinLength = 0
+            End If
+
+            If Frequency(S.ColumnName).Count > 0 Then
+
+                Dim Winner = Frequency(S.ColumnName).OrderByDescending(Function(x) x.Value).First()
+
+                S.MostCommonValue = Winner.Key
+                S.MostCommonCount = Winner.Value
+
+            End If
+
+            S.IsUnique = (S.DistinctValues = S.NonNullRows)
+
+            S.IsLikelyPrimaryKey =
+            S.IsUnique AndAlso
+            S.ContainsNumbers AndAlso
+            S.NullRows = 0
+
+            S.SuggestedFilter = ChooseFilter(S)
+
+        Next
+
+        Return Results
+
+    End Function
+
+    Private Function ChooseFilter(S As ColumnStatistics) As FilterType
+
+        If S.IsLikelyPrimaryKey Then
+            Return FilterType.None
+        End If
+
+        If S.ContainsBoolean AndAlso S.DistinctValues <= 2 Then
+            Return FilterType.CheckBox
+        End If
+
+        If S.ContainsDates Then
+            Return FilterType.DateRange
+        End If
+
+        If S.ContainsNumbers Then
+
+            If S.DistinctValues <= 20 Then
+                Return FilterType.DropDownList
+            End If
+
+            Return FilterType.NumberRange
+
+        End If
+
+        If S.DistinctValues <= 5 Then
+            Return FilterType.RadioButtonList
+        End If
+
+        If S.DistinctValues <= 30 Then
+            Return FilterType.DropDownList
+        End If
+
+        If S.DistinctValues <= 300 Then
+            Return FilterType.AutoComplete
+        End If
+
+        Return FilterType.TextBox
+
+    End Function
+
 
     Protected Sub DropDownList1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles DropDownList1.SelectedIndexChanged
         Dim SQL As String = ""
@@ -81,8 +279,17 @@ Partial Class MainPage
         Dim View As New DataTable
         View = DB.GetDataTable(EBDB, SQL)
 
-
-        GridView1.DataSource = DB.GetDataTable(EBDB, "Select * from " & View.Rows(0)("VIEWNAME").ToString)
+        Dim DT0 As New DataTable
+        DT0 = DB.GetDataTable(EBDB, "Select * from " & View.Rows(0)("VIEWNAME").ToString)
+        Dim L As New List(Of ColumnStatistics)
+        L = AnalyzeTable(DT0)
+        'Dim L1 As New ColumnStatistics
+        Dim AllFitlers As String = ""
+        For Each L1 As ColumnStatistics In L
+            AllFitlers = AllFitlers & vbCrLf & L1.ColumnName & vbTab & L1.SuggestedFilter
+        Next
+        MsgBox(AllFitlers)
+        GridView1.DataSource = DT0
         GridView1.DataBind()
 
         SQL = ""
