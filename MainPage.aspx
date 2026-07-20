@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
+﻿﻿<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
 <%@ Register assembly="ServerControl1" namespace="ServerControl1" tagprefix="cc1" %>
 
 <!DOCTYPE html>
@@ -354,4 +354,3 @@
 </form>
 </body>
 </html>
-
