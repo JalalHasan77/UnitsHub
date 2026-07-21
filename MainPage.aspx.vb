@@ -243,10 +243,9 @@ Partial Class MainPage
     Protected Sub DropDownList1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles DropDownList1.SelectedIndexChanged
         Dim SQL As String = ""
         Dim DT As New DataTable
+        Dim lcProjectID As String = DropDownList1.SelectedItem.Value
 
-        Dim ProjectID As String = DropDownList1.SelectedItem.Value
-
-        If ProjectID = "##" Then
+        If lcProjectID = "##" Then
             GridView1.DataSource = Nothing
             GridView1.DataBind()
 
@@ -260,7 +259,40 @@ Partial Class MainPage
 
             Exit Sub
         End If
+        'Build the SQL to get units
 
+        'Get "Units" of the Selected project: it is the lowest 
+        SQL = SQL + vbCrLf + "SELECT NODE_TYPE_ID "
+        SQL = SQL + vbCrLf + "FROM UNITSHUB_PROJECTSHIERARCHY "
+        SQL = SQL + vbCrLf + "WHERE PROJECT_ID ='" & lcProjectID & "' "
+        SQL = SQL + vbCrLf + "  AND TREELEVEL = ( "
+        SQL = SQL + vbCrLf + "        SELECT MAX(TREELEVEL) "
+        SQL = SQL + vbCrLf + "        FROM UNITSHUB_PROJECTSHIERARCHY "
+        SQL = SQL + vbCrLf + "        WHERE PROJECT_ID ='" & lcProjectID & "' "
+        SQL = SQL + vbCrLf + "      ) "
+        Dim UnitType As String = DB.RetreiveScalarSTRING(EBDB, SQL)
+
+
+        Dim aliases As New List(Of Tuple(Of Integer, String))
+        aliases = GetColumnAliases(projectId:=lcProjectID, nodeTypeId:=UnitType)
+        SQL = ""
+        SQL = BuildPivotSql(aliases:=aliases, projectId:=lcProjectID, Node_Type_ID:=UnitType)
+
+
+        Dim DT0 As New DataTable
+        DT0 = DB.GetDataTable(EBDB, SQL)
+        'DT0 = DB.GetDataTable(EBDB, "Select * from " & View.Rows(0)("VIEWNAME").ToString)
+
+        'add the table to session so i can use it in other forms
+        '=========================================================
+        Call AddTBLtoSession(DT0)
+
+        'Datatable to GridView =============================
+        GridView1.DataSource = DT0
+        GridView1.DataBind()
+
+        'Build the SQL Again to get Project Info
+        SQL = ""
         SQL = SQL + vbCrLf + " SELECT PROJECT_ID, "
         SQL = SQL + vbCrLf + "        TYPE_NAME, "
         SQL = SQL + vbCrLf + "        TREELEVEL, "
@@ -276,20 +308,11 @@ Partial Class MainPage
         SQL = SQL + vbCrLf + " WHERE RN = 1 "
         SQL = SQL + vbCrLf + " and PROJECT_ID='@PRJID@' "
         SQL = SQL + vbCrLf + " ORDER BY PROJECT_ID "
-
-        SQL = SQL.Replace("@PRJID@", DropDownList1.SelectedItem.Value)
+        SQL = SQL.Replace("@PRJID@", lcProjectID)
+        'Get the View
         Dim View As New DataTable
         View = DB.GetDataTable(EBDB, SQL)
 
-        Dim DT0 As New DataTable
-        DT0 = DB.GetDataTable(EBDB, "Select * from " & View.Rows(0)("VIEWNAME").ToString)
-
-        'add the table to session so i can use it in other forms
-        '=========================================================
-        Call AddTBLtoSession(DT0)
-
-        GridView1.DataSource = DT0
-        GridView1.DataBind()
 
         SQL = ""
         SQL = SQL + vbCrLf + " SELECT "
@@ -311,7 +334,7 @@ Partial Class MainPage
 
 
 
-        Dim ProjectTable As String = DB.RetreiveScalarSTRING(EBDB, "Select VIEWNAME from UNITSHUB_VIEWS where PROJECT_ID ='" & ProjectID & "' and TREELEVEL =1")
+        Dim ProjectTable As String = DB.RetreiveScalarSTRING(EBDB, "Select VIEWNAME from UNITSHUB_VIEWS where PROJECT_ID ='" & lcProjectID & "' and TREELEVEL =1")
         DT = GetDataTable(EBDB, "Select * from " & ProjectTable)
 
         Dim dtFields As New DataTable()
@@ -343,12 +366,58 @@ Partial Class MainPage
         AddDialogueToColumns() 'add dialogue to Columns Button
     End Sub
 
+    Private Function GetColumnAliases(projectId As String,
+                                      nodeTypeId As String) As List(Of Tuple(Of Integer, String))
+        Dim aliases As New List(Of Tuple(Of Integer, String))
+
+
+        Dim sql As String = "SELECT DISPLAY_ORDER, NAME_IN_UI " &
+                             "FROM UNITSHUB_ATTRIBUTES_PROPERTIES " &
+                             "WHERE PROJECT_ID = '" & projectId & "' AND NODE_TYPE_ID = '" & nodeTypeId & "' " &
+                             "ORDER BY DISPLAY_ORDER"
+
+        Dim DT As New DataTable
+        DT = GetDataTable(EBDB, sql)
+
+        For Each DR As DataRow In DT.Rows
+            aliases.Add(Tuple.Create(Convert.ToInt32(DR("DISPLAY_ORDER")), DR("NAME_IN_UI").ToString()))
+        Next
+
+        Return aliases
+    End Function
+
+    Private Function BuildPivotSql(aliases As List(Of Tuple(Of Integer, String)), projectId As String, Node_Type_ID As String) As String
+        Dim sb As New System.Text.StringBuilder()
+
+        sb.AppendLine("SELECT")
+        sb.AppendLine("    n.PROJECT_ID,")
+
+        For i As Integer = 0 To aliases.Count - 1
+            Dim displayOrder As Integer = aliases(i).Item1
+            Dim uiName As String = aliases(i).Item2.Replace("""", "")  ' strip quotes to avoid breaking the alias
+
+            sb.Append("    MAX(CASE WHEN v.DISPLAY_ORDER = " & displayOrder & " THEN v.VALUE_TEXT END) AS """ & uiName & """")
+            If i < aliases.Count - 1 Then sb.Append(",")
+            sb.AppendLine()
+        Next
+
+        sb.AppendLine("FROM UNITSHUB_NODES n")
+        sb.AppendLine("INNER JOIN UNITSHUB_NODE_ATTRIBUTE_VALUE v ON n.NODE_ID = v.NODE_ID")
+        sb.AppendLine("WHERE n.NODE_TYPE_ID = '" & Node_Type_ID & "' ")
+        sb.AppendLine("AND n.PROJECT_ID = '" & projectId.Replace("'", "''") & "'")
+        sb.AppendLine("GROUP BY n.NODE_ID, n.PARENT_NODE_ID, n.PROJECT_ID")
+
+        Return sb.ToString()
+    End Function
+
+
+
     Private Sub AddTBLtoSession(DT0 As DataTable)
 
         Session("MainTable") = DT0
         VendorPopupHelper.RegisterVendorPopup(Me,
                                       btnFilter,
-                                      "Filters.aspx?Parameters=MainTable",
+                                      "Filters.aspx?Parameters=MainTable&ProjectID=" & DropDownList1.SelectedItem.Value,
                                       600,
                                       700,
                                       PopupPlacement.Center,
@@ -461,7 +530,7 @@ Partial Class MainPage
     Protected Sub btnFilter_Click(sender As Object, e As EventArgs) Handles btnFilter.Click
         VendorPopupHelper.RegisterVendorPopup(Me,
                               btnFilter,
-                              "Filters.aspx?Parameters=MainTable",
+                              "Filters.aspx?Parameters=MainTable&ProjectID='" & DropDownList1.SelectedItem.Value & "'",
                               400,
                               600,
                               PopupPlacement.Center,

@@ -7,9 +7,39 @@ Partial Class Filters
     Private Sub Filters_Load(sender As Object, e As EventArgs) Handles Me.Load
 
         Dim MainTable As Data.DataTable = Session("MainTable")
+        Dim ProjectID As String = Request("ProjectID")
+
+        'Refine table to show only "Searchable Fields" ============================================
+        Dim DT As New DataTable
+        DT = GetDataTable(EBDB, "Select NAME_IN_UI from UNITSHUB_ATTRIBUTES_PROPERTIES where PROJECT_ID='" & ProjectID & "' and SEARCHABEL = 'Y'")
+        KeepOnlyColumns(MainTable, DT)
+        '===========================================================================================
+
         Call MakeFilterGridView(MainTable:=MainTable)
 
     End Sub
+
+    Public Sub KeepOnlyColumns(dt As DataTable, desiredColumns As List(Of String))
+        ' Iterate backwards since we're removing items from the collection while looping
+        For i As Integer = dt.Columns.Count - 1 To 0 Step -1
+            Dim colName As String = dt.Columns(i).ColumnName
+
+            If Not desiredColumns.Contains(colName, StringComparer.OrdinalIgnoreCase) Then
+                dt.Columns.RemoveAt(i)
+            End If
+        Next
+    End Sub
+
+    Public Sub KeepOnlyColumns(dt As DataTable, desiredColumns As DataTable)
+        Dim L As New List(Of String)
+        For Each DR As DataRow In desiredColumns.Rows
+            L.Add(DR(0).ToString)
+        Next
+        KeepOnlyColumns(dt, L)
+    End Sub
+
+
+
 
     Private Sub MakeFilterGridView(MainTable As DataTable)
         Dim counts As New Dictionary(Of String, Dictionary(Of String, Integer))
@@ -139,47 +169,48 @@ Partial Class Filters
         Keys = Values.Keys.ToList
 
         If Keys.All(AddressOf IsItNumeric) Then
-            Return GroupDictionaryIntoRangesNumaric(Values, NumberOfRanges)
+            Try
+                Return GroupDictionaryIntoRangesNumaric(Values, NumberOfRanges)
+            Catch ex As Exception
+                IO.File.WriteAllText("\\eskanbank.com\EBUP\EBU\2271\Desktop\UnitsHub\Values.txt", Join(Values.Keys.ToList.ToArray, vbCrLf))
+                MsgBox("done")
+            End Try
+
         Else
             Return GroupDictionaryIntoRangesString(Values, NumberOfRanges)
         End If
     End Function
 
     Public Function GroupDictionaryIntoRangesNumaric(
-                                                    Values As Dictionary(Of String, Integer),
-                                                    NumberOfRanges As Integer) As Dictionary(Of String, Integer)
-
+                                                Values As Dictionary(Of String, Integer),
+                                                NumberOfRanges As Integer) As Dictionary(Of String, Integer)
         Dim lcDic As New Dictionary(Of String, Integer)
 
-        Dim Keys As New List(Of String)
-        Keys = Values.Keys.ToList
+        Dim NumericKeys As New List(Of Double)
+        For Each k As String In Values.Keys
+            NumericKeys.Add(CDbl(k))
+        Next
 
-        Dim MinValue As Double = Keys.Min()
-        Dim MaxValue As Double = Keys.Max()
+        Dim MinValue As Double = NumericKeys.Min()
+        Dim MaxValue As Double = NumericKeys.Max()
 
         'Inclusive range width
         Dim Width As Integer = Math.Ceiling((MaxValue - MinValue + 1) / NumberOfRanges)
         Dim xLen As Integer = 10 ^ (CStr(Width).Length - 1)
-
         Width = Math.Floor(Width / xLen) * xLen
 
         For i As Integer = 0 To NumberOfRanges - 1
-
             Dim FromValue As Double = MinValue + (i * Width)
-
-            Dim ToValue As Double
-            ToValue = FromValue + Width - 1
+            Dim ToValue As Double = FromValue + Width - 1
 
             Dim Cnt As Integer = 0
-
-            For Each v As String In Keys
-                If v >= CStr(FromValue) AndAlso v <= CStr(ToValue) Then
+            For Each nv As Double In NumericKeys
+                If nv >= FromValue AndAlso nv <= ToValue Then
                     Cnt += 1
                 End If
             Next
 
             lcDic.Add(String.Format("{0:N0} - {1:N0}", FromValue, ToValue), Cnt)
-
         Next
 
         Return lcDic
