@@ -32,7 +32,7 @@ Partial Class Filters
                 NewDic.Add(item, DicToSort.Item(item))
             Next
 
-            NewDic = GroupDictionaryIntoRanges(NewDic, 5)
+            If NewDic.Count > 5 Then NewDic = GroupDictionaryIntoRanges(NewDic, 5)
             SortedCounts.Add(columnEntry.Key, NewDic)
         Next
 
@@ -227,7 +227,12 @@ Partial Class Filters
 
             Next
 
-            Result.Add(StartKey & " to " & EndKey, Total)
+            Dim RangeName As String =
+    If(StartKey = EndKey,
+       StartKey,
+       StartKey & " to " & EndKey)
+
+            Result.Add(RangeName, Total)
 
             Index += GroupSize
 
