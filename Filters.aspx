@@ -44,12 +44,19 @@
     border-bottom:none;
 }
 
-.leftText{
-    flex:1;
+.leftCheck{
+    margin-right:10px;
 }
 
-.rightCheck{
+.categoryName{
+    flex:1;
+    text-align:left;
+}
+
+.rightCount{
     margin-left:15px;
+    text-align:right;
+    color:#666;
 }
 
 body{
@@ -100,13 +107,17 @@ body{
 
             <div class="rowItem">
 
-                <span class="leftText">
-                    <%# Eval("Key") %> (<%# Eval("Count") %>)
-                </span>
-
                 <asp:CheckBox ID="chkSelect"
                     runat="server"
-                    CssClass="rightCheck" />
+                    CssClass="leftCheck" />
+
+                <span class="categoryName">
+                    <%# Eval("Key") %>
+                </span>
+
+                <span class="rightCount">
+                    <%# Eval("Count") %>
+                </span>
 
             </div>
 
