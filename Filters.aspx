@@ -76,6 +76,7 @@ body{
                         <tr>
                             <td style="width: 50%">
                                 <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="28px" ForeColor="#C8C8C8" Text="Filter"></asp:Label>
+                                <asp:HiddenField ID="hfFilter" runat="server" />
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
                                 <br />
@@ -101,7 +102,7 @@ body{
         <%# Eval("Title") %>
     </div>
 
-    <asp:Repeater ID="rptRows" runat="server">
+    <asp:Repeater ID="rptRows" runat="server" OnItemDataBound="rptRows_ItemDataBound">
 
         <ItemTemplate>
 
@@ -109,7 +110,8 @@ body{
 
                 <asp:CheckBox ID="chkSelect"
                     runat="server"
-                    CssClass="leftCheck" />
+                    CssClass="leftCheck"
+                    AutoPostBack="true" />
 
                 <span class="categoryName">
                     <%# Eval("Key") %>
