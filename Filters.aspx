@@ -76,7 +76,9 @@ body{
                         <tr>
                             <td style="width: 50%">
                                 <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="28px" ForeColor="#C8C8C8" Text="Filter"></asp:Label>
+                                <asp:Label ID="Label3" runat="server" Text="Label"></asp:Label>
                                 <asp:HiddenField ID="hfFilter" runat="server" />
+                                <asp:Button ID="Button1" runat="server" Text="Button" />
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
                                 <br />
@@ -121,53 +123,6 @@ body{
                                                 </asp:TemplateField>
                                             </Columns>
                                         </asp:GridView>
-
-                                    </td>
-                        </tr>
-                                <tr>
-                                    <td style="width: 100%" align="left">
-
-                                        <asp:Repeater ID="rptTables" runat="server"
-    OnItemDataBound="rptTables_ItemDataBound">
-
-<ItemTemplate>
-
-<div class="tableContainer">
-
-    <div class="tableTitle">
-        <%# Eval("Title") %>
-    </div>
-
-    <asp:Repeater ID="rptRows" runat="server" OnItemDataBound="rptRows_ItemDataBound">
-
-        <ItemTemplate>
-
-            <div class="rowItem">
-
-                <asp:CheckBox ID="chkSelect"
-                    runat="server"
-                    CssClass="leftCheck"
-                    AutoPostBack="true" />
-
-                <span class="categoryName">
-                    <%# Eval("Key") %>
-                </span>
-
-                <span class="rightCount">
-                    <%# Eval("Count") %>
-                </span>
-
-            </div>
-
-        </ItemTemplate>
-
-    </asp:Repeater>
-
-</div>
-
-</ItemTemplate>
-
-</asp:Repeater>
 
                                     </td>
                         </tr>

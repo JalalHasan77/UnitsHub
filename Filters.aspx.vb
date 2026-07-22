@@ -18,38 +18,41 @@ Partial Class Filters
 
     Private Sub Filters_Load(sender As Object, e As EventArgs) Handles Me.Load
 
-        Dim MainTable As Data.DataTable = Session("MainTable")
-        Dim ProjectID As String = Request("ProjectID")
-        Dim FilterExpression As String = ""
-        If Not Page.IsPostBack Then
-            'Refine table to show only "Searchable Fields" — only needs to run once per session,
-            'not on every postback, since MainTable/ProjectID don't change afterward.
-            Dim DT As New DataTable
-            DT = GetDataTable(EBDB, "Select NAME_IN_UI from UNITSHUB_ATTRIBUTES_PROPERTIES where PROJECT_ID='" & ProjectID & "' and SEARCHABEL = 'Y'")
-            KeepOnlyColumns(MainTable, DT)
-            Session("MainTable") = MainTable
 
-            Call MakeFilterGridView(MainTable:=MainTable)
+
+
+
+        If Not Page.IsPostBack Then
+
+            Dim ProjectID As String = Request("ProjectID")
+            Label3.Text = ProjectID
+            RefreshData()
+
+
 
         End If
+    End Sub
 
-        If hfFilter.Value <> "" Then
+
+    Sub RefreshData()
+        Dim MainTable As Data.DataTable = Session("MainTable")
+
+        Dim Filter As String = BuildFilterExpression(GetCheckedCategories())
+
+
+        'Refine table to show only "Searchable Fields" — only needs to run once per session,
+        'not on every postback, since MainTable/ProjectID don't change afterward.
+        Dim DT As New DataTable
+        DT = GetDataTable(EBDB, "Select NAME_IN_UI from UNITSHUB_ATTRIBUTES_PROPERTIES where PROJECT_ID='" & Label3.Text & "' and SEARCHABEL = 'Y'")
+        KeepOnlyColumns(MainTable, DT)
+
+        If Filter.Trim <> "" Then
             Dim DR() As DataRow
-            DR = MainTable.Select(hfFilter.Value)
+            DR = MainTable.Select(Filter.Trim)
             MainTable = DR.CopyToDataTable
         End If
 
-        ' Runs on every request (initial load AND postback): the Repeater tree must be rebuilt
-        ' identically every time for control IDs to line up.
-
-
-        ' Because chkSelect sits two Repeaters deep and both are fully rebuilt above, ASP.NET's
-        ' automatic "reapply the posted checkbox value onto the recreated control" mechanism is
-        ' unreliable at this nesting depth (this is what was causing the checked state to revert
-        ' immediately after postback). Instead, read each checkbox's actual posted value directly
-        ' from Request.Form now that the tree exists, and drive Checked/Session from that.
-        SyncCheckboxSelectionsFromForm()
-
+        Call MakeFilterGridView(MainTable:=MainTable)
     End Sub
 
     ''' <summary>
@@ -108,6 +111,58 @@ Partial Class Filters
 
         Return String.Join(" AND ", columnExpressions)
     End Function
+
+    ''' <summary>
+    ''' Walks GridView1 (outer) and each row's nested GridView2 (inner), collecting the
+    ''' "Categories" of every checked CheckBox1.
+    ''' Key = the outer row's Title (from Label1); Value = the checked categories for that title.
+    ''' Rows with no checked boxes are skipped (not added with an empty list).
+    ''' </summary>
+    Public Function GetCheckedCategories() As Dictionary(Of String, List(Of String))
+        Dim Result As Dictionary(Of String, List(Of String))
+
+        If Session("Result") IsNot Nothing Then
+            Result = CType(Session("Result"), Dictionary(Of String, List(Of String)))
+        Else
+            Result = New Dictionary(Of String, List(Of String))
+        End If
+
+        For Each OuterRow As GridViewRow In GridView1.Rows
+            If OuterRow.RowType <> DataControlRowType.DataRow Then Continue For
+
+            Dim TitleLabel As Label = CType(OuterRow.FindControl("Label1"), Label)
+            Dim InnerGrid As GridView = CType(OuterRow.FindControl("GridView2"), GridView)
+
+            If TitleLabel Is Nothing OrElse InnerGrid Is Nothing Then Continue For
+
+            Dim Title As String = TitleLabel.Text
+            Dim CheckedCategories As New List(Of String)
+
+            For Each InnerRow As GridViewRow In InnerGrid.Rows
+                If InnerRow.RowType <> DataControlRowType.DataRow Then Continue For
+
+                Dim Chk As CheckBox = CType(InnerRow.FindControl("CheckBox1"), CheckBox)
+                If Chk Is Nothing OrElse Not Chk.Checked Then Continue For
+
+                Dim CategoriesRaw As String = Chk.Attributes("Categories")
+                If Not String.IsNullOrEmpty(CategoriesRaw) Then
+                    CheckedCategories.AddRange(CategoriesRaw.Split("|"c))
+                End If
+            Next
+
+            ' Refresh this title's entry to reflect the current checkbox state:
+            ' overwrite if it exists, add if new, remove if nothing is checked anymore.
+            If CheckedCategories.Count > 0 Then
+                Result(Title) = CheckedCategories
+            ElseIf Result.ContainsKey(Title) Then
+                Result.Remove(Title)
+            End If
+        Next
+
+        Session("Result") = Result
+        Return Result
+    End Function
+
 
     Public Sub KeepOnlyColumns(dt As DataTable, desiredColumns As List(Of String))
         ' Iterate backwards since we're removing items from the collection while looping
@@ -398,21 +453,7 @@ Partial Class Filters
         End If
     End Function
 
-    Protected Sub rptTables_ItemDataBound(sender As Object, e As RepeaterItemEventArgs) Handles rptTables.ItemDataBound
-        If e.Item.ItemType = ListItemType.Item OrElse
-      e.Item.ItemType = ListItemType.AlternatingItem Then
 
-            Dim tbl = CType(e.Item.DataItem, TableViewModel)
-
-            Dim rpt As Repeater =
-                CType(e.Item.FindControl("rptRows"), Repeater)
-
-            _currentColumnName = tbl.Title
-            rpt.DataSource = tbl.Rows
-            rpt.DataBind()
-
-        End If
-    End Sub
 
     Protected Sub rptRows_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
         If e.Item.ItemType = ListItemType.Item OrElse
@@ -449,69 +490,7 @@ Partial Class Filters
     '''   fully-rebuilt Repeaters. Updates Session to match.
     ''' - On initial GET: restores Checked from previously saved Session selections.
     ''' </summary>
-    Private Sub SyncCheckboxSelectionsFromForm()
-        Dim SelectedFilters As Dictionary(Of String, List(Of String)) = GetSelectedFilters()
 
-        For Each tableItem As RepeaterItem In rptTables.Items
-            If tableItem.ItemType <> ListItemType.Item AndAlso tableItem.ItemType <> ListItemType.AlternatingItem Then Continue For
-
-            Dim innerRpt As Repeater = CType(tableItem.FindControl("rptRows"), Repeater)
-            If innerRpt Is Nothing Then Continue For
-
-            For Each rowItem As RepeaterItem In innerRpt.Items
-                If rowItem.ItemType <> ListItemType.Item AndAlso rowItem.ItemType <> ListItemType.AlternatingItem Then Continue For
-
-                Dim chk As CheckBox = CType(rowItem.FindControl("chkSelect"), CheckBox)
-                If chk Is Nothing Then Continue For
-
-                ' Note: RepeaterItem.DataItem is only valid during ItemDataBound — it's Nothing by
-                ' the time we get here. columnName/Categories were stamped onto the checkbox's
-                ' Attributes while binding was in progress (see rptRows_ItemDataBound), so read
-                ' them back from there instead.
-                Dim columnName As String = chk.Attributes("ColumnName")
-                Dim categoriesStr As String = chk.Attributes("Categories")
-                Dim categoryList As String() = If(String.IsNullOrEmpty(categoriesStr), New String() {}, categoriesStr.Split("|"c))
-
-                If String.IsNullOrEmpty(columnName) Then Continue For
-
-                If Page.IsPostBack Then
-                    Dim isChecked As Boolean = (Request.Form(chk.UniqueID) IsNot Nothing)
-                    chk.Checked = isChecked
-
-                    If isChecked Then
-                        If Not SelectedFilters.ContainsKey(columnName) Then SelectedFilters(columnName) = New List(Of String)
-                        For Each v As String In categoryList
-                            If Not SelectedFilters(columnName).Contains(v) Then SelectedFilters(columnName).Add(v)
-                        Next
-                    Else
-                        If SelectedFilters.ContainsKey(columnName) Then
-                            For Each v As String In categoryList
-                                SelectedFilters(columnName).Remove(v)
-                            Next
-                            If SelectedFilters(columnName).Count = 0 Then SelectedFilters.Remove(columnName)
-                        End If
-                    End If
-
-
-                Else
-                    ' Initial GET: reflect any selections already saved in Session (e.g. user navigated back)
-                    If SelectedFilters.ContainsKey(columnName) Then
-                        If categoryList.Intersect(SelectedFilters(columnName)).Any() Then
-                            chk.Checked = True
-                        End If
-                    End If
-                End If
-            Next
-        Next
-        Session("SelectedFilters") = SelectedFilters
-
-        If SelectedFilters.Count > 0 Then
-            hfFilter.Value = BuildFilterExpression(SelectedFilters)
-        End If
-
-
-
-    End Sub
     Protected Sub GridView1_RowDataBound(sender As Object, e As GridViewRowEventArgs) Handles GridView1.RowDataBound
         Dim R As GridViewRow
         R = e.Row
@@ -531,9 +510,35 @@ Partial Class Filters
         End If
     End Sub
     Protected Sub CheckBox1_CheckedChanged(sender As Object, e As EventArgs)
-        Dim CHK As CheckBox
-        CHK = CType(sender, CheckBox)
-        MsgBox(CHK.Attributes("Categories"))
+        Dim CheckedCategories As List(Of String)
+        If Session("CheckedCheckBox") IsNot Nothing Then
+            CheckedCategories = CType(Session("CheckedCheckBox"), List(Of String))
+        Else
+            CheckedCategories = New List(Of String)
+        End If
+
+        Dim Chk As CheckBox
+        Chk = CType(sender, CheckBox)
+        Dim CategoriesRaw As String = Chk.Attributes("Categories")
+
+        If Not String.IsNullOrEmpty(CategoriesRaw) Then
+            Dim ItemsToToggle As String() = CategoriesRaw.Split("|"c)
+
+            If Chk.Checked = True Then
+                For Each Item As String In ItemsToToggle
+                    If Not CheckedCategories.Contains(Item) Then
+                        CheckedCategories.Add(Item)
+                    End If
+                Next
+            Else
+                For Each Item As String In ItemsToToggle
+                    CheckedCategories.Remove(Item)
+                Next
+            End If
+        End If
+        Session("CheckedCheckBox") = CheckedCategories
+
+        RefreshData()
     End Sub
     Protected Sub GridView2_RowDataBound(sender As Object, e As GridViewRowEventArgs)
         Dim R As GridViewRow
@@ -543,8 +548,58 @@ Partial Class Filters
             chk = R.FindControl("CheckBox1")
             chk.Text = R.DataItem("Key").ToString
             chk.Attributes.Add("Categories", R.DataItem("Categories").ToString)
+            Dim CheckedCategories As List(Of String)
+            If Session("CheckedCheckBox") IsNot Nothing Then
+                CheckedCategories = CType(Session("CheckedCheckBox"), List(Of String))
+
+                If (chk.Text.Contains(" to ") Or chk.Text.Contains(" - ")) = False Then
+                    If CheckedCategories.Contains(chk.Text) Then
+                        chk.Checked = True
+                    End If
+                Else
+                    Dim Parts() As String
+                    If chk.Text.Contains(" to ") Then
+                        Parts = chk.Text.Split(New String() {" to "}, StringSplitOptions.None)
+                    Else
+                        Parts = chk.Text.Split(New String() {" - "}, StringSplitOptions.None)
+                    End If
+
+                    Dim FromPart As String = Parts(0).Trim()
+                    Dim ToPart As String = Parts(1).Trim()
+
+                    Dim IsInRange As Boolean = False
+
+                    If IsNumeric(FromPart) AndAlso IsNumeric(ToPart) Then
+                        Dim FromVal As Double = CDbl(FromPart)
+                        Dim ToVal As Double = CDbl(ToPart)
+
+                        For Each Item As String In CheckedCategories
+                            If IsNumeric(Item) Then
+                                Dim ItemVal As Double = CDbl(Item)
+                                If ItemVal >= FromVal AndAlso ItemVal <= ToVal Then
+                                    IsInRange = True
+                                    Exit For
+                                End If
+                            End If
+                        Next
+                    Else
+                        For Each Item As String In CheckedCategories
+                            If String.Compare(Item, FromPart) >= 0 AndAlso String.Compare(Item, ToPart) <= 0 Then
+                                IsInRange = True
+                                Exit For
+                            End If
+                        Next
+                    End If
+
+                    chk.Checked = IsInRange
+                End If
+
+            End If
 
         End If
+
+    End Sub
+    Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
 
     End Sub
 End Class
