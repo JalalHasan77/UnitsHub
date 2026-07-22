@@ -366,13 +366,13 @@ Partial Class Filters
 
         For i As Integer = 0 To NumberOfRanges - 1
             Dim FromValue As Double = MinValue + (i * Width)
-            Dim ToValue As Double = FromValue + Width - 1
+            Dim ToValue As Double = FromValue + Width '- 1
 
             Dim Cnt As Integer = 0
             Dim CatList As New List(Of String)
 
             For Each nv As Double In NumericKeys
-                If nv >= FromValue AndAlso nv <= ToValue Then
+                If nv >= FromValue AndAlso nv < ToValue Then
                     Cnt += 1
                     CatList.Add(KeyLookup(nv))
                 End If
