@@ -1,4 +1,4 @@
-﻿﻿<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
+﻿<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
 <%@ Register assembly="ServerControl1" namespace="ServerControl1" tagprefix="cc1" %>
 
 <!DOCTYPE html>
@@ -329,6 +329,30 @@
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
                                         <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333">
                                             <AlternatingRowStyle BackColor="White" ForeColor="#284775" />
+                                            <Columns>
+                                                <asp:TemplateField HeaderText="Actions">
+                                                    <ItemTemplate>
+
+                                                        <div class="dropdown">
+
+                                                            <button class="btn btn-sm btn-primary dropdown-toggle"
+                                                                    type="button"
+                                                                    data-bs-toggle="dropdown">
+                                                                Actions
+                                                            </button>
+
+                                                            <ul class="dropdown-menu">
+
+                                                                <asp:PlaceHolder ID="phActions"
+                                                                                 runat="server" />
+
+                                                            </ul>
+
+                                                        </div>
+
+                                                    </ItemTemplate>
+                                                </asp:TemplateField>
+                                            </Columns>
                                             <EditRowStyle BackColor="#999999" />
                                             <FooterStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" />
                                             <HeaderStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center"/>
