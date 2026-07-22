@@ -91,6 +91,42 @@ body{
                                 <tr>
                                     <td style="width: 100%" align="left">
 
+                                        <asp:GridView ID="GridView1" runat="server" AutoGenerateColumns="False"
+                                            GridLines="None" CellPadding="0" CellSpacing="0" BorderWidth="0"
+                                            ShowHeader="False" Width="100%">
+                                            <Columns>
+                                                <asp:TemplateField>
+                                                    <ItemTemplate>
+                                                        <div class="tableContainer">
+                                                            <div class="tableTitle">
+                                                                <asp:Label ID="Label1" runat="server" Text='<%# Bind("Title") %>'></asp:Label>
+                                                            </div>
+                                                            <asp:GridView ID="GridView2" runat="server" AutoGenerateColumns="False"
+                                                                GridLines="None" CellPadding="0" CellSpacing="0" BorderWidth="0"
+                                                                ShowHeader="False" Width="100%" OnRowDataBound="GridView2_RowDataBound">
+                                                                <Columns>
+                                                                    <asp:TemplateField>
+                                                                        <ItemTemplate>
+                                                                            <div class="rowItem">
+                                                                                <asp:CheckBox ID="CheckBox1" runat="server" CssClass="leftCheck" AutoPostBack="true" OnCheckedChanged="CheckBox1_CheckedChanged" />
+                                                                                <span class="rightCount"><%# Eval("Count") %></span>
+                                                                            </div>
+                                                                        </ItemTemplate>
+                                                                    </asp:TemplateField>
+                                                                    <asp:BoundField DataField="Categories" Visible="False" />
+                                                                </Columns>
+                                                            </asp:GridView>
+                                                        </div>
+                                                    </ItemTemplate>
+                                                </asp:TemplateField>
+                                            </Columns>
+                                        </asp:GridView>
+
+                                    </td>
+                        </tr>
+                                <tr>
+                                    <td style="width: 100%" align="left">
+
                                         <asp:Repeater ID="rptTables" runat="server"
     OnItemDataBound="rptTables_ItemDataBound">
 

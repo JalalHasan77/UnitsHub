@@ -28,6 +28,9 @@ Partial Class Filters
             DT = GetDataTable(EBDB, "Select NAME_IN_UI from UNITSHUB_ATTRIBUTES_PROPERTIES where PROJECT_ID='" & ProjectID & "' and SEARCHABEL = 'Y'")
             KeepOnlyColumns(MainTable, DT)
             Session("MainTable") = MainTable
+
+            Call MakeFilterGridView(MainTable:=MainTable)
+
         End If
 
         If hfFilter.Value <> "" Then
@@ -38,7 +41,7 @@ Partial Class Filters
 
         ' Runs on every request (initial load AND postback): the Repeater tree must be rebuilt
         ' identically every time for control IDs to line up.
-        Call MakeFilterGridView(MainTable:=MainTable)
+
 
         ' Because chkSelect sits two Repeaters deep and both are fully rebuilt above, ASP.NET's
         ' automatic "reapply the posted checkbox value onto the recreated control" mechanism is
@@ -169,8 +172,6 @@ Partial Class Filters
 
         Dim DS As New DataSet
         DS = ConvertToDataSet(sortedCounts:=SortedCounts)
-
-
         Dim Tables As New List(Of TableViewModel)
 
         For Each dt As DataTable In DS.Tables
@@ -182,8 +183,12 @@ Partial Class Filters
 
         Next
 
-        rptTables.DataSource = Tables
-        rptTables.DataBind()
+        'rptTables.DataSource = Tables
+        'rptTables.DataBind()
+
+        GridView1.DataSource = Tables
+        GridView1.DataBind()
+
 
     End Sub
 
@@ -505,6 +510,41 @@ Partial Class Filters
         End If
 
 
+
+    End Sub
+    Protected Sub GridView1_RowDataBound(sender As Object, e As GridViewRowEventArgs) Handles GridView1.RowDataBound
+        Dim R As GridViewRow
+        R = e.Row
+
+        If R.RowType = DataControlRowType.DataRow Then
+            Dim GV As GridView
+            GV = R.FindControl("GridView2")
+            Dim table As TableViewModel = CType(e.Row.DataItem, TableViewModel)
+
+            'Access the properties
+            Dim title As String = table.Title
+            Dim dt As DataTable = table.Rows
+
+            GV.DataSource = dt
+            GV.DataBind()
+
+        End If
+    End Sub
+    Protected Sub CheckBox1_CheckedChanged(sender As Object, e As EventArgs)
+        Dim CHK As CheckBox
+        CHK = CType(sender, CheckBox)
+        MsgBox(CHK.Attributes("Categories"))
+    End Sub
+    Protected Sub GridView2_RowDataBound(sender As Object, e As GridViewRowEventArgs)
+        Dim R As GridViewRow
+        R = e.Row
+        If R.RowType = DataControlRowType.DataRow Then
+            Dim chk As CheckBox
+            chk = R.FindControl("CheckBox1")
+            chk.Text = R.DataItem("Key").ToString
+            chk.Attributes.Add("Categories", R.DataItem("Categories").ToString)
+
+        End If
 
     End Sub
 End Class
