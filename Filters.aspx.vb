@@ -22,6 +22,7 @@ Partial Class Filters
 
 
 
+
         If Not Page.IsPostBack Then
 
             Dim ProjectID As String = Request("ProjectID")
@@ -35,7 +36,7 @@ Partial Class Filters
 
 
     Sub RefreshData()
-        Dim MainTable As Data.DataTable = Session("MainTable")
+        Dim MainTable As Data.DataTable = Session("FilterMainTable")
 
         Dim Filter As String = BuildFilterExpression(GetCheckedCategories())
 
@@ -599,8 +600,42 @@ Partial Class Filters
         End If
 
     End Sub
+    ''' <summary>
+    ''' OK: builds the DataTable.Select-style FilterExpression from the currently checked
+    ''' boxes and hands it back to the parent window, mirroring how
+    ''' AddMultipleItemsFromList.Button1_Click returns its selection via VendorPopupHelper.
+    ''' </summary>
     Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        Dim MainTable As DataTable = Session("FilterMainTable")
+        Dim FilterExpression As String = BuildFilterExpression(GetCheckedCategories(), MainTable)
 
+        hfFilter.Value = FilterExpression
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(
+            page:=Me,
+            returnValue:=FilterExpression,
+            startupScriptKey:="FilterExpression",
+            skipPostBack:=False)
+    End Sub
+
+    ''' <summary>
+    ''' Cancel: closes the popup without returning anything. Client-side only
+    ''' (Button2 has UseSubmitBehavior="false" and its own OnClientClick), but this
+    ''' handler stays in place in case the button is ever wired to Handles Button2.Click
+    ''' as well - e.g. for non-JS fallback / server-side cleanup.
+    ''' </summary>
+    Protected Sub Button2_Click(sender As Object, e As EventArgs) Handles Button2.Click
+        Dim script As String = "(function () {" &
+               "    if (window.parent && typeof window.parent.closeVendorDialog === 'function') {" &
+               "        window.parent.closeVendorDialog();" &
+               "    }" &
+               "})();"
+
+        If ScriptManager.GetCurrent(Me) IsNot Nothing Then
+            ScriptManager.RegisterStartupScript(Me, Me.GetType(), "ClosePopupOnly", script, True)
+        Else
+            Me.ClientScript.RegisterStartupScript(Me.GetType(), "ClosePopupOnly", script, True)
+        End If
     End Sub
 End Class
 

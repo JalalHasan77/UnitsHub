@@ -241,6 +241,13 @@ Partial Class MainPage
 
 
     Protected Sub DropDownList1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles DropDownList1.SelectedIndexChanged
+        Session("Result") = Nothing
+        Session("CheckedCheckBox") = Nothing
+        loadData()
+
+    End Sub
+
+    Sub loadData(Optional Filter As String = "")
         Dim SQL As String = ""
         Dim DT As New DataTable
         Dim lcProjectID As String = DropDownList1.SelectedItem.Value
@@ -287,6 +294,14 @@ Partial Class MainPage
         '=========================================================
         Call AddTBLtoSession(DT0)
 
+
+
+        'Filter ther result 
+        If Filter <> "" Then
+            Dim DR() As DataRow
+            DR = DT0.Select(Filter)
+            DT0 = DR.CopyToDataTable
+        End If
         'Datatable to GridView =============================
         GridView1.DataSource = DT0
         GridView1.DataBind()
@@ -364,6 +379,15 @@ Partial Class MainPage
         '===============================================================================
 
         AddDialogueToColumns() 'add dialogue to Columns Button
+        Dim ParameterName As String = "FilterMainTable" & Guid.NewGuid.ToString
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                      btnFilter,
+                      "Filters.aspx?Parameters=FilterMainTable&ProjectID=" & DropDownList1.SelectedItem.Value & "",
+                      600,
+                      700,
+                      PopupPlacement.Center,
+                      "Select Adj",
+                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
     End Sub
 
     Private Function GetColumnAliases(projectId As String,
@@ -414,15 +438,15 @@ Partial Class MainPage
 
     Private Sub AddTBLtoSession(DT0 As DataTable)
 
-        Session("MainTable") = DT0
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      btnFilter,
-                                      "Filters.aspx?Parameters=MainTable&ProjectID=" & DropDownList1.SelectedItem.Value,
-                                      600,
-                                      700,
-                                      PopupPlacement.Center,
-                                      "Select Adj",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+        Session("FilterMainTable") = DT0
+        'VendorPopupHelper.RegisterVendorPopup(Me,
+        '                              btnFilter,
+        '                              "Filters.aspx?Parameters=MainTable&ProjectID=" & DropDownList1.SelectedItem.Value,
+        '                              600,
+        '                              700,
+        '                              PopupPlacement.Center,
+        '                              "Select Adj",
+        '                              VendorPopupHelper.PopupDisplayMode.FrameOnly)
 
     End Sub
 
@@ -528,13 +552,10 @@ Partial Class MainPage
     End Sub
 
     Protected Sub btnFilter_Click(sender As Object, e As EventArgs) Handles btnFilter.Click
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                              btnFilter,
-                              "Filters.aspx?Parameters=MainTable&ProjectID='" & DropDownList1.SelectedItem.Value & "'",
-                              400,
-                              600,
-                              PopupPlacement.Center,
-                              "Select Adj",
-                              VendorPopupHelper.PopupDisplayMode.FrameOnly)
+
+        Dim FilterExpression As String =
+                           TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "FilterExpression"), String)
+
+        loadData(FilterExpression)
     End Sub
 End Class
