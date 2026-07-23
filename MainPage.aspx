@@ -157,6 +157,55 @@
     cursor: not-allowed;
 }
 
+.actionMenu{
+    position:relative;
+    display:inline-block;
+}
+
+.actionButton{
+    display:inline-block;
+    width:28px;
+    height:28px;
+    line-height:28px;
+    text-align:center;
+    font-size:22px;
+    cursor:pointer;
+    border-radius:4px;
+    user-select:none;
+}
+
+.actionButton:hover{
+    background:#eeeeee;
+}
+
+.actionPopup{
+    display:none;
+    position:fixed;
+    min-width:170px;
+    background:white;
+    border:1px solid #cccccc;
+    box-shadow:0 3px 10px rgba(0,0,0,.25);
+    z-index:9999;
+}
+
+.actionPopup.show{
+    display:block;
+}
+
+.actionItem{
+    display:block;
+    padding:8px 12px;
+    color:#333;
+    text-decoration:none;
+    font-family:Arial;
+    font-size:13px;
+}
+
+.actionItem:hover{
+    background:#f5f5f5;
+}
+
+
 </style>
  
 
@@ -176,6 +225,48 @@
             }
             // alert(strUser);
         }
+
+function toggleMenu(btn, evt) {
+
+    if (evt) { evt.stopPropagation(); }
+
+    var popup = btn.nextElementSibling;
+    var wasOpen = popup.classList.contains("show");
+
+    document.querySelectorAll(".actionPopup").forEach(function (m) {
+        m.classList.remove("show");
+    });
+
+    if (wasOpen) { return; }
+
+    popup.style.visibility = "hidden";
+    popup.classList.add("show");
+
+    var rect = btn.getBoundingClientRect();
+    var popupWidth = popup.offsetWidth;
+
+    var top = rect.bottom + 2;
+    var left = rect.left;
+
+    var maxLeft = window.innerWidth - popupWidth - 4;
+    if (left > maxLeft) { left = maxLeft; }
+
+    popup.style.top = top + "px";
+    popup.style.left = left + "px";
+    popup.style.visibility = "visible";
+
+}
+
+function closeAllActionMenus() {
+    document.querySelectorAll(".actionPopup").forEach(function (m) {
+        m.classList.remove("show");
+    });
+}
+
+document.addEventListener("click", closeAllActionMenus);
+window.addEventListener("scroll", closeAllActionMenus, true);
+window.addEventListener("resize", closeAllActionMenus);
+
 
         function syncGridScrollbars() {
             var top = document.getElementById('gvScrollTop');
@@ -333,22 +424,35 @@
                                                 <asp:TemplateField HeaderText="Actions">
                                                     <ItemTemplate>
 
-                                                        <div class="dropdown">
+                                                        <div class="actionMenu">
 
-                                                            <button class="btn btn-sm btn-primary dropdown-toggle"
-                                                                    type="button"
-                                                                    data-bs-toggle="dropdown">
-                                                                Actions
-                                                            </button>
+    <button type="button" class="actionButton" onclick="toggleMenu(this, event)">
+        &#8942;
+    </button>
 
-                                                            <ul class="dropdown-menu">
+    <div class="actionPopup" onclick="event.stopPropagation();">
 
-                                                                <asp:PlaceHolder ID="phActions"
-                                                                                 runat="server" />
+        <asp:LinkButton ID="lnkApprove"
+            runat="server"
+            CssClass="actionItem"
+            Text="✔ Approve"
+            CommandName="Approve" />
 
-                                                            </ul>
+        <asp:LinkButton ID="lnkBounce"
+            runat="server"
+            CssClass="actionItem"
+            Text="↩ Bounce"
+            CommandName="Bounce" />
 
-                                                        </div>
+        <asp:LinkButton ID="lnkEdit"
+            runat="server"
+            CssClass="actionItem"
+            Text="✎ Edit"
+            CommandName="Edit" />
+
+    </div>
+
+</div>
 
                                                     </ItemTemplate>
                                                 </asp:TemplateField>

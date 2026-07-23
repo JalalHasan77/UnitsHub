@@ -558,4 +558,48 @@ Partial Class MainPage
 
         loadData(FilterExpression)
     End Sub
+
+    Private Sub GridView1_RowDataBound(sender As Object, e As GridViewRowEventArgs) Handles GridView1.RowDataBound
+        If e.Row.RowType <> DataControlRowType.DataRow Then Exit Sub
+
+        Dim State As String =
+            DataBinder.Eval(e.Row.DataItem, "STATUS").ToString()
+
+        Dim btnApprove As LinkButton =
+            CType(e.Row.FindControl("lnkApprove"), LinkButton)
+
+        Dim btnBounce As LinkButton =
+            CType(e.Row.FindControl("lnkBounce"), LinkButton)
+
+        Dim btnEdit As LinkButton =
+            CType(e.Row.FindControl("lnkEdit"), LinkButton)
+
+        Dim btnHistory As LinkButton =
+            CType(e.Row.FindControl("lnkHistory"), LinkButton)
+
+        Select Case State
+
+            Case "Waiting for Finance Review"
+
+                btnApprove.Visible = True
+                btnBounce.Visible = True
+                btnEdit.Visible = True
+                btnHistory.Visible = True
+
+            Case "Vacant"
+
+                btnApprove.Visible = True
+                btnBounce.Visible = True
+                btnEdit.Visible = True
+                'btnHistory.Visible = True
+
+            Case Else
+
+                btnApprove.Visible = True
+                btnBounce.Visible = True
+                btnEdit.Visible = True
+                'btnHistory.Visible = True
+
+        End Select
+    End Sub
 End Class
