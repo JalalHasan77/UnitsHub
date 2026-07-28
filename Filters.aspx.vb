@@ -1,5 +1,4 @@
-﻿
-Imports System.Data
+﻿Imports System.Data
 Imports System.Linq
 
 Public Class RangeGroupInfo
@@ -36,7 +35,17 @@ Partial Class Filters
 
 
     Sub RefreshData()
-        Dim MainTable As Data.DataTable = Session("FilterMainTable")
+        Dim CachedTable As DataTable = TryCast(Session("FilterMainTable"), DataTable)
+        If CachedTable Is Nothing Then Exit Sub
+
+        ' KeepOnlyColumns() below mutates columns in place (Columns.RemoveAt), so MainTable
+        ' must be a COPY, never the same object reference as Session("FilterMainTable").
+        ' Working on the shared object directly would permanently strip every non-searchable
+        ' column (like "Reference") from the cached table itself - which is exactly what was
+        ' happening: MainPage.aspx's GridView1 (DataKeyNames="Reference,STATUS") would then
+        ' find "Reference" gone from Session("FilterMainTable") the next time it re-bound,
+        ' and blow up with "does not contain a property with the name 'Reference'".
+        Dim MainTable As DataTable = CachedTable.Copy()
 
         Dim Filter As String = BuildFilterExpression(GetCheckedCategories())
 

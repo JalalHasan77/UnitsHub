@@ -62,9 +62,9 @@ Public Module PF
             Return columnNames
         End If
 
-        If gv.Columns IsNot Nothing AndAlso gv.Columns.Count > 0 Then
-            ' Explicitly declared columns: DataControlFieldCollection always contains
-            ' every field, hidden or not.
+        If Not gv.AutoGenerateColumns Then
+            ' Explicitly declared columns only (AutoGenerateColumns="False"): DataControlFieldCollection
+            ' always contains every field, hidden or not.
             For Each field As DataControlField In gv.Columns
                 columnNames.Add(field.HeaderText)
             Next
@@ -72,12 +72,15 @@ Public Module PF
             Return columnNames
         End If
 
-        ' AutoGenerateColumns="True" (GridView1's case): gv.Columns stays empty, so read
-        ' from the header row DataBind() just built - it has one cell per underlying
-        ' data column, regardless of any cell's Visible flag.
+        ' AutoGenerateColumns="True" (GridView1's case), possibly mixed with one or more explicitly
+        ' declared columns (e.g. the "Actions" TemplateField): HeaderRow.Cells contains one cell per
+        ' rendered column - declared columns first, then the auto-generated data columns. Declared
+        ' columns are UI-only (not real data columns) and are always kept visible by
+        ' ApplyColumnVisibility, so they're skipped here too - the dialog should only offer the
+        ' actual auto-generated data columns as choices.
         If gv.HeaderRow IsNot Nothing Then
-            For Each cell As TableCell In gv.HeaderRow.Cells
-                columnNames.Add(cell.Text)
+            For colIndex As Integer = gv.Columns.Count To gv.HeaderRow.Cells.Count - 1
+                columnNames.Add(gv.HeaderRow.Cells(colIndex).Text)
             Next
         End If
 
@@ -94,7 +97,7 @@ Public Module PF
             Return VisibleColumnNames
         End If
 
-        If gv.Columns IsNot Nothing AndAlso gv.Columns.Count > 0 Then
+        If Not gv.AutoGenerateColumns Then
             For Each field As DataControlField In gv.Columns
                 If field.Visible Then
                     VisibleColumnNames.Add(field.HeaderText)
@@ -104,12 +107,14 @@ Public Module PF
             Return VisibleColumnNames
         End If
 
-        ' AutoGenerateColumns="True": a column is Visible by setting its header cell's
+        ' AutoGenerateColumns="True": a column is hidden by setting its header cell's
         ' Visible property to False (e.g. in RowCreated/RowDataBound). The cell still
-        ' exists in the Cells collection - it just doesn't render - so this correctly
-        ' detects it even though gv.Columns is empty.
+        ' exists in the Cells collection - it just doesn't render. Declared columns
+        ' (e.g. "Actions") are skipped since they're never offered as a choice - see
+        ' GetAllColumnNames.
         If gv.HeaderRow IsNot Nothing Then
-            For Each cell As TableCell In gv.HeaderRow.Cells
+            For colIndex As Integer = gv.Columns.Count To gv.HeaderRow.Cells.Count - 1
+                Dim cell As TableCell = gv.HeaderRow.Cells(colIndex)
                 If cell.Visible Then
                     VisibleColumnNames.Add(cell.Text)
                 End If
@@ -125,7 +130,8 @@ Public Module PF
     ''' Makes visible only the GridView columns whose header text appears in the
     ''' single-column "Value" DataTable; any column not listed is hidden.
     ''' Works for both explicitly declared columns (AutoGenerateColumns="False")
-    ''' and auto-generated columns (AutoGenerateColumns="True", e.g. GridView1).
+    ''' and auto-generated columns (AutoGenerateColumns="True", e.g. GridView1),
+    ''' including when the two are mixed together.
     ''' </summary>
     Public Sub ApplyColumnVisibility(ByVal gv As GridView, ByVal visibleColumns As DataTable)
         If gv Is Nothing Then
@@ -143,7 +149,7 @@ Public Module PF
             Next
         End If
 
-        If gv.Columns IsNot Nothing AndAlso gv.Columns.Count > 0 Then
+        If Not gv.AutoGenerateColumns Then
             ' Explicitly declared columns
             For Each field As DataControlField In gv.Columns
                 field.Visible = visibleNames.Contains(field.HeaderText)
@@ -155,13 +161,20 @@ Public Module PF
         ' AutoGenerateColumns="True" (GridView1's case): toggle each header cell,
         ' then mirror the same Visible flag onto that column's cell in every data row -
         ' each TableCell.Visible is independent, so the header alone isn't enough.
+        ' This also correctly covers explicitly declared columns mixed in (e.g. "Actions"),
+        ' since they still get a cell in HeaderRow.Cells at the same index as their data cells.
         If gv.HeaderRow Is Nothing Then
             Return
         End If
 
         For colIndex As Integer = 0 To gv.HeaderRow.Cells.Count - 1
             Dim headerCell As TableCell = gv.HeaderRow.Cells(colIndex)
-            Dim isVisible As Boolean = visibleNames.Contains(headerCell.Text)
+
+            ' Declared columns (e.g. the "Actions" TemplateField) occupy the first
+            ' gv.Columns.Count header cells and are never offered as choices in the
+            ' Select Columns dialog, so they must never be hidden by it.
+            Dim isDeclaredColumn As Boolean = colIndex < gv.Columns.Count
+            Dim isVisible As Boolean = isDeclaredColumn OrElse visibleNames.Contains(headerCell.Text)
 
             headerCell.Visible = isVisible
 

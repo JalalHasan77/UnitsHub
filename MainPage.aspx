@@ -171,7 +171,9 @@
     font-size:22px;
     cursor:pointer;
     border-radius:4px;
+    border-width:0px;
     user-select:none;
+    background-color:transparent;
 }
 
 .actionButton:hover{
@@ -184,12 +186,20 @@
     min-width:170px;
     background:white;
     border:1px solid #cccccc;
+    border-radius:10px;
+    overflow:hidden;
     box-shadow:0 3px 10px rgba(0,0,0,.25);
     z-index:9999;
 }
 
 .actionPopup.show{
     display:block;
+}
+
+.actionsHeaderHidden{
+    font-size:0;
+    line-height:0;
+    color:transparent;
 }
 
 .actionItem{
@@ -203,6 +213,133 @@
 
 .actionItem:hover{
     background:#f5f5f5;
+}
+
+/* ---------- Menu Container ---------- */
+
+.actionMenu {
+    position: relative;
+    display: inline-block;
+}
+
+/* ---------- Three Dots Button ---------- */
+
+.menuButton {
+
+    width:34px;
+    height:26px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:50%;
+
+    font-size:22px;
+    color:#666;
+
+    cursor:pointer;
+
+    transition:.2s;
+}
+
+.menuButton:hover{
+
+    background:#f3f5f7;
+
+    color:#0078D4;
+
+}
+
+/* ---------- Popup ---------- */
+
+.menuPopup{
+
+    display:none;
+
+    position:absolute;
+
+    right:0;
+    top:36px;
+
+    width:220px;
+
+    background:#fff;
+
+    border-radius:10px;
+
+    border:1px solid #E5E5E5;
+
+    box-shadow:
+        0 10px 25px rgba(0,0,0,.18);
+
+    overflow:hidden;
+
+    z-index:999999;
+}
+
+.menuPopup.show{
+
+    display:block;
+
+}
+
+/* ---------- Each Row ---------- */
+
+.menuRow{
+
+    transition:.15s;
+
+}
+
+.menuRow:hover{
+
+    background:#F7FAFD;
+
+}
+
+/* ---------- Link ---------- */
+.menuItem{
+
+    display:flex;
+    align-items:center;
+
+    padding:7px 14px;      /* was 12px 16px */
+
+    text-decoration:none;
+
+    color:#444;
+
+    font-size:13px;        /* was 14px */
+
+    font-family:'Segoe UI';
+
+    transition:.15s;
+
+    line-height:18px;      /* add this */
+}
+
+.menuItem:hover{
+
+    color:#0078D4;
+
+    padding-left:18px;     /* was 22px */
+}
+
+.menuIcon{
+
+    width:22px;            /* was 26px */
+
+    font-size:15px;        /* was 17px */
+
+    color:#0078D4;
+}
+
+.menuDivider{
+
+    border-top:1px solid #ECECEC;
+
+    margin:2px 0;          /* was 4px */
 }
 
 
@@ -226,46 +363,46 @@
             // alert(strUser);
         }
 
-function toggleMenu(btn, evt) {
+        function toggleMenu(btn, evt) {
 
-    if (evt) { evt.stopPropagation(); }
+            if (evt) { evt.stopPropagation(); }
 
-    var popup = btn.nextElementSibling;
-    var wasOpen = popup.classList.contains("show");
+            var popup = btn.nextElementSibling;
+            var wasOpen = popup.classList.contains("show");
 
-    document.querySelectorAll(".actionPopup").forEach(function (m) {
-        m.classList.remove("show");
-    });
+            document.querySelectorAll(".actionPopup").forEach(function (m) {
+                m.classList.remove("show");
+            });
 
-    if (wasOpen) { return; }
+            if (wasOpen) { return; }
 
-    popup.style.visibility = "hidden";
-    popup.classList.add("show");
+            popup.style.visibility = "hidden";
+            popup.classList.add("show");
 
-    var rect = btn.getBoundingClientRect();
-    var popupWidth = popup.offsetWidth;
+            var rect = btn.getBoundingClientRect();
+            var popupWidth = popup.offsetWidth;
 
-    var top = rect.bottom + 2;
-    var left = rect.left;
+            var top = rect.bottom + 2;
+            var left = rect.left;
 
-    var maxLeft = window.innerWidth - popupWidth - 4;
-    if (left > maxLeft) { left = maxLeft; }
+            var maxLeft = window.innerWidth - popupWidth - 4;
+            if (left > maxLeft) { left = maxLeft; }
 
-    popup.style.top = top + "px";
-    popup.style.left = left + "px";
-    popup.style.visibility = "visible";
+            popup.style.top = top + "px";
+            popup.style.left = left + "px";
+            popup.style.visibility = "visible";
 
-}
+        }
 
-function closeAllActionMenus() {
-    document.querySelectorAll(".actionPopup").forEach(function (m) {
-        m.classList.remove("show");
-    });
-}
+        function closeAllActionMenus() {
+            document.querySelectorAll(".actionPopup").forEach(function (m) {
+                m.classList.remove("show");
+            });
+        }
 
-document.addEventListener("click", closeAllActionMenus);
-window.addEventListener("scroll", closeAllActionMenus, true);
-window.addEventListener("resize", closeAllActionMenus);
+        document.addEventListener("click", closeAllActionMenus);
+        window.addEventListener("scroll", closeAllActionMenus, true);
+        window.addEventListener("resize", closeAllActionMenus);
 
 
         function syncGridScrollbars() {
@@ -418,10 +555,10 @@ window.addEventListener("resize", closeAllActionMenus);
                                             <div class="gridview-scroll-top-inner" id="gvScrollTopInner">&nbsp;</div>
                                         </div>
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
-                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333">
+                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS">
                                             <AlternatingRowStyle BackColor="White" ForeColor="#284775" />
                                             <Columns>
-                                                <asp:TemplateField HeaderText="Actions">
+                                                <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">
                                                     <ItemTemplate>
 
                                                         <div class="actionMenu">
@@ -431,29 +568,20 @@ window.addEventListener("resize", closeAllActionMenus);
     </button>
 
     <div class="actionPopup" onclick="event.stopPropagation();">
-
-        <asp:LinkButton ID="lnkApprove"
-            runat="server"
-            CssClass="actionItem"
-            Text="✔ Approve"
-            CommandName="Approve" />
-
-        <asp:LinkButton ID="lnkBounce"
-            runat="server"
-            CssClass="actionItem"
-            Text="↩ Bounce"
-            CommandName="Bounce" />
-
-        <asp:LinkButton ID="lnkEdit"
-            runat="server"
-            CssClass="actionItem"
-            Text="✎ Edit"
-            CommandName="Edit" />
-
+        <asp:PlaceHolder ID="phActions" runat="server" />
     </div>
 
 </div>
 
+                                                    </ItemTemplate>
+
+<HeaderStyle CssClass="actionsHeaderHidden"></HeaderStyle>
+                                                </asp:TemplateField>
+                                                <asp:TemplateField HeaderText="Status">
+                                                    <ItemTemplate>
+                                                        <asp:Label ID="Label1" runat="server" Text='<%# Bind("STATUS") %>'></asp:Label>
+                                                        <br />
+                                                        <asp:Label ID="Label2" runat="server" Font-Names="Arial" Font-Size="10pt" Text='<%# Bind("Status_Subtitle") %>'></asp:Label>
                                                     </ItemTemplate>
                                                 </asp:TemplateField>
                                             </Columns>
