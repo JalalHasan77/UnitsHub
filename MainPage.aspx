@@ -342,7 +342,42 @@
     margin:2px 0;          /* was 4px */
 }
 
+.statusCard {
+    background: #f8e08a;
+    border: 1px solid #8c7b2a;
+    border-radius: 8px;
+    padding: 4px 5px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center
+}
 
+.statusTitle {
+    font-family: Arial;
+    font-size: 12pt;
+    color: #000;
+    text-decoration: underline;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.statusSubtitle {
+    font-family: Arial;
+    font-size: 8pt;
+    color: #333;
+    background: #ffffff;
+    border: 1px solid #999;
+    border-radius: 6px;
+    padding: 4px 8px;
+    line-height: 1.3;
+        display: inline-block;
+    white-space: nowrap;
+}
 </style>
  
 
@@ -556,7 +591,7 @@
                                         </div>
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
                                         <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS">
-                                            <AlternatingRowStyle BackColor="White" ForeColor="#284775" />
+                                            <AlternatingRowStyle BackColor="White" ForeColor="#284775" HorizontalAlign="Center" />
                                             <Columns>
                                                 <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">
                                                     <ItemTemplate>
@@ -576,20 +611,29 @@
                                                     </ItemTemplate>
 
 <HeaderStyle CssClass="actionsHeaderHidden"></HeaderStyle>
+                                                    <ItemStyle HorizontalAlign="Center" />
                                                 </asp:TemplateField>
                                                 <asp:TemplateField HeaderText="Status">
                                                     <ItemTemplate>
-                                                        <asp:Label ID="Label1" runat="server" Text='<%# Bind("STATUS") %>'></asp:Label>
-                                                        <br />
-                                                        <asp:Label ID="Label2" runat="server" Font-Names="Arial" Font-Size="10pt" Text='<%# Bind("Status_Subtitle") %>'></asp:Label>
+                                                        <div class="statusCard">
+                                                            <div class="statusTitle">
+                                                                <%# Eval("STATUS") %>
+                                                            </div>
+
+                                                            <div class="statusSubtitle">
+                                                                <%# Eval("Status_Subtitle") %>
+                                                            </div>
+                                                        </div>
                                                     </ItemTemplate>
+                                                    <ItemStyle Width="106px" HorizontalAlign="Center" />
+                                                    <HeaderStyle Width="106px" HorizontalAlign="Center" />
                                                 </asp:TemplateField>
                                             </Columns>
-                                            <EditRowStyle BackColor="#999999" />
-                                            <FooterStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" />
+                                            <EditRowStyle BackColor="#999999" HorizontalAlign="Center" />
+                                            <FooterStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center" />
                                             <HeaderStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center"/>
                                             <PagerStyle BackColor="#284775" ForeColor="White" HorizontalAlign="Center" />
-                                            <RowStyle BackColor="#F7F6F3" ForeColor="#333333" />
+                                            <RowStyle BackColor="#F7F6F3" ForeColor="#333333" HorizontalAlign="Center" />
                                             <SelectedRowStyle BackColor="#E2DED6" Font-Bold="True" ForeColor="#333333" />
                                             <SortedAscendingCellStyle BackColor="#E9E7E2" />
                                             <SortedAscendingHeaderStyle BackColor="#506C8C" />

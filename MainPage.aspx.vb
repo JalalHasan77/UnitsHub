@@ -403,10 +403,20 @@ Partial Class MainPage
         Dim DT0 As New DataTable
         DT0 = DB.GetDataTable(EBDB, SQL)
 
-
         'add the table to session so i can use it in other forms
         '=========================================================
         Call AddTBLtoSession(DT0)
+
+
+        '==================================================================================================
+        'Dim selectedItems As List(Of Dictionary(Of String, Object)) = BuildSelectedItemsPayload(DT, selectedIds)
+
+        'VendorPopupHelper.RegisterPopupSelectionAndClose(
+        '    page:=Me,
+        '    returnValue:=selectedItems,
+        '    startupScriptKey:="SelectedItems",
+        '    skipPostBack:=False)
+        '==============================================================================================
 
 
 
@@ -464,6 +474,13 @@ Partial Class MainPage
         GridView2.DataSource = DB.GetDataTable(EBDB, SQL)
         GridView2.DataBind()
 
+        'Hide Status and Status_subtitle from GridView ===========================================
+        Dim result As New DataTable()
+        result.Columns.Add("value", GetType(String))
+        result.Rows.Add("Status")
+        result.Rows.Add("Status_subtitle")
+        PF.ApplyColumnInvisibility(GridView1, result)
+        'End of: Hide Status and Status_subtitle from GridView ===================================
 
 
         Dim ProjectTable As String = GetOrAddToCache(Of String)(

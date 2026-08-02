@@ -186,6 +186,54 @@ Public Module PF
         Next
     End Sub
 
+    Public Sub ApplyColumnInvisibility(ByVal gv As GridView, ByVal invisibleColumns As DataTable)
+        If gv Is Nothing Then
+            Return
+        End If
+
+        Dim hiddenNames As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        If invisibleColumns IsNot Nothing AndAlso invisibleColumns.Columns.Contains("Value") Then
+            For Each dr As DataRow In invisibleColumns.Rows
+                Dim columnName As String = Convert.ToString(dr("Value"))
+                If Not String.IsNullOrEmpty(columnName) Then
+                    hiddenNames.Add(columnName)
+                End If
+            Next
+        End If
+
+        If Not gv.AutoGenerateColumns Then
+            ' Explicitly declared columns
+            For Each field As DataControlField In gv.Columns
+                field.Visible = Not hiddenNames.Contains(field.HeaderText)
+            Next
+            Return
+        End If
+
+        ' AutoGenerateColumns="True" (GridView1's case): toggle each header cell,
+        ' then mirror the same Visible flag onto that column's cell in every data row -
+        ' each TableCell.Visible is independent, so the header alone isn't enough.
+        ' This also correctly covers explicitly declared columns mixed in (e.g. "Actions"),
+        ' since they still get a cell in HeaderRow.Cells at the same index as their data cells.
+        If gv.HeaderRow Is Nothing Then
+            Return
+        End If
+
+        For colIndex As Integer = 0 To gv.HeaderRow.Cells.Count - 1
+            Dim headerCell As TableCell = gv.HeaderRow.Cells(colIndex)
+            ' Declared columns (e.g. the "Actions" TemplateField) occupy the first
+            ' gv.Columns.Count header cells and are never offered as choices in the
+            ' Select Columns dialog, so they must never be hidden by it.
+            Dim isDeclaredColumn As Boolean = colIndex < gv.Columns.Count
+            Dim isVisible As Boolean = isDeclaredColumn OrElse Not hiddenNames.Contains(headerCell.Text)
+            headerCell.Visible = isVisible
+            For Each row As GridViewRow In gv.Rows
+                If colIndex < row.Cells.Count Then
+                    row.Cells(colIndex).Visible = isVisible
+                End If
+            Next
+        Next
+    End Sub
+
 
 End Module
 Public Enum FilterType
