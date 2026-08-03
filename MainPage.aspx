@@ -162,6 +162,182 @@
     display:inline-block;
 }
 
+/* Hamburger button (opens right-side slide-in menu) */
+.hamburgerBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 2px solid #ffffff;
+    border-radius: 8px;
+    background-color: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.hamburgerBtn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.hamburgerBtn .hamburgerIcon,
+.hamburgerBtn .hamburgerIcon::before,
+.hamburgerBtn .hamburgerIcon::after {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background-color: #ffffff;
+    border-radius: 1px;
+}
+
+.hamburgerBtn .hamburgerIcon {
+    position: relative;
+}
+
+.hamburgerBtn .hamburgerIcon::before,
+.hamburgerBtn .hamburgerIcon::after {
+    content: "";
+    position: absolute;
+    left: 0;
+}
+
+.hamburgerBtn .hamburgerIcon::before {
+    top: -7px;
+}
+
+.hamburgerBtn .hamburgerIcon::after {
+    top: 7px;
+}
+
+/* Right-side slide-in menu */
+.sideMenuOverlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.35);
+    z-index: 1000;
+}
+
+.sideMenuOverlay.show {
+    display: block;
+}
+
+.sideMenuPanel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 300px;
+    max-width: 85%;
+    background-color: #ffffff;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.25);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+}
+
+.sideMenuOverlay.show .sideMenuPanel {
+    transform: translateX(0);
+}
+
+.sideMenuHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background-color: #3366FF;
+    color: #ffffff;
+    font-family: Arial;
+    font-size: 16pt;
+    font-weight: bold;
+}
+
+.sideMenuClose {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.sideMenuClose:hover {
+    opacity: 0.75;
+}
+
+.sideMenuBody {
+    padding: 10px 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.sideMenuGroup {
+    border-bottom: 1px solid #eeeeee;
+}
+
+.sideMenuGroupHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    font-family: Arial;
+    font-size: 12pt;
+    font-weight: bold;
+    color: #333333;
+    cursor: pointer;
+    user-select: none;
+}
+
+.sideMenuGroupHeader:hover {
+    background-color: #f2f6ff;
+}
+
+.sideMenuGroupArrow {
+    font-size: 10px;
+    color: #888888;
+    transition: transform 0.2s ease;
+}
+
+.sideMenuGroup.open .sideMenuGroupArrow {
+    transform: rotate(180deg);
+}
+
+.sideMenuGroupItems {
+    max-height: 0;
+    overflow: hidden;
+    background-color: #fafafa;
+    transition: max-height 0.25s ease;
+}
+
+.sideMenuGroup.open .sideMenuGroupItems {
+    max-height: 600px;
+}
+
+.sideMenuItem {
+    display: block;
+    padding: 10px 20px 10px 32px;
+    font-family: Arial;
+    font-size: 11pt;
+    color: #333333;
+    text-decoration: none;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.sideMenuItem:last-child {
+    border-bottom: none;
+}
+
+.sideMenuItem:hover {
+    background-color: #e8f0ff;
+}
+
 .actionButton{
     display:inline-block;
     width:28px;
@@ -439,6 +615,31 @@
         window.addEventListener("scroll", closeAllActionMenus, true);
         window.addEventListener("resize", closeAllActionMenus);
 
+        function openSideMenu(evt) {
+            if (evt) { evt.stopPropagation(); }
+            document.getElementById("sideMenuOverlay").classList.add("show");
+        }
+
+        function closeSideMenu(evt) {
+            if (evt) { evt.stopPropagation(); }
+            document.getElementById("sideMenuOverlay").classList.remove("show");
+        }
+
+        function toggleSideMenuGroup(header) {
+            var group = header.parentElement;
+            group.classList.toggle("open");
+        }
+
+        function openMenuLink(url, width, height) {
+            if (!url) { return; }
+            var w = width || 800;
+            var h = height || 550;
+            var left = (screen.width - w) / 2;
+            var top = (screen.height - h) / 2;
+            window.open(url, "_blank", "width=" + w + ",height=" + h + ",left=" + left + ",top=" + top + ",resizable=yes,scrollbars=yes");
+            closeSideMenu();
+        }
+
 
         function syncGridScrollbars() {
             var top = document.getElementById('gvScrollTop');
@@ -491,7 +692,9 @@
                                 <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="36pt" ForeColor="White" Text="Label"></asp:Label>
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
-                                <br />
+                                <button type="button" class="hamburgerBtn" onclick="openSideMenu(event)" aria-label="Open menu">
+                                    <span class="hamburgerIcon"></span>
+                                </button>
                             </td>
                         </tr>
                     </table>
@@ -649,6 +852,18 @@
                         </td>
                      </tr>
                         </table>
+
+        <div class="sideMenuOverlay" id="sideMenuOverlay" onclick="closeSideMenu(event)">
+            <div class="sideMenuPanel" onclick="event.stopPropagation();">
+                <div class="sideMenuHeader">
+                    <span>Menu</span>
+                    <button type="button" class="sideMenuClose" onclick="closeSideMenu(event)" aria-label="Close menu">&times;</button>
+                </div>
+                <div class="sideMenuBody">
+                    <asp:PlaceHolder ID="phSideMenu" runat="server" />
+                </div>
+            </div>
+        </div>
 
 </form>
 </body>

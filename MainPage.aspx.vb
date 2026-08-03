@@ -56,8 +56,127 @@ Partial Class MainPage
                                  firstItemIs:="Select A Project")
         End If
 
+        PopulateSideMenu()
         RepopulateGridActionsIfNeeded()
     End Sub
+
+    ''' <summary>
+    ''' Builds the right-side slide-in menu from the ISSIDE menu definition table.
+    ''' Rows of TYPE "TITLE" render as collapsible group headers; rows of TYPE "LINK"
+    ''' render as clickable items nested under the group whose INDX matches their
+    ''' PARENT. Only rows whose VISIBLETO list contains the current user's role (or
+    ''' "ALL") are included. Groups with no visible children are omitted entirely.
+    ''' Rebuilt on every request (like the grid's action placeholders) since the
+    ''' PlaceHolder's dynamically-added children aren't preserved by ViewState.
+    ''' </summary>
+    Private Sub PopulateSideMenu()
+        phSideMenu.Controls.Clear()
+
+        Dim dt As New DataTable
+        dt.Columns.Add("TITLE")
+        dt.Columns.Add("URL")
+        dt.Columns.Add("WIDTH", GetType(Integer))
+        dt.Columns.Add("HEIGHT", GetType(Integer))
+        dt.Columns.Add("ISSIDE")
+        dt.Columns.Add("VISIBLETO")
+        dt.Columns.Add("TYPE")
+        dt.Columns.Add("INDX")
+        dt.Columns.Add("PARENT")
+
+        dt.Rows.Add("EMAIL TODAY", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
+        dt.Rows.Add("ADMIN", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
+        dt.Rows.Add("Events Control", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
+        dt.Rows.Add("Charts and Statistics", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
+        dt.Rows.Add("Dashboard", "frmDashboard.aspx", 800, 550, "Y", "ADM,FCD,ALL", "LINK", "4.1", "4")
+        dt.Rows.Add("Reminder Today", "frmEmailToday.aspx", 800, 550, "Y", "ADM", "LINK", "1.1", "1")
+        dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
+        dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")
+        dt.Rows.Add("Uploadees Control", "frmUploadees.aspx", 800, 550, "Y", "ADM", "LINK", "2.3", "2")
+        dt.Rows.Add("Start Today Event", "frmTodaysEvent.aspx", 800, 550, "Y", "ADM", "LINK", "1.2", "1")
+        dt.Rows.Add("Requested-By-Me OnGoing", "frmStateActionsUsersPackages.aspx", 800, 550, "Y", "ADM,FCD", "LINK", "3.1", "3")
+        dt.Rows.Add("Requested-From-Me OnGoing", "frmStateActionsUsersPackagesRequestedFromMe.aspx", 800, 550, "Y", "ADM", "LINK", "3.2", "3")
+        dt.Rows.Add("Upcoming Events", "frmUpcomingsAuthorities.aspx", 800, 550, "Y", "ADM", "LINK", "3.3", "3")
+        dt.Rows.Add("User Management", "frmUsers.aspx", 800, 550, "Y", "ADM,ALL", "LINK", "2.4", "2")
+        dt.Rows.Add("Vacations Control", "frmVacations.aspx", 800, 550, "Y", "ADM", "LINK", "2.5", "2")
+
+        Dim currentRole As String = GetCurrentUserRole()
+
+        Dim titleRows = dt.AsEnumerable().
+            Where(Function(r) String.Equals(r.Field(Of String)("TYPE"), "TITLE", StringComparison.OrdinalIgnoreCase) _
+                        AndAlso IsVisibleToRole(r.Field(Of String)("VISIBLETO"), currentRole)).
+            OrderBy(Function(r) ParseIndx(r.Field(Of String)("INDX")))
+
+        Dim sb As New System.Text.StringBuilder
+
+        For Each titleRow As DataRow In titleRows
+            Dim titleIndx As String = titleRow.Field(Of String)("INDX")
+
+            Dim childRows = dt.AsEnumerable().
+                Where(Function(r) String.Equals(r.Field(Of String)("TYPE"), "LINK", StringComparison.OrdinalIgnoreCase) _
+                            AndAlso r.Field(Of String)("PARENT") = titleIndx _
+                            AndAlso IsVisibleToRole(r.Field(Of String)("VISIBLETO"), currentRole)).
+                OrderBy(Function(r) ParseIndx(r.Field(Of String)("INDX"))).ToList()
+
+            If childRows.Count = 0 Then Continue For
+
+            sb.Append("<div class=""sideMenuGroup"">")
+            sb.Append("<div class=""sideMenuGroupHeader"" onclick=""toggleSideMenuGroup(this)"">")
+            sb.Append("<span>").Append(Server.HtmlEncode(titleRow.Field(Of String)("TITLE"))).Append("</span>")
+            sb.Append("<span class=""sideMenuGroupArrow"">&#9662;</span>")
+            sb.Append("</div>")
+            sb.Append("<div class=""sideMenuGroupItems"">")
+
+            For Each childRow As DataRow In childRows
+                Dim url As String = childRow.Field(Of String)("URL")
+                Dim width As Integer = childRow.Field(Of Integer)("WIDTH")
+                Dim height As Integer = childRow.Field(Of Integer)("HEIGHT")
+
+                sb.Append("<a class=""sideMenuItem"" href=""javascript:void(0);"" onclick=""openMenuLink('") _
+                  .Append(Server.HtmlEncode(url)).Append("', ").Append(width).Append(", ").Append(height).Append("); return false;"">") _
+                  .Append(Server.HtmlEncode(childRow.Field(Of String)("TITLE"))) _
+                  .Append("</a>")
+            Next
+
+            sb.Append("</div>")
+            sb.Append("</div>")
+        Next
+
+        phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
+    End Sub
+
+    ''' <summary>
+    ''' Returns True if the comma-separated VISIBLETO list contains the given role,
+    ''' or the special value "ALL" (visible to every role). If no role could be
+    ''' determined yet (GetCurrentUserRole returned blank), this fails OPEN and shows
+    ''' everything rather than silently rendering an empty menu - remove the
+    ''' String.IsNullOrEmpty(role) branch once GetCurrentUserRole is wired up for real.
+    ''' </summary>
+    Private Function IsVisibleToRole(visibleTo As String, role As String) As Boolean
+        If String.IsNullOrEmpty(visibleTo) Then Return False
+        If String.IsNullOrEmpty(role) Then Return True ' TEMP: no role source wired up yet
+
+        Dim roles = visibleTo.Split(","c).Select(Function(x) x.Trim().ToUpperInvariant())
+        Return roles.Contains("ALL") OrElse roles.Contains(role.ToUpperInvariant())
+    End Function
+
+    ''' <summary>
+    ''' Parses an INDX value ("1", "2.3", ...) into a sortable Decimal.
+    ''' </summary>
+    Private Function ParseIndx(indx As String) As Decimal
+        Dim result As Decimal
+        If Decimal.TryParse(indx, Global.System.Globalization.NumberStyles.Any, Global.System.Globalization.CultureInfo.InvariantCulture, result) Then
+            Return result
+        End If
+        Return 0
+    End Function
+
+    ''' <summary>
+    ''' TODO: Wire this to your actual authentication/session mechanism.
+    ''' Currently reads a "UserType" session value (e.g. "ADM", "FCD") set at login.
+    ''' </summary>
+    Private Function GetCurrentUserRole() As String
+        Return Convert.ToString(Session("UserType"))
+    End Function
 
     ''' <summary>
     ''' The Actions LinkButtons inside each row's phActions PlaceHolder are added
