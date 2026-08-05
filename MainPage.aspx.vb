@@ -1,10 +1,12 @@
 ﻿
 Imports System.Data
 Imports System.Globalization
+Imports System.Collections
 Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Web
 Imports System.Web.Caching
+Imports System.Web.UI.HtmlControls
 
 
 Partial Class MainPage
@@ -14,15 +16,17 @@ Partial Class MainPage
     Private encryNdecry As New EncryDecry
 
     ''' <summary>
-    ''' Per-request cache for GetAvailableActions(). The underlying query currently
-    ''' returns the same result set for every row (its WHERE clause doesn't actually
-    ''' branch on RequestID/State), so without this, binding a grid with N rows fires
-    ''' N identical DB round-trips - and RepopulateGridActionsIfNeeded() repeats that
-    ''' on EVERY postback, even ones unrelated to the grid. Keyed by state so that if
-    ''' the query is later fixed to genuinely vary by state, it still only runs once
-    ''' per distinct state per request rather than once per row.
+    ''' Per-request cache for GetAvailableActions(). The permission set for a user
+    ''' only varies by USER_ID and PROJECT_ID (it covers every STATE_ID for that
+    ''' project in one shot), so this is keyed by "ProjectID|UserID" and holds the
+    ''' full unfiltered DataTable of (PROJECT_ID, STATE_ID, ACTION_ID, ICON,
+    ''' PERMISSION_NAME, STATUS_NAME, STATUS_SUBTITLE) rows for that project/user.
+    ''' GetAvailableActions() then filters that table in memory by the row's own
+    ''' status name. Without this, binding a grid with
+    ''' N rows would fire N identical DB round-trips - and RepopulateGridActionsIfNeeded()
+    ''' would repeat that on EVERY postback, even ones unrelated to the grid.
     ''' </summary>
-    Private ReadOnly _actionsCache As New Dictionary(Of String, List(Of WorkflowAction))
+    Private ReadOnly _projectActionsCache As New Dictionary(Of String, DataTable)
 
     ''' <summary>
     ''' Shared, cross-user, cross-request cache for slow-changing lookup/config data
@@ -47,9 +51,44 @@ Partial Class MainPage
         Return fresh
     End Function
 
+    ''' <summary>
+    ''' Clears both Session and the ASP.NET Cache when MainPage is freshly loaded (not
+    ''' on postback - see Page_Load).
+    ''' - Session.Clear() drops THIS visitor's own leftovers - e.g.
+    '''   Session("FilterMainTable"), Session("CheckedCheckBox"), Session("Result"),
+    '''   Session("PopupParams_...") - from a previous visit.
+    ''' - The Cache sweep below drops every entry HttpRuntime.Cache is holding, not
+    '''   just this file's own config caches (UnitType_/ProjectView_/ProjectViewName_/
+    '''   VisibleFields_/ColumnAliases_ per project, plus the global UnitStatuses
+    '''   lookup - see GetOrAddToCache's callers). ASP.NET's Cache is shared
+    '''   APPLICATION-WIDE across every user and every page, unlike Session, so this
+    '''   also evicts anything any other page in the app may be caching. The very next
+    '''   request anywhere - this user or another, this page or another - re-fetches
+    '''   from the DB instead of getting a cache hit, which is exactly what
+    '''   GetOrAddToCache exists to avoid. Only wire this in where that trade-off is
+    '''   genuinely wanted.
+    ''' </summary>
+    Private Sub ClearSessionAndCache()
+        Session.Clear()
+
+        Dim cache As System.Web.Caching.Cache = HttpRuntime.Cache
+        Dim keysToRemove As New List(Of String)
+
+        Dim enumerator As IDictionaryEnumerator = cache.GetEnumerator()
+        While enumerator.MoveNext()
+            keysToRemove.Add(CStr(enumerator.Key))
+        End While
+
+        For Each key As String In keysToRemove
+            cache.Remove(key)
+        Next
+    End Sub
+
     'Dim DT As DataTable
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
+            ClearSessionAndCache()
+
             PopulateDropDownList(ddl:=DropDownList1,
                                  sql:="Select PROJECT_NAME_EN,PROJECT_ID from UNITSHUB_PROJECTS",
                                  DataConnection:=EBDB_CS,
@@ -176,6 +215,21 @@ Partial Class MainPage
     ''' </summary>
     Private Function GetCurrentUserRole() As String
         Return Convert.ToString(Session("UserType"))
+    End Function
+
+    ''' <summary>
+    ''' TODO: Wire this to your actual authentication/session mechanism, same as
+    ''' GetCurrentUserRole(). Currently reads a "UserID" session value set at login,
+    ''' falling back to the previously hardcoded test user ('2271') so behavior is
+    ''' unchanged until real session wiring is in place - remove the fallback once
+    ''' Session("UserID") is reliably populated at login.
+    ''' </summary>
+    Private Function GetCurrentUserID() As String
+        Dim sessionUserID As String = Convert.ToString(Session("UserID"))
+        If String.IsNullOrEmpty(sessionUserID) Then
+            Return "2271" ' TEMP: fallback while real auth/session wiring is pending
+        End If
+        Return sessionUserID
     End Function
 
     ''' <summary>
@@ -435,8 +489,10 @@ Partial Class MainPage
     ''' by AutoGenerateColumns="True") must be stripped out to avoid showing the value twice.
     ''' "Status" covers both "STATUS" and "Status" casings coming from different query paths
     ''' (comparison below is case-insensitive anyway, but keep the DataField name here).
+    ''' "StateId" isn't shown at all - it only exists to key the status color/action
+    ''' lookups by the real STATE_ID code rather than the (possibly non-unique) name.
     ''' </summary>
-    Private Shared ReadOnly DuplicatedAutoGeneratedFields As String() = {"STATUS", "Status_Subtitle"}
+    Private Shared ReadOnly DuplicatedAutoGeneratedFields As String() = {"STATUS", "Status_Subtitle", "StateId"}
 
     ''' <summary>
     ''' Runs after every single GridView1.DataBind() call, from wherever it's triggered
@@ -719,6 +775,12 @@ Partial Class MainPage
                 If uiName.Equals("Status", StringComparison.OrdinalIgnoreCase) Then
                     OuterFields.Add("US.STATUS AS ""Status""")
                     OuterFields.Add("US.SUBTITLE AS ""Status_Subtitle""")   'Optional
+                    ' Q."Status" here is still the raw STATE_ID code (before the LEFT JOIN
+                    ' below overwrites the outer "Status" alias with the display name) -
+                    ' carry it through under its own name so it survives as the row's real,
+                    ' unique key. Matching status colors by display NAME is unsafe if two
+                    ' different STATE_IDs ever share the same name.
+                    OuterFields.Add("Q.""Status"" AS ""StateId""")
                 Else
                     OuterFields.Add("Q.""" & uiName & """")
                 End If
@@ -924,14 +986,108 @@ Partial Class MainPage
         Dim State As String =
             DataBinder.Eval(e.Row.DataItem, "STATUS").ToString()
 
+        Dim StateId As String =
+            Convert.ToString(DataBinder.Eval(e.Row.DataItem, "StateId"))
+
+        Dim SubtitleText As String =
+            Convert.ToString(DataBinder.Eval(e.Row.DataItem, "Status_Subtitle"))
+
         Dim Actions As List(Of WorkflowAction) =
             GetAvailableActions(RequestID, State)
 
         PopulateActions(ph, Actions)
 
-
+        ApplyStatusCardColors(e.Row, StateId, SubtitleText)
 
     End Sub
+
+    ''' <summary>
+    ''' Sets the inline colors of the statusCard/statusTitle/statusSubtitle server
+    ''' controls (declared runat="server" in MainPage.aspx's Status TemplateField) from
+    ''' UNITSHUB_UNITSSTATUS's *_BG_COLOR/*_FG_COLOR columns, looked up by the row's real
+    ''' STATE_ID via GetUnitStatusColors() - STATE_ID is the table's actual key, unlike
+    ''' the display name, which could in principle be reused across different STATE_IDs
+    ''' and pick the wrong row's colors. Runs once per row from RowDataBound (i.e. only
+    ''' on an actual DataBind), same as the actions menu - since these are declared
+    ''' controls (not dynamically added ones), the colors/visibility set here persist
+    ''' across postbacks via ViewState like any other server control property, so nothing
+    ''' needs to reapply them on postbacks that don't rebind the grid.
+    ''' If a color column is blank/DBNull for a status, that inline style is left unset
+    ''' and the element falls back to its .statusCard/.statusTitle/.statusSubtitle CSS
+    ''' class color declared in MainPage.aspx's <style> block. The subtitle div is
+    ''' hidden entirely (rather than left empty) whenever the row has no subtitle text.
+    ''' </summary>
+    Private Sub ApplyStatusCardColors(row As GridViewRow, StateId As String, SubtitleText As String)
+        Dim cardDiv As HtmlGenericControl = TryCast(row.FindControl("statusCard"), HtmlGenericControl)
+        Dim titleDiv As HtmlGenericControl = TryCast(row.FindControl("statusTitle"), HtmlGenericControl)
+        Dim subtitleDiv As HtmlGenericControl = TryCast(row.FindControl("statusSubtitle"), HtmlGenericControl)
+
+        If subtitleDiv IsNot Nothing Then
+            subtitleDiv.Visible = Not String.IsNullOrWhiteSpace(SubtitleText)
+        End If
+
+        Dim colors As DataRow = GetUnitStatusColors(StateId)
+        If colors Is Nothing Then Exit Sub
+
+        SetColorStyleIfPresent(cardDiv, "background-color", colors("STATUS_BG_COLOR"))
+        SetColorStyleIfPresent(titleDiv, "color", colors("STATUS_FG_COLOR"))
+        SetColorStyleIfPresent(subtitleDiv, "background-color", colors("SUBTITLE_BG_COLOR"))
+        SetColorStyleIfPresent(subtitleDiv, "color", colors("SUBTITLE_FG_COLOR"))
+    End Sub
+
+    ''' <summary>
+    ''' UNITSHUB_UNITSSTATUS's *_BG_COLOR/*_FG_COLOR columns store hex colors WITHOUT
+    ''' the leading '#' (e.g. "F8E08A"), so it's added back here before assigning the
+    ''' CSS style - a bare "F8E08A" is not valid CSS and would be silently ignored by
+    ''' the browser.
+    ''' </summary>
+    Private Sub SetColorStyleIfPresent(control As HtmlGenericControl, styleName As String, value As Object)
+        If control Is Nothing Then Exit Sub
+        Dim text As String = Convert.ToString(value).Trim()
+        If String.IsNullOrWhiteSpace(text) Then Exit Sub ' leave the CSS class's default color in place
+        If Not text.StartsWith("#") Then text = "#" & text
+        control.Style(styleName) = text
+    End Sub
+
+    ''' <summary>
+    ''' Cross-user, cross-request cache of the full UNITSHUB_UNITSSTATUS table (STATUS,
+    ''' STATE_ID, SUBTITLE, STATUS_BG_COLOR, STATUS_FG_COLOR, SUBTITLE_BG_COLOR,
+    ''' SUBTITLE_FG_COLOR) - it's the same slow-changing admin config for every user/
+    ''' project, so it's fetched once and reused rather than re-queried per row/request.
+    ''' </summary>
+    Private Function GetUnitStatusTable() As DataTable
+        Return GetOrAddToCache(Of DataTable)(
+            "UnitStatuses", 30,
+            Function() GetDataTable(EBDB, "SELECT STATUS, STATE_ID, SUBTITLE, STATUS_BG_COLOR, STATUS_FG_COLOR, SUBTITLE_BG_COLOR, SUBTITLE_FG_COLOR FROM UNITSHUB_UNITSSTATUS"))
+    End Function
+
+    ''' <summary>
+    ''' Looks up the UNITSHUB_UNITSSTATUS row for a given STATE_ID (the table's real key -
+    ''' see BuildPivotSql's "Q.""Status"" AS ""StateId""" for where this comes from on the
+    ''' grid). Returns Nothing if there's no matching row (e.g. blank/unrecognized state).
+    ''' Compares via NormalizeStateId rather than a raw trimmed match, since the pivoted
+    ''' status code coming through the grid and UNITSHUB_UNITSSTATUS.STATE_ID may not be
+    ''' zero-padded the same way (e.g. "1" vs "001") depending on the underlying column
+    ''' types - a strict match would then silently fail for every row, not just some.
+    ''' </summary>
+    Private Function GetUnitStatusColors(stateId As String) As DataRow
+        Dim target As String = NormalizeStateId(stateId)
+        Return GetUnitStatusTable().AsEnumerable().
+            FirstOrDefault(Function(r) String.Equals(NormalizeStateId(Convert.ToString(r("STATE_ID"))),
+                                                       target,
+                                                       StringComparison.OrdinalIgnoreCase))
+    End Function
+
+    ''' <summary>
+    ''' Trims and strips leading zeros (e.g. "001" -> "1", "000" -> "0") so codes that
+    ''' differ only in zero-padding still compare equal. Left alone for non-numeric/
+    ''' alphanumeric codes (e.g. "A01" is untouched, since it doesn't start with '0').
+    ''' </summary>
+    Private Function NormalizeStateId(value As String) As String
+        Dim s As String = If(value, "").Trim()
+        Dim stripped As String = s.TrimStart("0"c)
+        Return If(stripped = "", "0", stripped)
+    End Function
 
     ''' <summary>
     ''' Fires when any LinkButton inside a GridView1 row raises a command - including the
@@ -1001,60 +1157,106 @@ Partial Class MainPage
     'End Sub
 
 
+    ''' <summary>
+    ''' Returns the actions available to the current user, for the currently selected
+    ''' project (DropDownList1), filtered down to the given row's STATE_ID (its
+    ''' STATUS). Each GridView row calls this with its own RequestID/State, so the
+    ''' same permission set (fetched/cached once per project+user) ends up producing
+    ''' a different menu per row whenever that row's status differs.
+    ''' </summary>
     Public Function GetAvailableActions(ByVal RequestID As String,
-                                    ByVal CurrentUserID As String) As List(Of WorkflowAction)
+                                    ByVal State As String) As List(Of WorkflowAction)
 
-        Dim cacheKey As String = If(CurrentUserID, "")
-        Dim cachedActions As List(Of WorkflowAction) = Nothing
-        If _actionsCache.TryGetValue(cacheKey, cachedActions) Then
-            ' Same action list already fetched earlier in this request/postback for
-            ' this state - reuse it instead of hitting the DB again for this row.
-            Return CloneActionsFor(cachedActions, RequestID)
+        Dim lcProjectID As String = DropDownList1.SelectedItem.Value
+        Dim UserID As String = GetCurrentUserID()
+
+        Dim cacheKey As String = lcProjectID & "|" & UserID
+        Dim actionsTable As DataTable = Nothing
+
+        If Not _projectActionsCache.TryGetValue(cacheKey, actionsTable) Then
+            ' Not fetched yet this request - load every (STATE_ID, ACTION_ID) this
+            ' user is permitted for this project in one round-trip, then filter
+            ' in memory per row/state below instead of re-querying per row.
+            actionsTable = LoadAvailableActionsForProject(lcProjectID, UserID)
+            _projectActionsCache(cacheKey) = actionsTable
         End If
 
         Dim Actions As New List(Of WorkflowAction)
 
+        ' GridView1's STATUS column holds the human-readable status NAME
+        ' (UNITSHUB_UNITSSTATUS.STATUS - see BuildPivotSql's "US.STATUS AS ""Status""").
+        ' LoadAvailableActionsForProject now joins UNITSHUB_UNITSSTATUS itself and
+        ' returns that same STATUS name (aliased STATUS_NAME) alongside STATE_ID, so
+        ' match directly on the name - no separate code<->name lookup needed.
+        Dim matchingRows = actionsTable.AsEnumerable().
+            Where(Function(r) String.Equals(Convert.ToString(r("STATUS_NAME")).Trim(),
+                                             If(State, "").Trim(),
+                                             StringComparison.OrdinalIgnoreCase))
 
-        Dim DT As New DataTable
-        Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT * FROM UNITSHUB_PRJ_STT_PRM_USR SPU    "
-        SQL = SQL + vbCrLf + " join UNITSHUB_PERMISSIONS  AC    "
-        SQL = SQL + vbCrLf + " on SPU.ACTION_ID = AC.ACTION_ID    "
-        SQL = SQL + vbCrLf + " inner join UNITSHUB_UNITSSTATUS S    "
-        SQL = SQL + vbCrLf + " ON SPU.STATE_ID = S.STATE_ID    "
-        SQL = SQL + vbCrLf + " where SPU.STATE_ID='000' and SPU.USERS like '%2271%' "
-
-
-
-        DT = GetDataTable(EBDB, SQL)
-
-        For Each DR As DataRow In DT.Rows
+        For Each DR As DataRow In matchingRows
             Actions.Add(New WorkflowAction With {
-            .Text = DR("PERMISSION_NAME"),
-            .CommandName = DR("PERMISSION_NAME"),
+                .Text = DR("PERMISSION_NAME").ToString(),
+                .CommandName = DR("PERMISSION_NAME").ToString(),
                 .CommandArgument = RequestID,
-                .Icon = DR("ICON").ToString
+                .Icon = DR("ICON").ToString(),
+                .StatusSubtitle = DR("STATUS_SUBTITLE").ToString()
             })
         Next
 
-        _actionsCache(cacheKey) = Actions
-        Return CloneActionsFor(Actions, RequestID)
+        Return Actions
     End Function
 
     ''' <summary>
-    ''' The cached action list is shared across rows, but CommandArgument must carry
-    ''' each row's own RequestID (it's what GridView1_RowCommand uses to know which
-    ''' record to act on), so return per-row copies with CommandArgument rebound
-    ''' rather than mutating - or returning - the single shared cached list.
+    ''' Loads every action the given user is allowed to perform on the given project,
+    ''' across all STATE_IDs, mirroring the role-based + user-override permission
+    ''' model: role-derived permissions (via group -> role -> role permissions) are
+    ''' returned unless a matching user-level override for that exact PROJECT_ID/
+    ''' STATE_ID/ACTION_ID already grants it explicitly (to avoid duplicating it, since
+    ''' the second half of the UNION adds it back in) or denies it, and any user-level
+    ''' ALLOW override is added on top even if no role would otherwise grant it.
+    ''' Joins UNITSHUB_UNITSSTATUS so each row carries its STATUS name/SUBTITLE
+    ''' alongside the STATE_ID code, since that's what the grid's rows key off of.
+    ''' Caller (GetAvailableActions) filters the returned table down to one status
+    ''' per grid row.
     ''' </summary>
-    Private Function CloneActionsFor(source As List(Of WorkflowAction), RequestID As String) As List(Of WorkflowAction)
-        Return source.Select(Function(a) New WorkflowAction With {
-            .Text = a.Text,
-            .CommandName = a.CommandName,
-            .CommandArgument = RequestID,
-            .Icon = a.Icon,
-            .CssClass = a.CssClass
-        }).ToList()
+    Private Function LoadAvailableActionsForProject(ByVal ProjectID As String, ByVal UserID As String) As DataTable
+        Dim safeProjectID As String = If(ProjectID, "").Replace("'", "''")
+        Dim safeUserID As String = If(UserID, "").Replace("'", "''")
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT RP.PROJECT_ID, RP.STATE_ID, RP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
+        SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
+        SQL = SQL + vbCrLf + " FROM UnitsHub_Users U "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUBX_USERGROUPS UG ON U.USER_ID = UG.USER_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUBX_GROUPS G ON UG.GROUP_ID = G.GROUP_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUBX_GROUPROLES GR ON G.GROUP_ID = GR.GROUP_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUBX_ROLES R ON GR.ROLE_ID = R.ROLE_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUBX_ROLEPERMISSIONS RP ON R.ROLE_ID = RP.ROLE_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PERMISSIONS P ON RP.ACTION_ID = P.ACTION_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = RP.STATE_ID "
+        SQL = SQL + vbCrLf + " WHERE U.USER_ID = '" & safeUserID & "' "
+        SQL = SQL + vbCrLf + "   AND RP.PROJECT_ID = '" & safeProjectID & "' "
+        SQL = SQL + vbCrLf + "   AND NOT EXISTS "
+        SQL = SQL + vbCrLf + "   ( "
+        SQL = SQL + vbCrLf + "       SELECT 1 "
+        SQL = SQL + vbCrLf + "       FROM UnitsHubx_UserPermissions UP "
+        SQL = SQL + vbCrLf + "       WHERE UP.USER_ID = U.USER_ID "
+        SQL = SQL + vbCrLf + "         AND UP.PROJECT_ID = RP.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         AND UP.STATE_ID = RP.STATE_ID "
+        SQL = SQL + vbCrLf + "         AND UP.ACTION_ID = RP.ACTION_ID "
+        SQL = SQL + vbCrLf + "         AND UP.ALLOW_DENY = 'A' "
+        SQL = SQL + vbCrLf + "   ) "
+        SQL = SQL + vbCrLf + " UNION "
+        SQL = SQL + vbCrLf + " SELECT UP.PROJECT_ID, UP.STATE_ID, UP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
+        SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
+        SQL = SQL + vbCrLf + " FROM UnitsHubx_UserPermissions UP "
+        SQL = SQL + vbCrLf + " JOIN UnitsHub_Permissions P ON P.ACTION_ID = UP.ACTION_ID "
+        SQL = SQL + vbCrLf + " JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = UP.STATE_ID "
+        SQL = SQL + vbCrLf + " WHERE UP.USER_ID = '" & safeUserID & "' "
+        SQL = SQL + vbCrLf + "   AND UP.PROJECT_ID = '" & safeProjectID & "' "
+        SQL = SQL + vbCrLf + "   AND UP.ALLOW_DENY = 'A'; "
+
+        Return GetDataTable(EBDB, SQL)
     End Function
 
     Private Sub PopulateActions(ph As PlaceHolder,
@@ -1097,6 +1299,7 @@ Public Class WorkflowAction
     Public Property CommandArgument As String
     Public Property Icon As String
     Public Property CssClass As String = "menuItem"
+    Public Property StatusSubtitle As String
 
 End Class
 

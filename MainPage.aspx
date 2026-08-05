@@ -818,12 +818,12 @@
                                                 </asp:TemplateField>
                                                 <asp:TemplateField HeaderText="Status">
                                                     <ItemTemplate>
-                                                        <div class="statusCard">
-                                                            <div class="statusTitle">
+                                                        <div id="statusCard" runat="server" class="statusCard">
+                                                            <div id="statusTitle" runat="server" class="statusTitle">
                                                                 <%# Eval("STATUS") %>
                                                             </div>
 
-                                                            <div class="statusSubtitle">
+                                                            <div id="statusSubtitle" runat="server" class="statusSubtitle">
                                                                 <%# Eval("Status_Subtitle") %>
                                                             </div>
                                                         </div>
