@@ -1017,21 +1017,21 @@ Partial Class MainPage
 
         Dim DT As New DataTable
         Dim SQL As String = ""
-        SQL = SQL + " SELECT * FROM UNITSHUB_PRJ_STT_ACT_USR SAU"
-        SQL = SQL + "   join "
-        SQL = SQL + "   UNITSHUB_ACTIONS AC"
-        SQL = SQL + "   on SAU.ACTION_ID = AC.ACTION_ID"
-        SQL = SQL + "   inner join UNITSHUB_UNITSSTATUS S"
-        SQL = SQL + "   ON SAU.STATE_ID = S.STATE_ID"
-        SQL = SQL + "   where SAU.STATE_ID='000' and SAU.USERS like '%2271%'"
+        SQL = SQL + vbCrLf + " SELECT * FROM UNITSHUB_PRJ_STT_PRM_USR SPU    "
+        SQL = SQL + vbCrLf + " join UNITSHUB_PERMISSIONS  AC    "
+        SQL = SQL + vbCrLf + " on SPU.ACTION_ID = AC.ACTION_ID    "
+        SQL = SQL + vbCrLf + " inner join UNITSHUB_UNITSSTATUS S    "
+        SQL = SQL + vbCrLf + " ON SPU.STATE_ID = S.STATE_ID    "
+        SQL = SQL + vbCrLf + " where SPU.STATE_ID='000' and SPU.USERS like '%2271%' "
+
 
 
         DT = GetDataTable(EBDB, SQL)
 
         For Each DR As DataRow In DT.Rows
             Actions.Add(New WorkflowAction With {
-            .Text = DR("Text"),
-            .CommandName = DR("Text"),
+            .Text = DR("PERMISSION_NAME"),
+            .CommandName = DR("PERMISSION_NAME"),
                 .CommandArgument = RequestID,
                 .Icon = DR("ICON").ToString
             })
