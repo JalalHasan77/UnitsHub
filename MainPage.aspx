@@ -692,10 +692,14 @@
                                 <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="36pt" ForeColor="White" Text="Label"></asp:Label>
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
-                                <button type="button" class="hamburgerBtn" onclick="openSideMenu(event)" aria-label="Open menu">
-                                    <span class="hamburgerIcon"></span>
-                                </button>
+
+                                <asp:LinkButton ID="lnkOpenAction" runat="server">Open Actions</asp:LinkButton>
+
                             </td>
+                            <td style="vertical-align: top; width: 50%;" align="right">
+                                                             <button type="button" class="hamburgerBtn" onclick="openSideMenu(event)" aria-label="Open menu">
+                                    <span class="hamburgerIcon"></span>
+                                </button></td>
                         </tr>
                     </table>
                 </td>
@@ -793,7 +797,7 @@
                                             <div class="gridview-scroll-top-inner" id="gvScrollTopInner">&nbsp;</div>
                                         </div>
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
-                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS">
+                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS,NodeId">
                                             <AlternatingRowStyle BackColor="White" ForeColor="#284775" HorizontalAlign="Center" />
                                             <Columns>
                                                 <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">

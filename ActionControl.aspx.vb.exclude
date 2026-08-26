@@ -1,0 +1,108 @@
+Imports System
+Imports System.Web.UI
+Imports System.Web.UI.WebControls
+
+Namespace ActionControlDemo
+
+    Public Class ActionControl
+        Inherits System.Web.UI.Page
+
+        ' Simple model representing the fields on the form.
+        Public Class ActionControlModel
+            Public Property IsActive As Boolean
+            Public Property ActionTitle As String
+            Public Property ActionType As String
+            Public Property ImplementerTitle As String
+            Public Property ShowInDefault As Boolean
+            Public Property ShowInPreview As Boolean
+            Public Property ReceiveParametersEnabled As Boolean
+            Public Property ReceiveParametersMode As String
+            Public Property Script As String
+            Public Property PreExecution As String
+        End Class
+
+        Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
+            If Not IsPostBack Then
+                ' TODO: replace with a real record load when editing an existing action.
+                LoadDefaults()
+            End If
+        End Sub
+
+        ''' <summary>
+        ''' Sets the initial/default state of the controls, matching the mock-up.
+        ''' </summary>
+        Private Sub LoadDefaults()
+            rblActionStatus.SelectedValue = "Active"
+            ddlActionType.SelectedValue = "Delete"
+            cblShowIn.Items.FindByValue("Default").Selected = True
+            rblReceiveParameters.SelectedValue = "No"
+            rblPreExecution.SelectedValue = "None"
+        End Sub
+
+        Protected Sub btnSave_Click(ByVal sender As Object, ByVal e As EventArgs)
+            If Not Page.IsValid Then
+                Return
+            End If
+
+            Dim model As ActionControlModel = BuildModelFromForm()
+
+            ' TODO: persist "model" to your data store (e.g. call a service/repository here).
+            SaveActionControl(model)
+
+            lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
+        End Sub
+
+        Protected Sub btnCancel_Click(ByVal sender As Object, ByVal e As EventArgs)
+            Response.Redirect(Request.RawUrl)
+        End Sub
+
+        ''' <summary>
+        ''' Reads all form controls into a plain model object.
+        ''' </summary>
+        Private Function BuildModelFromForm() As ActionControlModel
+            Dim model As New ActionControlModel()
+
+            model.IsActive = (rblActionStatus.SelectedValue = "Active")
+            model.ActionTitle = txtActionTitle.Text.Trim()
+            model.ActionType = ddlActionType.SelectedValue
+            model.ImplementerTitle = txtImplementerTitle.Text.Trim()
+
+            model.ShowInDefault = cblShowIn.Items.FindByValue("Default").Selected
+            model.ShowInPreview = cblShowIn.Items.FindByValue("Preview").Selected
+
+            model.ReceiveParametersEnabled = chkReceiveParameters.Checked
+            model.ReceiveParametersMode = rblReceiveParameters.SelectedValue
+
+            model.Script = txtScript.Text
+            model.PreExecution = rblPreExecution.SelectedValue
+
+            Return model
+        End Function
+
+        ''' <summary>
+        ''' Placeholder for actual save logic (database call, API call, etc.).
+        ''' </summary>
+        Private Sub SaveActionControl(ByVal model As ActionControlModel)
+            ' Example:
+            ' Using conn As New SqlConnection(ConfigurationManager.ConnectionStrings("Default").ConnectionString)
+            '     Using cmd As New SqlCommand("usp_SaveActionControl", conn)
+            '         cmd.CommandType = CommandType.StoredProcedure
+            '         cmd.Parameters.AddWithValue("@IsActive", model.IsActive)
+            '         cmd.Parameters.AddWithValue("@ActionTitle", model.ActionTitle)
+            '         cmd.Parameters.AddWithValue("@ActionType", model.ActionType)
+            '         cmd.Parameters.AddWithValue("@ImplementerTitle", model.ImplementerTitle)
+            '         cmd.Parameters.AddWithValue("@ShowInDefault", model.ShowInDefault)
+            '         cmd.Parameters.AddWithValue("@ShowInPreview", model.ShowInPreview)
+            '         cmd.Parameters.AddWithValue("@ReceiveParametersEnabled", model.ReceiveParametersEnabled)
+            '         cmd.Parameters.AddWithValue("@ReceiveParametersMode", model.ReceiveParametersMode)
+            '         cmd.Parameters.AddWithValue("@Script", model.Script)
+            '         cmd.Parameters.AddWithValue("@PreExecution", model.PreExecution)
+            '         conn.Open()
+            '         cmd.ExecuteNonQuery()
+            '     End Using
+            ' End Using
+        End Sub
+
+    End Class
+
+End Namespace
