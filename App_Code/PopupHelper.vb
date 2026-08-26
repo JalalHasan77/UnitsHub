@@ -448,11 +448,17 @@ Public Module VendorPopupHelper
         js.AppendLine("")
         js.AppendLine("    title.innerHTML = popupTitle || 'Select Vendor';")
         js.AppendLine("")
-        js.AppendLine("    if (!popupWidth || popupWidth < 1) popupWidth = 600;")
-        js.AppendLine("    if (!popupHeight || popupHeight < 1) popupHeight = 400;")
+        js.AppendLine("    if (popupWidth && popupWidth > 0) {")
+        js.AppendLine("        dialog.style.width = popupWidth + 'px';")
+        js.AppendLine("    } else {")
+        js.AppendLine("        dialog.style.width = '95vw';")
+        js.AppendLine("    }")
         js.AppendLine("")
-        js.AppendLine("    dialog.style.width = popupWidth + 'px';")
-        js.AppendLine("    dialog.style.height = popupHeight + 'px';")
+        js.AppendLine("    if (popupHeight && popupHeight > 0) {")
+        js.AppendLine("        dialog.style.height = popupHeight + 'px';")
+        js.AppendLine("    } else {")
+        js.AppendLine("        dialog.style.height = '95vh';")
+        js.AppendLine("    }")
         js.AppendLine("")
         js.AppendLine("    vendorPopupSetPlacement(placement || 'Center');")
         js.AppendLine("    vendorPopupApplyDisplayMode(vendorPopupContext.displayMode);")
@@ -573,8 +579,11 @@ Public Module VendorPopupHelper
                                            ByVal displayTextControlClientId As String,
                                            ByVal displayMode As PopupDisplayMode) As String
 
-        If popupWidth <= 0 Then popupWidth = 600
-        If popupHeight <= 0 Then popupHeight = 400
+        ' A width/height of 0 (or less) means "not specified" — the client script
+        ' will expand that dimension to the maximum available size (95vw / 95vh)
+        ' instead of falling back to a fixed pixel default.
+        If popupWidth < 0 Then popupWidth = 0
+        If popupHeight < 0 Then popupHeight = 0
 
         Dim script As New StringBuilder()
 

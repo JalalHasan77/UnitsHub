@@ -420,13 +420,24 @@
                     <div class="form-row">
                         <div class="form-label">Action Type</div>
                         <div class="form-control-cell">
-                            <asp:DropDownList ID="ddlActionType" runat="server" CssClass="ddl-input">
-                                <asp:ListItem Value="MOVE">Move To Next State</asp:ListItem>
+                            <asp:DropDownList ID="ddlActionType" runat="server" CssClass="ddl-input" onchange="toggleNeedPaymentVisibility();">
+                                <asp:ListItem>Select Action</asp:ListItem>
+                                <asp:ListItem Value="CHANGE">Change Status</asp:ListItem>
                                 <asp:ListItem Value="DLET">Delete</asp:ListItem>
                                 <asp:ListItem Value="ACTV">Activate</asp:ListItem>
                                 <asp:ListItem Value="DACTV">De-Activate</asp:ListItem>
                                 <asp:ListItem>Edit</asp:ListItem>
                             </asp:DropDownList>
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowNeedPayment" runat="server">
+                        <div class="form-label"></div>
+                        <div class="form-control-cell">
+                            <label class="toggle-inline">
+                                <asp:CheckBox ID="chkNeedPayment" runat="server" />
+                                Need Payment
+                            </label>
                         </div>
                     </div>
 
@@ -527,6 +538,22 @@
 
             </div>
         </div>
+
+        <script type="text/javascript">
+            function toggleNeedPaymentVisibility() {
+                var ddl = document.getElementById('<%= ddlActionType.ClientID %>');
+                var row = document.getElementById('<%= rowNeedPayment.ClientID %>');
+
+                if (!ddl || !row) { return; }
+
+                var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
+                row.style.display = (selectedValue === 'CHANGE') ? '' : 'none';
+            }
+
+            if (document.addEventListener) {
+                document.addEventListener('DOMContentLoaded', toggleNeedPaymentVisibility);
+            }
+        </script>
     </form>
 </body>
 </html>

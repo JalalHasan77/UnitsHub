@@ -97,7 +97,7 @@ Partial Class MainPage
         VendorPopupHelper.RegisterVendorPopup(Me,
                                       lnkOpenAction,
                                       "DesignAction.aspx",
-                                      1000, 1600,
+                                      800, 0,
                                       PopupPlacement.Center,
                                       "Select Adj",
                                       VendorPopupHelper.PopupDisplayMode.FrameOnly)

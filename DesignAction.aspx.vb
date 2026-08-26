@@ -12,6 +12,7 @@ Partial Class DesignAction
         Public Property ShowInPreview As Boolean
         Public Property ReceiveParametersEnabled As Boolean
         Public Property ReceiveParametersMode As String
+        Public Property NeedPayment As Boolean
         Public Property Script As String
         Public Property PreExecution As String
     End Class
@@ -21,6 +22,17 @@ Partial Class DesignAction
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
         End If
+
+        UpdateNeedPaymentVisibility()
+    End Sub
+
+    ''' <summary>
+    ''' Shows/hides the "Need Payment" checkbox row based on the currently selected Action Type.
+    ''' Mirrors the client-side toggleNeedPaymentVisibility() script so the row is also correct
+    ''' on the very first render and whenever JavaScript is unavailable.
+    ''' </summary>
+    Private Sub UpdateNeedPaymentVisibility()
+        rowNeedPayment.Style("display") = If(ddlActionType.SelectedValue = "CHANGE", "", "none")
     End Sub
 
     ''' <summary>
@@ -67,6 +79,7 @@ Partial Class DesignAction
 
         model.ReceiveParametersEnabled = chkReceiveParameters.Checked
         model.ReceiveParametersMode = rblReceiveParameters.SelectedValue
+        model.NeedPayment = chkNeedPayment.Checked
 
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
@@ -90,6 +103,7 @@ Partial Class DesignAction
         '         cmd.Parameters.AddWithValue("@ShowInPreview", model.ShowInPreview)
         '         cmd.Parameters.AddWithValue("@ReceiveParametersEnabled", model.ReceiveParametersEnabled)
         '         cmd.Parameters.AddWithValue("@ReceiveParametersMode", model.ReceiveParametersMode)
+        '         cmd.Parameters.AddWithValue("@NeedPayment", model.NeedPayment)
         '         cmd.Parameters.AddWithValue("@Script", model.Script)
         '         cmd.Parameters.AddWithValue("@PreExecution", model.PreExecution)
         '         conn.Open()
