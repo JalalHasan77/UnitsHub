@@ -72,9 +72,7 @@
         }
 
         .status-panel {
-            background-color: #1a1464;
-            padding: 10px 10px 7px 10px;
-            border-radius: 8px;
+            padding: 0;
         }
 
         .status-grid {
@@ -83,7 +81,18 @@
         }
 
         .status-grid td {
-            padding: 0 0 10px 0;
+            padding: 0 0 24px 0;
+        }
+
+        .state-group {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(30, 41, 59, 0.15);
+        }
+
+        .state-header {
+            background-color: #1a1464;
+            padding: 14px 18px;
         }
 
         .status-box {
@@ -146,27 +155,66 @@
 
         .status-empty {
             padding: 16px 22px;
-            color: #ffffff;
+            color: #64748b;
             font-size: 14px;
         }
-        
-            .lblSpacing2 
-        { 
-    padding-left: 3px;
-    padding-right: 3px; 
-    padding-top: 3px; 
-    padding-bottom: 3px; 
-    -moz-border-radius: 3px;
-    -webkit-border-radius: 3px;
-    border-radius: 7px;
-    border: 1px solid grey;
-    }
 
-                    .auto-style4 {
-            width: 100%;
-            border-collapse: collapse;
+        .state-actions-panel {
+            background-color: #dbeafe;
+            border: 2px solid #1a1464;
         }
 
+        .action-grid {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+        }
+
+        .action-grid td {
+            padding: 0;
+        }
+
+        .action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 18px;
+            border-bottom: 1px solid #1a1464;
+            line-height: 1.3;
+            min-height: 0;
+        }
+
+        .state-actions-panel table tr:last-child .action-row {
+            border-bottom: none;
+        }
+
+        .action-row-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.3;
+        }
+
+        .action-row-left input[type="checkbox"] {
+            vertical-align: middle;
+            margin: 0;
+        }
+
+        .action-link {
+            color: #4338ca;
+            text-decoration: underline;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .lblSpacing2 {
+            padding: 4px 16px;
+            border-radius: 14px;
+            border: 1px solid #94a3b8;
+            background-color: #ffffff;
+            font-size: 13px;
+            cursor: pointer;
+        }
 
     </style>
 </head>
@@ -213,52 +261,43 @@
                                         <Columns>
                                             <asp:TemplateField>
                                                 <ItemTemplate>
-                                                    <table style="width:100%">
-                                                        <tr>
-                                                            <td>
-                                                    <div class="status-row">
-                                                        <asp:Panel ID="pnlStatusBox" runat="server" CssClass="status-box">
-                                                            <asp:Label ID="lblStatus" runat="server" CssClass="status-title" Text='<%# Eval("STATUS") %>' />
-                                                            <asp:Panel ID="pnlSubtitle" runat="server" CssClass="subtitle-box">
-                                                                <asp:Label ID="lblSubtitle" runat="server" Text='<%# Eval("SUBTITLE") %>' />
-                                                            </asp:Panel>
-                                                        </asp:Panel>
-                                                        <div class="status-actions">
-                                                            <asp:LinkButton ID="lnkAddStateUp" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateUp_Click">Add State &#9650;</asp:LinkButton>
-                                                            <asp:LinkButton ID="lnkAddStateDown" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateDown_Click">Add State &#9660;</asp:LinkButton>
-                                                            <asp:LinkButton ID="lnkAddNewAction" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddNewAction_Click">Add New Action</asp:LinkButton>
+                                                    <div class="state-group">
+                                                        <div class="state-header">
+                                                            <div class="status-row">
+                                                                <asp:Panel ID="pnlStatusBox" runat="server" CssClass="status-box">
+                                                                    <asp:Label ID="lblStatus" runat="server" CssClass="status-title" Text='<%# Eval("STATUS") %>' />
+                                                                    <asp:Panel ID="pnlSubtitle" runat="server" CssClass="subtitle-box">
+                                                                        <asp:Label ID="lblSubtitle" runat="server" Text='<%# Eval("SUBTITLE") %>' />
+                                                                    </asp:Panel>
+                                                                </asp:Panel>
+                                                                <div class="status-actions">
+                                                                    <asp:LinkButton ID="lnkAddStateUp" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateUp_Click">Add State &#9650;</asp:LinkButton>
+                                                                    <asp:LinkButton ID="lnkAddStateDown" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateDown_Click">Add State &#9660;</asp:LinkButton>
+                                                                    <asp:LinkButton ID="lnkAddNewAction" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddNewAction_Click">Add New Action</asp:LinkButton>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="state-actions-panel">
+                                                            <asp:GridView ID="GridView1" runat="server" AutoGenerateColumns="False"
+                                                                ShowHeader="False" GridLines="None" CellPadding="0" CellSpacing="0" Width="100%"
+                                                                CssClass="action-grid"
+                                                                OnRowDataBound="GridView1_RowDataBound">
+                                                                <Columns>
+                                                                    <asp:TemplateField>
+                                                                        <ItemTemplate>
+                                                                            <div class="action-row">
+                                                                                <div class="action-row-left">
+                                                                                    <asp:CheckBox ID="chkActionTitle" runat="server" AutoPostBack="True" />
+                                                                                    <asp:LinkButton ID="lnkActionTitle" runat="server" CssClass="action-link"></asp:LinkButton>
+                                                                                </div>
+                                                                                <asp:Button ID="btnShowUsers" runat="server" Text="Show Users" CssClass="lblSpacing2" />
+                                                                            </div>
+                                                                        </ItemTemplate>
+                                                                    </asp:TemplateField>
+                                                                </Columns>
+                                                            </asp:GridView>
                                                         </div>
                                                     </div>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td style="background-color:#9D8BE6">
-                                                                <asp:GridView ID="GridView1" runat="server" AutoGenerateColumns="False" OnRowDataBound="GridView1_RowDataBound">
-                                                                    <Columns>
-                                                                        <asp:TemplateField>
-                                                                            <ItemTemplate>
-                                                                            <table cellpadding="4" class="auto-style4">
-                                                                                <tr>
-                                                                                    <td align="Left">
-                                                                                        <asp:CheckBox ID="chkActionTitle" runat="server" Font-Names="Arial" AutoPostBack="True" />
-                                                                                        <asp:LinkButton ID="lnkActionTitle" runat="server" Font-Names="Arial"></asp:LinkButton>
-                                                                                    </td>
-                                                                                    <td style="width: 1px">
-                                                                                        <asp:Button ID="btnShowUsers" runat="server" Text="Show Users" CssClass="lblSpacing2" />
-                                                                                    </td>
-                                                                                </tr>
-                                                                            </table>
-                                                                            </ItemTemplate>
-                                                                        </asp:TemplateField>
-                                                                    </Columns>
-                                                                </asp:GridView>
-
-
-
-                                                             </td>
-                                                        </tr>
-                                                    </table>
-
                                                 </ItemTemplate>
                                             </asp:TemplateField>
                                         </Columns>
