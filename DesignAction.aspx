@@ -269,6 +269,38 @@
         .toggle-inline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
         .toggle-inline input { width: 17px; height: 17px; accent-color: var(--brand-1); cursor: pointer; }
 
+        .plan-details-grid {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .plan-details-grid th {
+            background-color: var(--brand-soft);
+            color: var(--brand-1);
+            text-align: left;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .plan-details-grid td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink);
+        }
+
+        .plan-details-grid tr:last-child td { border-bottom: none; }
+        .plan-details-grid tr:hover td { background-color: #f8fafc; }
+        .plan-details-grid input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-1); cursor: pointer; }
+        .plan-details-empty { font-size: 13px; color: var(--muted); padding: 10px 2px; }
+
         .select-users-btn {
             display: inline-flex;
             align-items: center;
@@ -429,6 +461,9 @@
                                 <asp:ListItem>Edit</asp:ListItem>
                             </asp:DropDownList>
                         </div>
+                        <div class="form-control-cell" id="cellToStatus" runat="server">
+                            <asp:DropDownList ID="ddlToStatus" runat="server" CssClass="ddl-input" />
+                        </div>
                     </div>
 
                     <div class="form-row" id="rowNeedPayment" runat="server">
@@ -444,7 +479,23 @@
                     <div class="form-row" id="rowPaymentPlan" runat="server">
                         <div class="form-label">Payment Plan</div>
                         <div class="form-control-cell">
-                            <asp:DropDownList ID="ddlPaymentPlan" runat="server" CssClass="ddl-input" />
+                            <asp:DropDownList ID="ddlPaymentPlan" runat="server" CssClass="ddl-input" AutoPostBack="true" OnSelectedIndexChanged="ddlPaymentPlan_SelectedIndexChanged" />
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowPlanDetails" runat="server" style="flex-basis:100%;">
+                        <div class="form-control-cell" style="flex-basis:100%;">
+                            <asp:GridView ID="gvPlanDetails" runat="server" AutoGenerateColumns="True"
+                                CssClass="plan-details-grid" GridLines="None"
+                                EmptyDataText="No plan details found for the selected payment plan.">
+                                <Columns>
+                                    <asp:TemplateField HeaderText="Select">
+                                        <ItemTemplate>
+                                            <asp:CheckBox ID="chkSelectDetail" runat="server" />
+                                        </ItemTemplate>
+                                    </asp:TemplateField>
+                                </Columns>
+                            </asp:GridView>
                         </div>
                     </div>
 
@@ -550,11 +601,15 @@
             function toggleNeedPaymentVisibility() {
                 var ddl = document.getElementById('<%= ddlActionType.ClientID %>');
                 var row = document.getElementById('<%= rowNeedPayment.ClientID %>');
+                var toStatusCell = document.getElementById('<%= cellToStatus.ClientID %>');
 
-                if (!ddl || !row) { return; }
+                if (!ddl || !row || !toStatusCell) { return; }
 
                 var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
-                row.style.display = (selectedValue === 'CHANGE') ? '' : 'none';
+                var isChangeStatus = (selectedValue === 'CHANGE');
+
+                row.style.display = isChangeStatus ? '' : 'none';
+                toStatusCell.style.display = isChangeStatus ? '' : 'none';
 
                 togglePaymentPlanVisibility();
             }
@@ -563,11 +618,18 @@
                 var chk = document.getElementById('<%= chkNeedPayment.ClientID %>');
                 var needPaymentRow = document.getElementById('<%= rowNeedPayment.ClientID %>');
                 var planRow = document.getElementById('<%= rowPaymentPlan.ClientID %>');
+                var planDetailsRow = document.getElementById('<%= rowPlanDetails.ClientID %>');
+                var planDdl = document.getElementById('<%= ddlPaymentPlan.ClientID %>');
 
-                if (!chk || !needPaymentRow || !planRow) { return; }
+                if (!chk || !needPaymentRow || !planRow || !planDetailsRow || !planDdl) { return; }
 
                 var needPaymentRowVisible = (needPaymentRow.style.display !== 'none');
-                planRow.style.display = (needPaymentRowVisible && chk.checked) ? '' : 'none';
+                var planRowVisible = (needPaymentRowVisible && chk.checked);
+                var selectedPlanValue = planDdl.options[planDdl.selectedIndex] ? planDdl.options[planDdl.selectedIndex].value : '';
+                var planDetailsRowVisible = (planRowVisible && selectedPlanValue !== '');
+
+                planRow.style.display = planRowVisible ? '' : 'none';
+                planDetailsRow.style.display = planDetailsRowVisible ? '' : 'none';
             }
 
             if (document.addEventListener) {

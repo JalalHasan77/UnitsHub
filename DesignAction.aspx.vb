@@ -14,6 +14,7 @@ Partial Class DesignAction
         Public Property ReceiveParametersMode As String
         Public Property NeedPayment As Boolean
         Public Property PaymentPlanId As String
+        Public Property ToStatusId As String
         Public Property Script As String
         Public Property PreExecution As String
     End Class
@@ -23,6 +24,7 @@ Partial Class DesignAction
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
             LoadPaymentPlans()
+            LoadStatuses()
         End If
 
         UpdateNeedPaymentVisibility()
@@ -36,8 +38,13 @@ Partial Class DesignAction
     Private Sub UpdateNeedPaymentVisibility()
         Dim needPaymentRowVisible As Boolean = (ddlActionType.SelectedValue = "CHANGE")
         rowNeedPayment.Style("display") = If(needPaymentRowVisible, "", "none")
+        cellToStatus.Style("display") = If(needPaymentRowVisible, "", "none")
 
-        rowPaymentPlan.Style("display") = If(needPaymentRowVisible AndAlso chkNeedPayment.Checked, "", "none")
+        Dim paymentPlanRowVisible As Boolean = (needPaymentRowVisible AndAlso chkNeedPayment.Checked)
+        rowPaymentPlan.Style("display") = If(paymentPlanRowVisible, "", "none")
+
+        Dim planDetailsRowVisible As Boolean = (paymentPlanRowVisible AndAlso Not String.IsNullOrEmpty(ddlPaymentPlan.SelectedValue))
+        rowPlanDetails.Style("display") = If(planDetailsRowVisible, "", "none")
     End Sub
 
     ''' <summary>
@@ -53,6 +60,54 @@ Partial Class DesignAction
         ddlPaymentPlan.DataTextField = "NAME"
         ddlPaymentPlan.DataValueField = "PLAN_ID"
         ddlPaymentPlan.DataBind()
+
+        ddlPaymentPlan.Items.Insert(0, New ListItem("Select Payment Plan", ""))
+    End Sub
+
+    ''' <summary>
+    ''' Populates ddlToStatus from UNITSHUB_UNITSSTATUS. Only called on the initial load
+    ''' (not on postback) so the selection persists via ViewState instead of being re-bound.
+    ''' </summary>
+    Private Sub LoadStatuses()
+        Dim DT As New Data.DataTable
+        Dim SQL As String = "Select STATE_ID, CASE WHEN SUBTITLE IS NOT NULL OR TRIM(SUBTITLE) <> '' THEN STATUS || ': ' || SUBTITLE ELSE STATUS END AS STATUS from UNITSHUB_UNITSSTATUS"
+        DT = GetDataTable(EBDB, SQL)
+
+        ddlToStatus.Items.Clear()
+        ddlToStatus.DataSource = DT
+        ddlToStatus.DataTextField = "STATUS"
+        ddlToStatus.DataValueField = "STATE_ID"
+        ddlToStatus.DataBind()
+
+        ddlToStatus.Items.Insert(0, New ListItem("To Status", ""))
+    End Sub
+
+    ''' <summary>
+    ''' Fires when the user picks a different Payment Plan; reloads the corresponding
+    ''' plan-detail rows into gvPlanDetails.
+    ''' </summary>
+    Protected Sub ddlPaymentPlan_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        LoadPlanDetails()
+    End Sub
+
+    ''' <summary>
+    ''' Loads UNITSHUB_PAYMENTPLANDETAILS rows for the currently selected Payment Plan
+    ''' into gvPlanDetails.
+    ''' </summary>
+    Private Sub LoadPlanDetails()
+        Dim PLAN_ID As String = ddlPaymentPlan.SelectedValue
+
+        If String.IsNullOrEmpty(PLAN_ID) Then
+            gvPlanDetails.DataSource = Nothing
+            gvPlanDetails.DataBind()
+            Return
+        End If
+
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select * from UNITSHUB_PAYMENTPLANDETAILS where PLAN_ID = '" & PLAN_ID & "'")
+
+        gvPlanDetails.DataSource = DT
+        gvPlanDetails.DataBind()
     End Sub
 
     ''' <summary>
@@ -94,6 +149,8 @@ Partial Class DesignAction
         model.ActionType = ddlActionType.SelectedValue
         model.ImplementerTitle = txtImplementerTitle.Text.Trim()
 
+        model.ToStatusId = If(model.ActionType = "CHANGE", ddlToStatus.SelectedValue, Nothing)
+
         model.ShowInDefault = cblShowIn.Items.FindByValue("Default").Selected
         model.ShowInPreview = cblShowIn.Items.FindByValue("Preview").Selected
 
@@ -120,6 +177,7 @@ Partial Class DesignAction
         '         cmd.Parameters.AddWithValue("@ActionTitle", model.ActionTitle)
         '         cmd.Parameters.AddWithValue("@ActionType", model.ActionType)
         '         cmd.Parameters.AddWithValue("@ImplementerTitle", model.ImplementerTitle)
+        '         cmd.Parameters.AddWithValue("@ToStatusId", model.ToStatusId)
         '         cmd.Parameters.AddWithValue("@ShowInDefault", model.ShowInDefault)
         '         cmd.Parameters.AddWithValue("@ShowInPreview", model.ShowInPreview)
         '         cmd.Parameters.AddWithValue("@ReceiveParametersEnabled", model.ReceiveParametersEnabled)
