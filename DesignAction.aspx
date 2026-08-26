@@ -435,9 +435,16 @@
                         <div class="form-label"></div>
                         <div class="form-control-cell">
                             <label class="toggle-inline">
-                                <asp:CheckBox ID="chkNeedPayment" runat="server" />
+                                <asp:CheckBox ID="chkNeedPayment" runat="server" onchange="togglePaymentPlanVisibility();" />
                                 Need Payment
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowPaymentPlan" runat="server">
+                        <div class="form-label">Payment Plan</div>
+                        <div class="form-control-cell">
+                            <asp:DropDownList ID="ddlPaymentPlan" runat="server" CssClass="ddl-input" />
                         </div>
                     </div>
 
@@ -548,6 +555,19 @@
 
                 var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
                 row.style.display = (selectedValue === 'CHANGE') ? '' : 'none';
+
+                togglePaymentPlanVisibility();
+            }
+
+            function togglePaymentPlanVisibility() {
+                var chk = document.getElementById('<%= chkNeedPayment.ClientID %>');
+                var needPaymentRow = document.getElementById('<%= rowNeedPayment.ClientID %>');
+                var planRow = document.getElementById('<%= rowPaymentPlan.ClientID %>');
+
+                if (!chk || !needPaymentRow || !planRow) { return; }
+
+                var needPaymentRowVisible = (needPaymentRow.style.display !== 'none');
+                planRow.style.display = (needPaymentRowVisible && chk.checked) ? '' : 'none';
             }
 
             if (document.addEventListener) {

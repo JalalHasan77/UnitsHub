@@ -13,6 +13,7 @@ Partial Class DesignAction
         Public Property ReceiveParametersEnabled As Boolean
         Public Property ReceiveParametersMode As String
         Public Property NeedPayment As Boolean
+        Public Property PaymentPlanId As String
         Public Property Script As String
         Public Property PreExecution As String
     End Class
@@ -21,18 +22,37 @@ Partial Class DesignAction
         If Not IsPostBack Then
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
+            LoadPaymentPlans()
         End If
 
         UpdateNeedPaymentVisibility()
     End Sub
 
     ''' <summary>
-    ''' Shows/hides the "Need Payment" checkbox row based on the currently selected Action Type.
-    ''' Mirrors the client-side toggleNeedPaymentVisibility() script so the row is also correct
-    ''' on the very first render and whenever JavaScript is unavailable.
+    ''' Shows/hides the "Need Payment" checkbox row based on the currently selected Action Type,
+    ''' and the Payment Plan row based on that checkbox. Mirrors the client-side toggle scripts
+    ''' so both rows are also correct on the very first render and whenever JavaScript is unavailable.
     ''' </summary>
     Private Sub UpdateNeedPaymentVisibility()
-        rowNeedPayment.Style("display") = If(ddlActionType.SelectedValue = "CHANGE", "", "none")
+        Dim needPaymentRowVisible As Boolean = (ddlActionType.SelectedValue = "CHANGE")
+        rowNeedPayment.Style("display") = If(needPaymentRowVisible, "", "none")
+
+        rowPaymentPlan.Style("display") = If(needPaymentRowVisible AndAlso chkNeedPayment.Checked, "", "none")
+    End Sub
+
+    ''' <summary>
+    ''' Populates ddlPaymentPlan from UNITSHUB_PAYMENTPLAN. Only called on the initial load
+    ''' (not on postback) so selections persist via ViewState instead of being re-bound.
+    ''' </summary>
+    Private Sub LoadPaymentPlans()
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select PLAN_ID, NAME from UNITSHUB_PAYMENTPLAN")
+
+        ddlPaymentPlan.Items.Clear()
+        ddlPaymentPlan.DataSource = DT
+        ddlPaymentPlan.DataTextField = "NAME"
+        ddlPaymentPlan.DataValueField = "PLAN_ID"
+        ddlPaymentPlan.DataBind()
     End Sub
 
     ''' <summary>
@@ -80,6 +100,7 @@ Partial Class DesignAction
         model.ReceiveParametersEnabled = chkReceiveParameters.Checked
         model.ReceiveParametersMode = rblReceiveParameters.SelectedValue
         model.NeedPayment = chkNeedPayment.Checked
+        model.PaymentPlanId = If(model.NeedPayment, ddlPaymentPlan.SelectedValue, Nothing)
 
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
@@ -104,6 +125,7 @@ Partial Class DesignAction
         '         cmd.Parameters.AddWithValue("@ReceiveParametersEnabled", model.ReceiveParametersEnabled)
         '         cmd.Parameters.AddWithValue("@ReceiveParametersMode", model.ReceiveParametersMode)
         '         cmd.Parameters.AddWithValue("@NeedPayment", model.NeedPayment)
+        '         cmd.Parameters.AddWithValue("@PaymentPlanId", model.PaymentPlanId)
         '         cmd.Parameters.AddWithValue("@Script", model.Script)
         '         cmd.Parameters.AddWithValue("@PreExecution", model.PreExecution)
         '         conn.Open()
