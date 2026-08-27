@@ -27,10 +27,16 @@ Partial Class DesignAction
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
-            ' TODO: verify these are the actual query-string parameter names this page is
-            ' navigated to with (e.g. from ProjectStatusAndAction.aspx's "Add New Action" link).
-            'lblProjectID.Text = Request.QueryString("ProjectID")
-            'lblSTATUSID.Text = Request.QueryString("StatusID")
+            ' Only override the markup's placeholder text (e.g. "001" / "0000") when the query
+            ' string actually supplies a value — otherwise Request.QueryString(...) returns
+            ' Nothing and silently blanks out lblProjectID/lblSTATUSID.
+            If Not String.IsNullOrEmpty(Request.QueryString("ProjectID")) Then
+                lblProjectID.Text = Request.QueryString("ProjectID")
+            End If
+
+            If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
+                lblSTATUSID.Text = Request.QueryString("StatusID")
+            End If
 
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
@@ -173,6 +179,117 @@ Partial Class DesignAction
         Response.Redirect(Request.RawUrl)
     End Sub
 
+    Protected Sub btnLoad_Click(ByVal sender As Object, ByVal e As EventArgs)
+        LoadActionControl()
+    End Sub
+
+    ''' <summary>
+    ''' Loads an existing action (and its previously-ticked Payment Plan Details) back into
+    ''' the form, from UNITSHUB_ACTIONS / UNITSHUB_ACT_PAY_PLN_DETAILS, for
+    ''' PROJECT_ID = lblProjectID.Text, STATUS_ID = lblSTATUSID.Text, ACTION_ID = '00001'.
+    ''' </summary>
+    ''' <remarks>
+    ''' TODO: ACTION_ID is hardcoded to "00001" per the current requirement — swap this for
+    ''' whichever action the user is actually meant to be loading (e.g. a query-string
+    ''' parameter, or a row picked from a list) once that's available.
+    ''' </remarks>
+    Private Sub LoadActionControl()
+        Const actionId As String = "00001"
+
+        Dim actionDT As New Data.DataTable
+        Dim actionSql As String =
+            "SELECT * FROM UNITSHUB_ACTIONS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & lblSTATUSID.Text.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+        actionDT = GetDataTable(EBDB, actionSql)
+
+        If actionDT.Rows.Count = 0 Then
+            lblMessage.Text = "No saved action found for this Project / Status / Action ID."
+            Return
+        End If
+
+        Dim row As Data.DataRow = actionDT.Rows(0)
+
+        rblActionStatus.SelectedValue = If(SafeBool(row("IS_ACTIVE")), "Active", "InActive")
+        txtActionTitle.Text = SafeString(row("ACTION_TITLE"))
+        SafeSetSelectedValue(ddlActionType, SafeString(row("ACTION_TYPE")))
+        txtImplementerTitle.Text = SafeString(row("IMPLEMENTER_TITLE"))
+
+        cblShowIn.Items.FindByValue("Default").Selected = SafeBool(row("SHOW_IN_DEFAULT"))
+        cblShowIn.Items.FindByValue("Preview").Selected = SafeBool(row("SHOW_IN_PREVIEW"))
+
+        chkReceiveParameters.Checked = SafeBool(row("RECEIVE_PARAMETERS_ENABLED"))
+        SafeSetSelectedValue(rblReceiveParameters, SafeString(row("RECEIVE_PARAMETERS_MODE")))
+
+        chkNeedPayment.Checked = SafeBool(row("NEED_PAYMENT"))
+        Dim paymentPlanId As String = SafeString(row("PAYMENT_PLAN_ID"))
+        SafeSetSelectedValue(ddlPaymentPlan, paymentPlanId)
+
+        SafeSetSelectedValue(ddlToStatus, SafeString(row("TO_STATUS_ID")))
+
+        txtScript.Text = SafeString(row("SCRIPT_TEXT"))
+        SafeSetSelectedValue(rblPreExecution, SafeString(row("PRE_EXECUTION")))
+        txtConfirmationText.Text = SafeString(row("CONFIRMATION_TEXT"))
+        SafeSetSelectedValue(ddlParameterType, SafeString(row("PARAMETER_TYPE")))
+        txtFormTitle.Text = SafeString(row("FORM_TITLE"))
+        txtSelectSQL.Text = SafeString(row("SELECT_SQL"))
+
+        ' Re-bind the Payment Plan Details grid for the loaded plan, then re-tick whichever
+        ' rows were previously saved for this action.
+        If chkNeedPayment.Checked AndAlso Not String.IsNullOrEmpty(paymentPlanId) Then
+            LoadPlanDetails()
+
+            Dim detailsDT As New Data.DataTable
+            Dim detailsSql As String =
+                "SELECT DETAIL_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
+                "AND STATUS_ID = '" & lblSTATUSID.Text.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+            detailsDT = GetDataTable(EBDB, detailsSql)
+
+            For Each gvRow As GridViewRow In gvPlanDetails.Rows
+                If gvRow.RowType <> DataControlRowType.DataRow Then
+                    Continue For
+                End If
+
+                Dim detailId As String = gvPlanDetails.DataKeys(gvRow.RowIndex).Value.ToString()
+                Dim chk As CheckBox = CType(gvRow.FindControl("chkSelectDetail"), CheckBox)
+
+                If chk IsNot Nothing Then
+                    chk.Checked = (detailsDT.Select("DETAIL_ID = '" & detailId.Replace("'", "''") & "'").Length > 0)
+                End If
+            Next
+        Else
+            gvPlanDetails.DataSource = Nothing
+            gvPlanDetails.DataBind()
+        End If
+
+        UpdateNeedPaymentVisibility()
+        UpdatePreExecutionVisibility()
+
+        lblMessage.Text = "Action '" & txtActionTitle.Text & "' loaded."
+    End Sub
+
+    ''' <summary>Returns "" for Nothing/DBNull instead of throwing.</summary>
+    Private Function SafeString(ByVal value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return String.Empty
+        End If
+        Return value.ToString()
+    End Function
+
+    ''' <summary>Treats NUMBER(1,0) flag columns (1/0) as True/False.</summary>
+    Private Function SafeBool(ByVal value As Object) As Boolean
+        Return SafeString(value) = "1"
+    End Function
+
+    ''' <summary>
+    ''' Sets SelectedValue only if that value actually exists in the list — setting
+    ''' SelectedValue to a value with no matching ListItem throws.
+    ''' </summary>
+    Private Sub SafeSetSelectedValue(ByVal list As ListControl, ByVal value As String)
+        If Not String.IsNullOrEmpty(value) AndAlso list.Items.FindByValue(value) IsNot Nothing Then
+            list.SelectedValue = value
+        End If
+    End Sub
+
     ''' <summary>
     ''' Reads all form controls into a plain model object.
     ''' </summary>
@@ -234,8 +351,7 @@ Partial Class DesignAction
     Private Sub SaveActionControl(ByVal model As ActionControlModel)
         ' 1. Generate the new ACTION_ID.
         Dim nextActionIdDT As New Data.DataTable
-        nextActionIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ACTION_ID)), 0) + 1, 5, '0') AS NEXT_ID FROM UNITSHUB_ACTIONS where " &
-                                      " PROJECT_ID ='" & lblProjectID.Text & "' and STATUS_ID='" & lblSTATUSID.Text & "'")
+        nextActionIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ACTION_ID)), 0) + 1, 5, '0') AS NEXT_ID FROM UNITSHUB_ACTIONS")
         Dim actionId As String = nextActionIdDT.Rows(0)("NEXT_ID").ToString()
 
         ' 2. Insert the parent Action row.
@@ -300,8 +416,5 @@ Partial Class DesignAction
                 End If
             Next
         End If
-    End Sub
-    Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
-
     End Sub
 End Class

@@ -410,7 +410,6 @@
 </head>
 <body>
     <form id="form1" runat="server">
-        <asp:Button ID="Button1" runat="server" Text="Load" />
         <div class="action-panel">
 
             <div class="action-header">
@@ -627,6 +626,7 @@
                 </div>
 
                 <div class="btn-row">
+                    <asp:Button ID="btnLoad" runat="server" Text="Load" CssClass="btn-cancel" CausesValidation="false" OnClick="btnLoad_Click" />
                     <asp:Button ID="btnCancel" runat="server" Text="Cancel" CssClass="btn-cancel" CausesValidation="false" OnClick="btnCancel_Click" />
                     <asp:Button ID="btnSave" runat="server" Text="Save Action" CssClass="btn-save" OnClick="btnSave_Click" />
                 </div>
