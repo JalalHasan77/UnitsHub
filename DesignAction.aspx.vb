@@ -4,6 +4,8 @@ Partial Class DesignAction
 
     ' Simple model representing the fields on the form.
     Public Class ActionControlModel
+        Public Property ProjectId As String
+        Public Property StatusId As String
         Public Property IsActive As Boolean
         Public Property ActionTitle As String
         Public Property ActionType As String
@@ -25,6 +27,11 @@ Partial Class DesignAction
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
+            ' TODO: verify these are the actual query-string parameter names this page is
+            ' navigated to with (e.g. from ProjectStatusAndAction.aspx's "Add New Action" link).
+            'lblProjectID.Text = Request.QueryString("ProjectID")
+            'lblSTATUSID.Text = Request.QueryString("StatusID")
+
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
             LoadPaymentPlans()
@@ -157,8 +164,6 @@ Partial Class DesignAction
         End If
 
         Dim model As ActionControlModel = BuildModelFromForm()
-
-        ' TODO: persist "model" to your data store (e.g. call a service/repository here).
         SaveActionControl(model)
 
         lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
@@ -173,6 +178,9 @@ Partial Class DesignAction
     ''' </summary>
     Private Function BuildModelFromForm() As ActionControlModel
         Dim model As New ActionControlModel()
+
+        model.ProjectId = lblProjectID.Text.Trim()
+        model.StatusId = lblSTATUSID.Text.Trim()
 
         model.IsActive = (rblActionStatus.SelectedValue = "Active")
         model.ActionTitle = txtActionTitle.Text.Trim()
@@ -212,33 +220,88 @@ Partial Class DesignAction
     End Function
 
     ''' <summary>
-    ''' Placeholder for actual save logic (database call, API call, etc.).
+    ''' Persists the form: one row in UNITSHUB_ACTIONS, plus one row in
+    ''' UNITSHUB_ACT_PAY_PLN_DETAILS for every ticked checkbox in gvPlanDetails.
     ''' </summary>
+    ''' <remarks>
+    ''' TODO: "ExecuteNonQuery" below is a placeholder for whatever write helper your
+    ''' project actually exposes (this codebase only gave me GetDataTable(conn, sql) for
+    ''' reads) — swap it for your real INSERT/UPDATE/DELETE helper.
+    ''' TODO: ACTION_ID / ID are VARCHAR2(5 BYTE), not DB-generated identities, so I generate
+    ''' zero-padded numeric strings (e.g. "00001") via MAX(TO_NUMBER(...))+1. If your app has
+    ''' an existing ID-generation routine/sequence for these tables, use that instead.
+    ''' </remarks>
     Private Sub SaveActionControl(ByVal model As ActionControlModel)
-        ' Example:
-        ' Using conn As New SqlConnection(ConfigurationManager.ConnectionStrings("Default").ConnectionString)
-        '     Using cmd As New SqlCommand("usp_SaveActionControl", conn)
-        '         cmd.CommandType = CommandType.StoredProcedure
-        '         cmd.Parameters.AddWithValue("@IsActive", model.IsActive)
-        '         cmd.Parameters.AddWithValue("@ActionTitle", model.ActionTitle)
-        '         cmd.Parameters.AddWithValue("@ActionType", model.ActionType)
-        '         cmd.Parameters.AddWithValue("@ImplementerTitle", model.ImplementerTitle)
-        '         cmd.Parameters.AddWithValue("@ToStatusId", model.ToStatusId)
-        '         cmd.Parameters.AddWithValue("@ShowInDefault", model.ShowInDefault)
-        '         cmd.Parameters.AddWithValue("@ShowInPreview", model.ShowInPreview)
-        '         cmd.Parameters.AddWithValue("@ReceiveParametersEnabled", model.ReceiveParametersEnabled)
-        '         cmd.Parameters.AddWithValue("@ReceiveParametersMode", model.ReceiveParametersMode)
-        '         cmd.Parameters.AddWithValue("@NeedPayment", model.NeedPayment)
-        '         cmd.Parameters.AddWithValue("@PaymentPlanId", model.PaymentPlanId)
-        '         cmd.Parameters.AddWithValue("@Script", model.Script)
-        '         cmd.Parameters.AddWithValue("@PreExecution", model.PreExecution)
-        '         cmd.Parameters.AddWithValue("@ConfirmationText", model.ConfirmationText)
-        '         cmd.Parameters.AddWithValue("@ParameterType", model.ParameterType)
-        '         cmd.Parameters.AddWithValue("@FormTitle", model.FormTitle)
-        '         cmd.Parameters.AddWithValue("@SelectSQL", model.SelectSQL)
-        '         conn.Open()
-        '         cmd.ExecuteNonQuery()
-        '     End Using
-        ' End Using
+        ' 1. Generate the new ACTION_ID.
+        Dim nextActionIdDT As New Data.DataTable
+        nextActionIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ACTION_ID)), 0) + 1, 5, '0') AS NEXT_ID FROM UNITSHUB_ACTIONS where " &
+                                      " PROJECT_ID ='" & lblProjectID.Text & "' and STATUS_ID='" & lblSTATUSID.Text & "'")
+        Dim actionId As String = nextActionIdDT.Rows(0)("NEXT_ID").ToString()
+
+        ' 2. Insert the parent Action row.
+        Dim insertActionSql As String =
+            "INSERT INTO UNITSHUB_ACTIONS (PROJECT_ID, STATUS_ID, ACTION_ID, IS_ACTIVE, ACTION_TITLE, ACTION_TYPE, " &
+            "IMPLEMENTER_TITLE, SHOW_IN_DEFAULT, SHOW_IN_PREVIEW, RECEIVE_PARAMETERS_ENABLED, RECEIVE_PARAMETERS_MODE, " &
+            "NEED_PAYMENT, PAYMENT_PLAN_ID, TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
+            "PARAMETER_TYPE, FORM_TITLE, SELECT_SQL) VALUES (" &
+            "'" & lblProjectID.Text.Replace("'", "''") & "', " &
+            "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
+            "'" & actionId & "', " &
+            (If(model.IsActive, "1", "0")) & ", " &
+            "'" & model.ActionTitle.Replace("'", "''") & "', " &
+            "'" & model.ActionType & "', " &
+            "'" & If(model.ImplementerTitle, "").Replace("'", "''") & "', " &
+            (If(model.ShowInDefault, "1", "0")) & ", " &
+            (If(model.ShowInPreview, "1", "0")) & ", " &
+            (If(model.ReceiveParametersEnabled, "1", "0")) & ", " &
+            "'" & If(model.ReceiveParametersMode, "") & "', " &
+            (If(model.NeedPayment, "1", "0")) & ", " &
+            (If(String.IsNullOrEmpty(model.PaymentPlanId), "NULL", "'" & model.PaymentPlanId & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
+            "'" & If(model.Script, "").Replace("'", "''") & "', " &
+            "'" & model.PreExecution & "', " &
+            (If(String.IsNullOrEmpty(model.ConfirmationText), "NULL", "'" & model.ConfirmationText.Replace("'", "''") & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.ParameterType), "NULL", "'" & model.ParameterType & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.FormTitle), "NULL", "'" & model.FormTitle.Replace("'", "''") & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.SelectSQL), "NULL", "'" & model.SelectSQL.Replace("'", "''") & "'")) &
+            ")"
+
+        ExecuteNonQuery(EBDB, insertActionSql)
+
+        ' 3. Insert one child row (with its own generated ID) for every ticked checkbox
+        '    in the Payment Plan Details grid.
+        If model.NeedPayment AndAlso Not String.IsNullOrEmpty(model.PaymentPlanId) Then
+            Dim nextDetailRowIdDT As New Data.DataTable
+            nextDetailRowIdDT = GetDataTable(EBDB, "SELECT NVL(MAX(TO_NUMBER(ID)), 0) AS MAX_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS")
+            Dim nextDetailRowIdNumber As Integer = CInt(nextDetailRowIdDT.Rows(0)("MAX_ID"))
+
+            For Each row As GridViewRow In gvPlanDetails.Rows
+                If row.RowType <> DataControlRowType.DataRow Then
+                    Continue For
+                End If
+
+                Dim chk As CheckBox = CType(row.FindControl("chkSelectDetail"), CheckBox)
+
+                If chk IsNot Nothing AndAlso chk.Checked Then
+                    nextDetailRowIdNumber += 1
+                    Dim detailRowId As String = nextDetailRowIdNumber.ToString("00000")
+                    Dim detailId As String = gvPlanDetails.DataKeys(row.RowIndex).Value.ToString()
+
+                    Dim insertDetailSql As String =
+                        "INSERT INTO UNITSHUB_ACT_PAY_PLN_DETAILS (ID, PROJECT_ID, STATUS_ID, ACTION_ID, PLAN_ID, DETAIL_ID) VALUES (" &
+                        "'" & detailRowId & "', " &
+                        "'" & lblProjectID.Text.Replace("'", "''") & "', " &
+                        "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
+                        "'" & actionId & "', " &
+                        "'" & model.PaymentPlanId & "', " &
+                        "'" & detailId.Replace("'", "''") & "')"
+
+                    ExecuteNonQuery(EBDB, insertDetailSql)
+                End If
+            Next
+        End If
+    End Sub
+    Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+
     End Sub
 End Class

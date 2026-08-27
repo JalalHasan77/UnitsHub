@@ -410,6 +410,7 @@
 </head>
 <body>
     <form id="form1" runat="server">
+        <asp:Button ID="Button1" runat="server" Text="Load" />
         <div class="action-panel">
 
             <div class="action-header">
@@ -418,7 +419,9 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
                     </div>
                     <div>
-                        <div class="action-title">Action Control</div>
+                        <div class="action-title">Action Control<asp:Label ID="lblProjectID" runat="server" CssClass="field-hint" >001</asp:Label>
+                            <asp:Label ID="lblSTATUSID" runat="server" CssClass="field-hint" >0000</asp:Label>
+                        </div>
                         <div class="action-subtitle">Configure how this action behaves, who can trigger it, and what it runs</div>
                     </div>
                 </div>
@@ -488,6 +491,7 @@
                         <div class="form-control-cell" style="flex-basis:100%;">
                             <asp:GridView ID="gvPlanDetails" runat="server" AutoGenerateColumns="True"
                                 CssClass="plan-details-grid" GridLines="None"
+                                DataKeyNames="DETAIL_ID"
                                 EmptyDataText="No plan details found for the selected payment plan.">
                                 <Columns>
                                     <asp:TemplateField HeaderText="Select">
