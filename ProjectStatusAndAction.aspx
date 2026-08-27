@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ProjectStatusAndAction.aspx.vb" Inherits="TR_StatusAndAction" %>
+﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ProjectStatusAndAction.aspx.vb" Inherits="ProjectStatusAndAction" %>
 
 <!DOCTYPE html>
 
@@ -230,7 +230,9 @@
                                 </td>
                             <td>
 
-                                &nbsp;</td>
+                                <asp:Label ID="lblPROJECTID" runat="server" Text="001"></asp:Label>
+                                <asp:Label ID="lblSTATUSID" runat="server" Text="0000"></asp:Label>
+                            </td>
                             </tr>
                         </table>
                     </td>

@@ -17,6 +17,10 @@ Partial Class DesignAction
         Public Property ToStatusId As String
         Public Property Script As String
         Public Property PreExecution As String
+        Public Property ConfirmationText As String
+        Public Property ParameterType As String
+        Public Property FormTitle As String
+        Public Property SelectSQL As String
     End Class
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
@@ -28,6 +32,32 @@ Partial Class DesignAction
         End If
 
         UpdateNeedPaymentVisibility()
+        UpdatePreExecutionVisibility()
+    End Sub
+
+    ''' <summary>
+    ''' Shows/hides the Confirmation Text row, the Parameter Type row, and (depending on the
+    ''' selected Parameter Type) the Form Title / Select SQL rows. Mirrors the client-side
+    ''' togglePreExecutionVisibility() / toggleParameterTypeVisibility() scripts.
+    ''' </summary>
+    Private Sub UpdatePreExecutionVisibility()
+        rowConfirmationText.Style("display") = If(rblPreExecution.SelectedValue = "Confirmation", "", "none")
+
+        Dim parameterRowVisible As Boolean = (rblPreExecution.SelectedValue = "Parameter")
+        rowParameterType.Style("display") = If(parameterRowVisible, "", "none")
+
+        Dim parameterType As String = ddlParameterType.SelectedValue
+
+        Dim showFormTitle As Boolean = parameterRowVisible AndAlso
+            (parameterType = "JUSTIFICATION" OrElse parameterType = "RESTRICTION_WINDOW" OrElse
+             parameterType = "RESTRICTION_NO_WINDOW" OrElse parameterType = "RESTRICTION_JUSTIFICATION")
+
+        Dim showSelectSql As Boolean = parameterRowVisible AndAlso
+            (parameterType = "RESTRICTION_WINDOW" OrElse parameterType = "RESTRICTION_NO_WINDOW" OrElse
+             parameterType = "RESTRICTION_JUSTIFICATION")
+
+        rowFormTitle.Style("display") = If(showFormTitle, "", "none")
+        rowSelectSQL.Style("display") = If(showSelectSql, "", "none")
     End Sub
 
     ''' <summary>
@@ -161,6 +191,22 @@ Partial Class DesignAction
 
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
+        model.ConfirmationText = If(model.PreExecution = "Confirmation", txtConfirmationText.Text.Trim(), Nothing)
+
+        If model.PreExecution = "Parameter" Then
+            model.ParameterType = ddlParameterType.SelectedValue
+
+            Dim formTitleApplies As Boolean =
+                (model.ParameterType = "JUSTIFICATION" OrElse model.ParameterType = "RESTRICTION_WINDOW" OrElse
+                 model.ParameterType = "RESTRICTION_NO_WINDOW" OrElse model.ParameterType = "RESTRICTION_JUSTIFICATION")
+
+            Dim selectSqlApplies As Boolean =
+                (model.ParameterType = "RESTRICTION_WINDOW" OrElse model.ParameterType = "RESTRICTION_NO_WINDOW" OrElse
+                 model.ParameterType = "RESTRICTION_JUSTIFICATION")
+
+            model.FormTitle = If(formTitleApplies, txtFormTitle.Text.Trim(), Nothing)
+            model.SelectSQL = If(selectSqlApplies, txtSelectSQL.Text.Trim(), Nothing)
+        End If
 
         Return model
     End Function
@@ -186,6 +232,10 @@ Partial Class DesignAction
         '         cmd.Parameters.AddWithValue("@PaymentPlanId", model.PaymentPlanId)
         '         cmd.Parameters.AddWithValue("@Script", model.Script)
         '         cmd.Parameters.AddWithValue("@PreExecution", model.PreExecution)
+        '         cmd.Parameters.AddWithValue("@ConfirmationText", model.ConfirmationText)
+        '         cmd.Parameters.AddWithValue("@ParameterType", model.ParameterType)
+        '         cmd.Parameters.AddWithValue("@FormTitle", model.FormTitle)
+        '         cmd.Parameters.AddWithValue("@SelectSQL", model.SelectSQL)
         '         conn.Open()
         '         cmd.ExecuteNonQuery()
         '     End Using

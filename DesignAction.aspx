@@ -271,9 +271,10 @@
 
         .plan-details-grid {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             font-size: 13.5px;
-            border: 1px solid var(--border);
+            border: 1.5px solid #94a3b8;
             border-radius: 10px;
             overflow: hidden;
         }
@@ -585,6 +586,40 @@
                             </asp:RadioButtonList>
                         </div>
                     </div>
+
+                    <div class="form-row" id="rowConfirmationText" runat="server">
+                        <div class="form-label">Confirmation Text</div>
+                        <div class="form-control-cell">
+                            <asp:TextBox ID="txtConfirmationText" runat="server" CssClass="txt-input" placeholder="e.g. Are you sure you want to proceed?" />
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowParameterType" runat="server">
+                        <div class="form-label">Parameter Type</div>
+                        <div class="form-control-cell">
+                            <asp:DropDownList ID="ddlParameterType" runat="server" CssClass="ddl-input" onchange="toggleParameterTypeVisibility();">
+                                <asp:ListItem Text="Justification" Value="JUSTIFICATION" />
+                                <asp:ListItem Text="Restriction (Window)" Value="RESTRICTION_WINDOW" />
+                                <asp:ListItem Text="Restriction (No Window)" Value="RESTRICTION_NO_WINDOW" />
+                                <asp:ListItem Text="Restriction and Justification" Value="RESTRICTION_JUSTIFICATION" />
+                                <asp:ListItem Text="Modify" Value="MODIFY" />
+                            </asp:DropDownList>
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowFormTitle" runat="server">
+                        <div class="form-label">Form Title</div>
+                        <div class="form-control-cell">
+                            <asp:TextBox ID="txtFormTitle" runat="server" CssClass="txt-input" placeholder="e.g. Restriction Request" />
+                        </div>
+                    </div>
+
+                    <div class="form-row" id="rowSelectSQL" runat="server">
+                        <div class="form-label">Select SQL</div>
+                        <div class="form-control-cell" style="flex-basis:100%;">
+                            <asp:TextBox ID="txtSelectSQL" runat="server" TextMode="MultiLine" CssClass="script-box" placeholder="Select ... from ... where ..." />
+                        </div>
+                    </div>
                 </div>
 
                 <div class="btn-row">
@@ -632,8 +667,63 @@
                 planDetailsRow.style.display = planDetailsRowVisible ? '' : 'none';
             }
 
+            function togglePreExecutionVisibility() {
+                var radios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
+                var confirmationRow = document.getElementById('<%= rowConfirmationText.ClientID %>');
+                var parameterTypeRow = document.getElementById('<%= rowParameterType.ClientID %>');
+
+                if (!radios || !confirmationRow || !parameterTypeRow) { return; }
+
+                var selectedValue = '';
+                for (var i = 0; i < radios.length; i++) {
+                    if (radios[i].checked) {
+                        selectedValue = radios[i].value;
+                        break;
+                    }
+                }
+
+                confirmationRow.style.display = (selectedValue === 'Confirmation') ? '' : 'none';
+                parameterTypeRow.style.display = (selectedValue === 'Parameter') ? '' : 'none';
+
+                toggleParameterTypeVisibility();
+            }
+
+            function toggleParameterTypeVisibility() {
+                var parameterTypeRow = document.getElementById('<%= rowParameterType.ClientID %>');
+                var ddl = document.getElementById('<%= ddlParameterType.ClientID %>');
+                var formTitleRow = document.getElementById('<%= rowFormTitle.ClientID %>');
+                var selectSqlRow = document.getElementById('<%= rowSelectSQL.ClientID %>');
+
+                if (!parameterTypeRow || !ddl || !formTitleRow || !selectSqlRow) { return; }
+
+                var parameterRowVisible = (parameterTypeRow.style.display !== 'none');
+                var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
+
+                var showFormTitle = parameterRowVisible && (
+                    selectedValue === 'JUSTIFICATION' ||
+                    selectedValue === 'RESTRICTION_WINDOW' ||
+                    selectedValue === 'RESTRICTION_NO_WINDOW' ||
+                    selectedValue === 'RESTRICTION_JUSTIFICATION');
+
+                var showSelectSql = parameterRowVisible && (
+                    selectedValue === 'RESTRICTION_WINDOW' ||
+                    selectedValue === 'RESTRICTION_NO_WINDOW' ||
+                    selectedValue === 'RESTRICTION_JUSTIFICATION');
+
+                formTitleRow.style.display = showFormTitle ? '' : 'none';
+                selectSqlRow.style.display = showSelectSql ? '' : 'none';
+            }
+
             if (document.addEventListener) {
-                document.addEventListener('DOMContentLoaded', toggleNeedPaymentVisibility);
+                document.addEventListener('DOMContentLoaded', function () {
+                    toggleNeedPaymentVisibility();
+                    togglePreExecutionVisibility();
+
+                    var preExecutionRadios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
+                    for (var i = 0; i < preExecutionRadios.length; i++) {
+                        preExecutionRadios[i].addEventListener('change', togglePreExecutionVisibility);
+                    }
+                });
             }
         </script>
     </form>
