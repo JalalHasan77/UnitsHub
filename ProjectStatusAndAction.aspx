@@ -273,8 +273,8 @@
                                                                     </asp:Panel>
                                                                 </asp:Panel>
                                                                 <div class="status-actions">
-                                                                    <asp:LinkButton ID="lnkAddStateUp" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateUp_Click">Add State &#9650;</asp:LinkButton>
-                                                                    <asp:LinkButton ID="lnkAddStateDown" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddStateDown_Click">Add State &#9660;</asp:LinkButton>
+                                                                    <asp:LinkButton ID="lnkAddStateUp" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>'>Add State &#9650;</asp:LinkButton>
+                                                                    <asp:LinkButton ID="lnkAddStateDown" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>'>Add State &#9660;</asp:LinkButton>
                                                                     <asp:LinkButton ID="lnkAddNewAction" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddNewAction_Click">Add New Action</asp:LinkButton>
                                                                 </div>
                                                             </div>
@@ -283,6 +283,7 @@
                                                             <asp:GridView ID="GridView1" runat="server" AutoGenerateColumns="False"
                                                                 ShowHeader="False" GridLines="None" CellPadding="0" CellSpacing="0" Width="100%"
                                                                 CssClass="action-grid"
+                                                                DataKeyNames="ACTION_ID"
                                                                 OnRowDataBound="GridView1_RowDataBound">
                                                                 <Columns>
                                                                     <asp:TemplateField>

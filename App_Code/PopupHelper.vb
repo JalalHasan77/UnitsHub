@@ -29,7 +29,7 @@ Public Module VendorPopupHelper
                                    ByVal selectedVendorValueField As HiddenField,
                                    ByVal selectedVendorTextField As HiddenField,
                                    ByVal displayTextBox As TextBox,
-                                   Optional ByVal popupTitle As String = "Select Vendor",
+                                   Optional ByVal popupTitle As String = "",
                                    Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
@@ -70,7 +70,7 @@ Public Module VendorPopupHelper
                                    ByVal selectedVendorTextField As HiddenField,
                                    ByVal displayValueLabel As Label,
                                    ByVal displayTextLabel As Label,
-                                   Optional ByVal popupTitle As String = "Select Vendor",
+                                   Optional ByVal popupTitle As String = "",
                                    Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
@@ -108,7 +108,7 @@ Public Module VendorPopupHelper
                                ByVal popupWidth As Integer,
                                ByVal popupHeight As Integer,
                                ByVal placement As PopupPlacement,
-                               Optional ByVal popupTitle As String = "Select Vendor",
+                               Optional ByVal popupTitle As String = "",
                                Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
 
         If page Is Nothing Then Throw New ArgumentNullException("page")

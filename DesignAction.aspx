@@ -420,6 +420,8 @@
                     <div>
                         <div class="action-title">Action Control<asp:Label ID="lblProjectID" runat="server" CssClass="field-hint" >001</asp:Label>
                             <asp:Label ID="lblSTATUSID" runat="server" CssClass="field-hint" >0000</asp:Label>
+                            <asp:Label ID="lblActionID" runat="server" Text="Label"></asp:Label>
+                            <asp:Label ID="lblMode" runat="server" Text="Label"></asp:Label>
                         </div>
                         <div class="action-subtitle">Configure how this action behaves, who can trigger it, and what it runs</div>
                     </div>

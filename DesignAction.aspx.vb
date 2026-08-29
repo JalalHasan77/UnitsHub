@@ -38,10 +38,26 @@ Partial Class DesignAction
                 lblSTATUSID.Text = Request.QueryString("StatusID")
             End If
 
-            ' TODO: replace with a real record load when editing an existing action.
-            LoadDefaults()
+            If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
+                lblACTIONID.Text = Request.QueryString("ActionID")
+            End If
+
+            If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
+                lblMode.Text = Request.QueryString("Mode")
+            End If
+
             LoadPaymentPlans()
             LoadStatuses()
+            ' TODO: replace with a real record load when editing an existing action.
+            LoadDefaults()
+            If lblMode.Text.ToLower = "Edit".ToLower Then
+                LoadActionControl(ProjectID:=lblProjectID.Text, StatusID:=lblSTATUSID.Text, ActionID:=lblActionID.Text)
+            Else
+
+
+            End If
+
+
         End If
 
         UpdateNeedPaymentVisibility()
@@ -171,16 +187,30 @@ Partial Class DesignAction
 
         Dim model As ActionControlModel = BuildModelFromForm()
         SaveActionControl(model)
-
         lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
+
     End Sub
 
     Protected Sub btnCancel_Click(ByVal sender As Object, ByVal e As EventArgs)
-        Response.Redirect(Request.RawUrl)
+        'Response.Redirect(Request.RawUrl)
+
+        Dim script As String = "(function () {" &
+       "    if (window.parent && typeof window.parent.closeVendorDialog === 'function') {" &
+       "        window.parent.closeVendorDialog();" &
+       "    }" &
+       "})();"
+
+        If ScriptManager.GetCurrent(Me) IsNot Nothing Then
+            ScriptManager.RegisterStartupScript(Me, Me.GetType(), "ClosePopupOnly", script, True)
+        Else
+            Me.ClientScript.RegisterStartupScript(Me.GetType(), "ClosePopupOnly", script, True)
+        End If
+
+
     End Sub
 
     Protected Sub btnLoad_Click(ByVal sender As Object, ByVal e As EventArgs)
-        LoadActionControl()
+        'LoadActionControl()
     End Sub
 
     ''' <summary>
@@ -193,13 +223,13 @@ Partial Class DesignAction
     ''' whichever action the user is actually meant to be loading (e.g. a query-string
     ''' parameter, or a row picked from a list) once that's available.
     ''' </remarks>
-    Private Sub LoadActionControl()
-        Const actionId As String = "00001"
+    Private Sub LoadActionControl(ByVal ProjectID As String, ByVal StatusID As String, ByVal ActionID As String)
+
 
         Dim actionDT As New Data.DataTable
         Dim actionSql As String =
-            "SELECT * FROM UNITSHUB_ACTIONS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
-            "AND STATUS_ID = '" & lblSTATUSID.Text.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+            "SELECT * FROM UNITSHUB_ACTIONS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "'"
         actionDT = GetDataTable(EBDB, actionSql)
 
         If actionDT.Rows.Count = 0 Then
@@ -240,8 +270,8 @@ Partial Class DesignAction
 
             Dim detailsDT As New Data.DataTable
             Dim detailsSql As String =
-                "SELECT DETAIL_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
-                "AND STATUS_ID = '" & lblSTATUSID.Text.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+                "SELECT DETAIL_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
+                "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "'"
             detailsDT = GetDataTable(EBDB, detailsSql)
 
             For Each gvRow As GridViewRow In gvPlanDetails.Rows

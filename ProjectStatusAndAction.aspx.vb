@@ -99,39 +99,66 @@ Public Class ProjectStatusAndAction
             pnlSubtitle.ForeColor = GetColorFromHex(rowData("SUBTITLE_FG_COLOR").ToString())
         End If
 
+        ' 0000 and 9216 are the boundary states — there's nothing above the first or below
+        ' the last to bisect against, so hide the corresponding "Add State" link. Otherwise,
+        ' wire each one to open AddProjectStatus.aspx in a popup for this project/status.
+        Dim projectId As String = ddlProjectName.SelectedValue
+        Dim statusId As String = rowData("STATE_ID").ToString().Trim()
+
+        Dim lnkAddStateUp As LinkButton = CType(e.Row.FindControl("lnkAddStateUp"), LinkButton)
+        If lnkAddStateUp IsNot Nothing Then
+            lnkAddStateUp.Visible = (statusId <> "0000")
+
+            If lnkAddStateUp.Visible Then
+                Dim popupUrlUp As String = "AddProjectStatus.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                            "&StatusID=" & Server.UrlEncode(statusId) &
+                                            "&MODE=NEW" &
+                                            "&Dir=Asc"
+
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                                      lnkAddStateUp,
+                                                      popupUrlUp,
+                                                      1000, 0,
+                                                      PopupPlacement.Center,
+                                                      "",
+                                                      VendorPopupHelper.PopupDisplayMode.Standard)
+            End If
+        End If
+
+        Dim lnkAddStateDown As LinkButton = CType(e.Row.FindControl("lnkAddStateDown"), LinkButton)
+        If lnkAddStateDown IsNot Nothing Then
+            lnkAddStateDown.Visible = (statusId <> "9216")
+
+            If lnkAddStateDown.Visible Then
+                Dim popupUrlDown As String = "AddProjectStatus.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                              "&StatusID=" & Server.UrlEncode(statusId) &
+                                              "&MODE=NEW" &
+                                              "&Dir=Desc"
+
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                                      lnkAddStateDown,
+                                                      popupUrlDown,
+                                                      1000, 0,
+                                                      PopupPlacement.Center,
+                                                      "",
+                                                      VendorPopupHelper.PopupDisplayMode.Standard)
+            End If
+        End If
+
 
         Dim GV As GridView
         GV = e.Row.FindControl("GridView1")
-        Dim dtActions As New DataTable("Actions")
 
-        dtActions.Columns.Add("ID", GetType(Integer))
-        dtActions.Columns.Add("Action", GetType(String))
+        Dim actionsDT As New Data.DataTable
+        Dim actionsSql As String =
+            "Select ACTION_ID, ACTION_TITLE, PROJECT_ID, STATUS_ID from UNITSHUB_ACTIONS where PROJECT_ID = '" &
+            ddlProjectName.SelectedValue.Replace("'", "''") & "' and STATUS_ID = '" &
+            rowData("STATE_ID").ToString().Replace("'", "''") & "'"
+        actionsDT = GetDataTable(EBDB, actionsSql)
 
-        For i As Integer = 0 To 4
-            dtActions.Rows.Add(i + 1, {"Sell", "Reserve", "HandOver", "Keys", "Release"}(i))
-        Next
-
-        GV.DataSource = dtActions
+        GV.DataSource = actionsDT
         GV.DataBind()
 
-    End Sub
-
-    ''' <summary>
-    ''' Fires when "Add State &#9650;" is clicked for a given row. CommandArgument carries that
-    ''' row's STATE_ID.
-    ''' TODO: implement — e.g. insert a new state positioned above this one (lower sort order).
-    ''' </summary>
-    Protected Sub lnkAddStateUp_Click(ByVal sender As Object, ByVal e As EventArgs)
-        Dim stateId As String = CType(sender, LinkButton).CommandArgument
-    End Sub
-
-    ''' <summary>
-    ''' Fires when "Add State &#9660;" is clicked for a given row. CommandArgument carries that
-    ''' row's STATE_ID.
-    ''' TODO: implement — e.g. insert a new state positioned below this one (higher sort order).
-    ''' </summary>
-    Protected Sub lnkAddStateDown_Click(ByVal sender As Object, ByVal e As EventArgs)
-        Dim stateId As String = CType(sender, LinkButton).CommandArgument
     End Sub
 
     ''' <summary>
@@ -149,9 +176,28 @@ Public Class ProjectStatusAndAction
             Return
         End If
 
+        Dim rowView As Data.DataRowView = CType(e.Row.DataItem, Data.DataRowView)
+
         Dim L As LinkButton
         L = e.Row.FindControl("lnkActionTitle")
-        L.Text = e.Row.DataItem("Action").ToString
+        L.Text = rowView("ACTION_TITLE").ToString()
+
+        Dim projectId As String = rowView("PROJECT_ID").ToString()
+        Dim statusId As String = rowView("STATUS_ID").ToString()
+        Dim actionId As String = rowView("ACTION_ID").ToString()
+
+        Dim popupUrl As String = "DesignAction.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                  "&StatusID=" & Server.UrlEncode(statusId) &
+                                  "&ActionID=" & Server.UrlEncode(actionId) &
+                                  "&Mode=Edit"
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              L,
+                                              popupUrl,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.Standard)
 
     End Sub
 End Class
