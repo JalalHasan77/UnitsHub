@@ -77,8 +77,72 @@ Partial Class AddProjectStatus
             If Not String.IsNullOrEmpty(ProjectIdParam) AndAlso ddlProjectName.Items.FindByValue(ProjectIdParam) IsNot Nothing Then
                 ddlProjectName.SelectedValue = ProjectIdParam
             End If
+
+            If String.Equals(ModeParam, "EDIT", StringComparison.OrdinalIgnoreCase) Then
+                LoadStatusForEdit()
+            End If
         End If
     End Sub
+
+    ''' <summary>
+    ''' Loads an existing UNITSHUB_PROJECTSTATUS row into the form fields, for
+    ''' STATE_ID = StatusIdParam and PROJECT_ID = ProjectIdParam. Only called when
+    ''' MODE=EDIT.
+    ''' </summary>
+    Private Sub LoadStatusForEdit()
+        If String.IsNullOrEmpty(ProjectIdParam) OrElse String.IsNullOrEmpty(StatusIdParam) Then
+            lblMessage.CssClass = "msg-error"
+            lblMessage.Text = "Cannot load status for editing: missing ProjectID or StatusID."
+            Return
+        End If
+
+        Dim DT As New Data.DataTable
+        Dim SQL As String =
+            "SELECT * FROM UNITSHUB_PROJECTSTATUS WHERE STATE_ID = '" & StatusIdParam.Replace("'", "''") & "' " &
+            "AND PROJECT_ID = '" & ProjectIdParam.Replace("'", "''") & "'"
+        DT = GetDataTable(EBDB, SQL)
+
+        If DT.Rows.Count = 0 Then
+            lblMessage.CssClass = "msg-error"
+            lblMessage.Text = "No status found for Project " & ProjectIdParam & " / Status " & StatusIdParam & "."
+            Return
+        End If
+
+        Dim row As Data.DataRow = DT.Rows(0)
+
+        txtStatusTitle.Text = SafeString(row("STATUS"))
+        txtStatusSubtitle.Text = SafeString(row("SUBTITLE"))
+
+        colorStatusBg.Value = NormalizeHex(SafeString(row("STATUS_BG_COLOR")))
+        colorStatusFg.Value = NormalizeHex(SafeString(row("STATUS_FG_COLOR")))
+        colorSubtitleBg.Value = NormalizeHex(SafeString(row("SUBTITLE_BG_COLOR")))
+        colorSubtitleFg.Value = NormalizeHex(SafeString(row("SUBTITLE_FG_COLOR")))
+    End Sub
+
+    ''' <summary>Returns "" for Nothing/DBNull instead of throwing.</summary>
+    Private Function SafeString(ByVal value As Object) As String
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Return String.Empty
+        End If
+        Return value.ToString()
+    End Function
+
+    ''' <summary>
+    ''' HTML5 &lt;input type="color"&gt; requires "#RRGGBB"; the database stores colors as
+    ''' plain hex text (e.g. "3366FF") without the leading '#'.
+    ''' </summary>
+    Private Function NormalizeHex(ByVal hexValue As String) As String
+        If String.IsNullOrWhiteSpace(hexValue) Then
+            Return "#000000"
+        End If
+
+        Dim hex As String = hexValue.Trim()
+        If Not hex.StartsWith("#") Then
+            hex = "#" & hex
+        End If
+
+        Return hex
+    End Function
 
     ''' <summary>
     ''' Populates ddlProjectName from UNITSHUB_PROJECTS.
@@ -98,14 +162,13 @@ Partial Class AddProjectStatus
     End Sub
 
     Protected Sub btnCancel_Click(ByVal sender As Object, ByVal e As EventArgs)
-        Response.Redirect(Request.RawUrl)
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
 
     ''' <summary>
-    ''' Inserts a new row into UNITSHUB_PROJECTSTATUS from the form values. The new STATE_ID
-    ''' is the midpoint between the reference state (StatusIdParam) and its neighbor in the
-    ''' direction of DirParam — "Asc" (Add State ▲) looks for the first larger STATE_ID in
-    ''' the same project, "Desc" (Add State ▼) looks for the first smaller one.
+    ''' Saves the form: updates the existing UNITSHUB_PROJECTSTATUS row when MODE=EDIT,
+    ''' otherwise inserts a new one (bisecting STATE_ID between the reference state and its
+    ''' neighbor, per DirParam).
     ''' </summary>
     ''' <remarks>
     ''' TODO: "ExecuteNonQuery" is a placeholder for whatever write helper your project
@@ -117,6 +180,41 @@ Partial Class AddProjectStatus
             Return
         End If
 
+        If String.Equals(ModeParam, "EDIT", StringComparison.OrdinalIgnoreCase) Then
+            SaveEditedStatus()
+        Else
+            SaveNewStatus()
+        End If
+    End Sub
+
+    ''' <summary>Updates the existing row identified by ProjectIdParam/StatusIdParam.</summary>
+    Private Sub SaveEditedStatus()
+        Dim updateSql As String =
+            "UPDATE UNITSHUB_PROJECTSTATUS SET " &
+            "STATUS = '" & txtStatusTitle.Text.Trim().Replace("'", "''") & "', " &
+            "SUBTITLE = '" & txtStatusSubtitle.Text.Trim().Replace("'", "''") & "', " &
+            "STATUS_BG_COLOR = '" & colorStatusBg.Value.Replace("'", "''") & "', " &
+            "STATUS_FG_COLOR = '" & colorStatusFg.Value.Replace("'", "''") & "', " &
+            "SUBTITLE_BG_COLOR = '" & colorSubtitleBg.Value.Replace("'", "''") & "', " &
+            "SUBTITLE_FG_COLOR = '" & colorSubtitleFg.Value.Replace("'", "''") & "' " &
+            "WHERE STATE_ID = '" & StatusIdParam.Replace("'", "''") & "' " &
+            "AND PROJECT_ID = '" & ProjectIdParam.Replace("'", "''") & "'"
+
+        ExecuteNonQuery(EBDB, updateSql)
+
+        lblMessage.CssClass = "msg-success"
+        lblMessage.Text = "Status '" & txtStatusTitle.Text.Trim() & "' updated."
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, True, skipPostBack:=False)
+    End Sub
+
+    ''' <summary>
+    ''' Inserts a new row into UNITSHUB_PROJECTSTATUS from the form values. The new STATE_ID
+    ''' is the midpoint between the reference state (StatusIdParam) and its neighbor in the
+    ''' direction of DirParam — "Asc" (Add State ▲) looks for the first larger STATE_ID in
+    ''' the same project, "Desc" (Add State ▼) looks for the first smaller one.
+    ''' </summary>
+    Private Sub SaveNewStatus()
         Dim stateId As String = Nothing
 
         If Not String.IsNullOrEmpty(StatusIdParam) AndAlso Not String.IsNullOrEmpty(DirParam) Then
@@ -125,17 +223,13 @@ Partial Class AddProjectStatus
 
             Dim neighborSql As String
             If DirParam = "Asc" Then
-                neighborSql = "SELECT Max(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" &
-                    projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) > " & referenceId
-                '"SELECT MIN(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS " &
-                '"WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) > " & referenceId
-
+                neighborSql =
+                    "SELECT MIN(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS " &
+                    "WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) > " & referenceId
             Else
-                neighborSql = "SELECT Min(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" &
-                    projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) > " & referenceId
-
-                '"SELECT MAX(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS " &
-                '"WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) < " & referenceId
+                neighborSql =
+                    "SELECT MAX(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS " &
+                    "WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) < " & referenceId
             End If
 
             Dim neighborDT As New Data.DataTable
@@ -193,6 +287,8 @@ Partial Class AddProjectStatus
         txtStatusTitle.Text = ""
         txtStatusSubtitle.Text = ""
         ddlProjectName.SelectedValue = currentProject
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, True, skipPostBack:=False)
     End Sub
 
 End Class

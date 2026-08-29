@@ -105,6 +105,21 @@ Public Class ProjectStatusAndAction
         Dim projectId As String = ddlProjectName.SelectedValue
         Dim statusId As String = rowData("STATE_ID").ToString().Trim()
 
+        Dim lblStatus As LinkButton = CType(e.Row.FindControl("lblStatus"), LinkButton)
+        If lblStatus IsNot Nothing Then
+            Dim popupUrlEdit As String = "AddProjectStatus.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                          "&StatusID=" & Server.UrlEncode(statusId) &
+                                          "&MODE=EDIT"
+
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                                  lblStatus,
+                                                  popupUrlEdit,
+                                                  1000, 0,
+                                                  PopupPlacement.Center,
+                                                  "",
+                                                  VendorPopupHelper.PopupDisplayMode.Standard)
+        End If
+
         Dim lnkAddStateUp As LinkButton = CType(e.Row.FindControl("lnkAddStateUp"), LinkButton)
         If lnkAddStateUp IsNot Nothing Then
             lnkAddStateUp.Visible = (statusId <> "0000")
@@ -145,6 +160,22 @@ Public Class ProjectStatusAndAction
             End If
         End If
 
+        Dim lnkAddNewAction As LinkButton = CType(e.Row.FindControl("lnkAddNewAction"), LinkButton)
+        If lnkAddNewAction IsNot Nothing Then
+            Dim L As LinkButton = lnkAddNewAction
+
+            Dim popupUrl As String = "DesignAction.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                      "&StatusID=" & Server.UrlEncode(statusId) &
+                                      "&Mode=New"
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                                  L,
+                                                  popupUrl,
+                                                  1000, 0,
+                                                  PopupPlacement.Center,
+                                                  "",
+                                                  VendorPopupHelper.PopupDisplayMode.Standard)
+        End If
+
 
         Dim GV As GridView
         GV = e.Row.FindControl("GridView1")
@@ -159,15 +190,6 @@ Public Class ProjectStatusAndAction
         GV.DataSource = actionsDT
         GV.DataBind()
 
-    End Sub
-
-    ''' <summary>
-    ''' Fires when "Add New Action" is clicked for a given row. CommandArgument carries that
-    ''' row's STATE_ID.
-    ''' TODO: implement — e.g. redirect/open DesignAction.aspx pre-populated for this state.
-    ''' </summary>
-    Protected Sub lnkAddNewAction_Click(ByVal sender As Object, ByVal e As EventArgs)
-        Dim stateId As String = CType(sender, LinkButton).CommandArgument
     End Sub
 
     Protected Sub GridView1_RowDataBound(sender As Object, e As GridViewRowEventArgs)

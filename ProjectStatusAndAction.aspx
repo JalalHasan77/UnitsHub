@@ -112,6 +112,12 @@
             text-decoration: underline;
             display: block;
             text-align: center;
+            color: inherit;
+            cursor: pointer;
+        }
+
+        .status-title:hover, .status-title:visited, .status-title:active {
+            color: inherit;
         }
 
         .subtitle-box {
@@ -267,7 +273,7 @@
                                                         <div class="state-header">
                                                             <div class="status-row">
                                                                 <asp:Panel ID="pnlStatusBox" runat="server" CssClass="status-box">
-                                                                    <asp:Label ID="lblStatus" runat="server" CssClass="status-title" Text='<%# Eval("STATUS") %>' />
+                                                                    <asp:LinkButton ID="lblStatus" runat="server" CssClass="status-title" Text='<%# Eval("STATUS") %>' />
                                                                     <asp:Panel ID="pnlSubtitle" runat="server" CssClass="subtitle-box">
                                                                         <asp:Label ID="lblSubtitle" runat="server" Text='<%# Eval("SUBTITLE") %>' />
                                                                     </asp:Panel>
@@ -275,7 +281,7 @@
                                                                 <div class="status-actions">
                                                                     <asp:LinkButton ID="lnkAddStateUp" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>'>Add State &#9650;</asp:LinkButton>
                                                                     <asp:LinkButton ID="lnkAddStateDown" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>'>Add State &#9660;</asp:LinkButton>
-                                                                    <asp:LinkButton ID="lnkAddNewAction" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>' OnClick="lnkAddNewAction_Click">Add New Action</asp:LinkButton>
+                                                                    <asp:LinkButton ID="lnkAddNewAction" runat="server" CssClass="status-action-link" CommandArgument='<%# Eval("STATE_ID") %>'>Add New Action</asp:LinkButton>
                                                                 </div>
                                                             </div>
                                                         </div>
