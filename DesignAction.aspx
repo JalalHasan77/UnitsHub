@@ -302,6 +302,47 @@
         .plan-details-grid input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-1); cursor: pointer; }
         .plan-details-empty { font-size: 13px; color: var(--muted); padding: 10px 2px; }
 
+        .plan-block {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            background-color: #f8fafc;
+        }
+
+        .plan-block:last-child { margin-bottom: 0; }
+
+        .plan-block-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--ink);
+            margin-bottom: 10px;
+        }
+
+        .plan-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--brand-soft);
+            color: var(--brand-1);
+            border-radius: 999px;
+            padding: 6px 10px 6px 14px;
+            margin: 0 8px 8px 0;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .plan-chip a { color: inherit; text-decoration: none; }
+
+        .plan-chip-remove {
+            color: var(--brand-1);
+            opacity: 0.6;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .plan-chip-remove:hover { opacity: 1; color: #dc2626; }
+
         .select-users-btn {
             display: inline-flex;
             align-items: center;
@@ -482,26 +523,44 @@
                     </div>
 
                     <div class="form-row" id="rowPaymentPlan" runat="server">
-                        <div class="form-label">Payment Plan</div>
+                        <div class="form-label">Add Payment Plan</div>
                         <div class="form-control-cell">
                             <asp:DropDownList ID="ddlPaymentPlan" runat="server" CssClass="ddl-input" AutoPostBack="true" OnSelectedIndexChanged="ddlPaymentPlan_SelectedIndexChanged" />
                         </div>
                     </div>
 
+                    <div class="form-row" id="rowAddedPlans" runat="server" style="flex-basis:100%;">
+                        <div class="form-control-cell" style="flex-basis:100%;">
+                            <asp:Repeater ID="rptAddedPlans" runat="server" OnItemCommand="rptAddedPlans_ItemCommand">
+                                <ItemTemplate>
+                                    <span class="plan-chip">
+                                        <asp:LinkButton ID="lnkViewPlan" runat="server" CommandName="View" CommandArgument='<%# Eval("PLAN_ID") %>' CausesValidation="false" Text='<%# Eval("NAME") %>' />
+                                        <asp:LinkButton ID="lnkRemovePlan" runat="server" CommandName="Remove" CommandArgument='<%# Eval("PLAN_ID") %>' CssClass="plan-chip-remove" CausesValidation="false" ToolTip="Remove this plan">&#10005;</asp:LinkButton>
+                                    </span>
+                                </ItemTemplate>
+                            </asp:Repeater>
+                        </div>
+                    </div>
+
                     <div class="form-row" id="rowPlanDetails" runat="server" style="flex-basis:100%;">
                         <div class="form-control-cell" style="flex-basis:100%;">
-                            <asp:GridView ID="gvPlanDetails" runat="server" AutoGenerateColumns="True"
-                                CssClass="plan-details-grid" GridLines="None"
-                                DataKeyNames="DETAIL_ID"
-                                EmptyDataText="No plan details found for the selected payment plan.">
-                                <Columns>
-                                    <asp:TemplateField HeaderText="Select">
-                                        <ItemTemplate>
-                                            <asp:CheckBox ID="chkSelectDetail" runat="server" />
-                                        </ItemTemplate>
-                                    </asp:TemplateField>
-                                </Columns>
-                            </asp:GridView>
+                            <div class="plan-block">
+                                <div class="plan-block-title">
+                                    <asp:Label ID="lblCurrentPlanName" runat="server" />
+                                </div>
+                                <asp:GridView ID="gvPlanDetails" runat="server" AutoGenerateColumns="True"
+                                    CssClass="plan-details-grid" GridLines="None"
+                                    DataKeyNames="DETAIL_ID"
+                                    EmptyDataText="No plan details found for this payment plan.">
+                                    <Columns>
+                                        <asp:TemplateField HeaderText="Select">
+                                            <ItemTemplate>
+                                                <asp:CheckBox ID="chkSelectDetail" runat="server" />
+                                            </ItemTemplate>
+                                        </asp:TemplateField>
+                                    </Columns>
+                                </asp:GridView>
+                            </div>
                         </div>
                     </div>
 
@@ -659,18 +718,24 @@
                 var chk = document.getElementById('<%= chkNeedPayment.ClientID %>');
                 var needPaymentRow = document.getElementById('<%= rowNeedPayment.ClientID %>');
                 var planRow = document.getElementById('<%= rowPaymentPlan.ClientID %>');
+                var addedPlansRow = document.getElementById('<%= rowAddedPlans.ClientID %>');
                 var planDetailsRow = document.getElementById('<%= rowPlanDetails.ClientID %>');
-                var planDdl = document.getElementById('<%= ddlPaymentPlan.ClientID %>');
 
-                if (!chk || !needPaymentRow || !planRow || !planDetailsRow || !planDdl) { return; }
+                if (!chk || !needPaymentRow || !planRow || !addedPlansRow || !planDetailsRow) { return; }
 
                 var needPaymentRowVisible = (needPaymentRow.style.display !== 'none');
                 var planRowVisible = (needPaymentRowVisible && chk.checked);
-                var selectedPlanValue = planDdl.options[planDdl.selectedIndex] ? planDdl.options[planDdl.selectedIndex].value : '';
-                var planDetailsRowVisible = (planRowVisible && selectedPlanValue !== '');
 
                 planRow.style.display = planRowVisible ? '' : 'none';
-                planDetailsRow.style.display = planDetailsRowVisible ? '' : 'none';
+
+                // Whether the chips / plan-details rows should actually be SHOWN depends on
+                // which plans have been added and which one is current, which the server only
+                // knows after a postback. So JS only ever force-hides these rows; showing
+                // them is left to whatever the server most recently rendered.
+                if (!planRowVisible) {
+                    addedPlansRow.style.display = 'none';
+                    planDetailsRow.style.display = 'none';
+                }
             }
 
             function togglePreExecutionVisibility() {

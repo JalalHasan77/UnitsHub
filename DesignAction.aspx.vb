@@ -1,4 +1,5 @@
-﻿
+﻿Imports System.Collections.Generic
+
 Partial Class DesignAction
     Inherits System.Web.UI.Page
 
@@ -15,7 +16,7 @@ Partial Class DesignAction
         Public Property ReceiveParametersEnabled As Boolean
         Public Property ReceiveParametersMode As String
         Public Property NeedPayment As Boolean
-        Public Property PaymentPlanId As String
+        Public Property PaymentPlanIds As New List(Of String)
         Public Property ToStatusId As String
         Public Property Script As String
         Public Property PreExecution As String
@@ -24,6 +25,110 @@ Partial Class DesignAction
         Public Property FormTitle As String
         Public Property SelectSQL As String
     End Class
+
+    ''' <summary>
+    ''' The set of payment plans added so far via ddlPaymentPlan, in the order they were
+    ''' added. Backed by ViewState so it survives postbacks (picking another plan, ticking
+    ''' detail checkboxes, removing a plan) without earlier picks being lost.
+    ''' </summary>
+    Private Property SelectedPlanIds As List(Of String)
+        Get
+            Dim list = TryCast(ViewState("SelectedPlanIds"), List(Of String))
+            If list Is Nothing Then
+                list = New List(Of String)()
+                ViewState("SelectedPlanIds") = list
+            End If
+            Return list
+        End Get
+        Set(ByVal value As List(Of String))
+            ViewState("SelectedPlanIds") = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Which detail checkboxes are ticked, across every plan that's been added (not just
+    ''' the one currently displayed), as "PLANID::DETAILID" entries. Backed by ViewState.
+    ''' Only one plan's gvPlanDetails is ever bound in the DOM at a time, so this is what
+    ''' remembers every other added plan's ticks while they're not on screen.
+    ''' </summary>
+    Private Property TickedDetailKeys As List(Of String)
+        Get
+            Dim list = TryCast(ViewState("TickedDetailKeys"), List(Of String))
+            If list Is Nothing Then
+                list = New List(Of String)()
+                ViewState("TickedDetailKeys") = list
+            End If
+            Return list
+        End Get
+        Set(ByVal value As List(Of String))
+            ViewState("TickedDetailKeys") = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Which single plan's details are currently displayed in gvPlanDetails. Backed by
+    ''' ViewState. Only one plan's grid is shown at a time — switching plans (via the
+    ''' dropdown or a chip) swaps what CurrentPlanId points to.
+    ''' </summary>
+    Private Property CurrentPlanId As String
+        Get
+            Return CStr(If(ViewState("CurrentPlanId"), String.Empty))
+        End Get
+        Set(ByVal value As String)
+            ViewState("CurrentPlanId") = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Snapshots which detail checkboxes are currently ticked for CurrentPlanId. Call this
+    ''' BEFORE switching to a different plan or rebinding gvPlanDetails, while the controls
+    ''' still reflect this postback's actual state.
+    ''' </summary>
+    Private Sub CaptureTickedDetails()
+        If String.IsNullOrEmpty(CurrentPlanId) Then
+            Return
+        End If
+
+        ' Replace this plan's previously captured ticks with whatever's actually ticked now.
+        TickedDetailKeys.RemoveAll(Function(k) k.StartsWith(CurrentPlanId & "::"))
+
+        For Each detailRow As GridViewRow In gvPlanDetails.Rows
+            If detailRow.RowType <> DataControlRowType.DataRow Then
+                Continue For
+            End If
+
+            Dim chk As CheckBox = CType(detailRow.FindControl("chkSelectDetail"), CheckBox)
+
+            If chk IsNot Nothing AndAlso chk.Checked Then
+                Dim detailId As String = gvPlanDetails.DataKeys(detailRow.RowIndex).Value.ToString()
+                TickedDetailKeys.Add(CurrentPlanId & "::" & detailId)
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Re-ticks whichever detail checkboxes were previously captured for CurrentPlanId.
+    ''' Call this AFTER rebinding gvPlanDetails to CurrentPlanId.
+    ''' </summary>
+    Private Sub ReapplyTickedDetails()
+        If String.IsNullOrEmpty(CurrentPlanId) Then
+            Return
+        End If
+
+        For Each detailRow As GridViewRow In gvPlanDetails.Rows
+            If detailRow.RowType <> DataControlRowType.DataRow Then
+                Continue For
+            End If
+
+            Dim chk As CheckBox = CType(detailRow.FindControl("chkSelectDetail"), CheckBox)
+            If chk Is Nothing Then
+                Continue For
+            End If
+
+            Dim detailId As String = gvPlanDetails.DataKeys(detailRow.RowIndex).Value.ToString()
+            chk.Checked = TickedDetailKeys.Contains(CurrentPlanId & "::" & detailId)
+        Next
+    End Sub
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
@@ -39,7 +144,7 @@ Partial Class DesignAction
             End If
 
             If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
-                lblACTIONID.Text = Request.QueryString("ActionID")
+                lblActionID.Text = Request.QueryString("ActionID")
             End If
 
             If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
@@ -102,7 +207,10 @@ Partial Class DesignAction
         Dim paymentPlanRowVisible As Boolean = (needPaymentRowVisible AndAlso chkNeedPayment.Checked)
         rowPaymentPlan.Style("display") = If(paymentPlanRowVisible, "", "none")
 
-        Dim planDetailsRowVisible As Boolean = (paymentPlanRowVisible AndAlso Not String.IsNullOrEmpty(ddlPaymentPlan.SelectedValue))
+        Dim anyPlanSelected As Boolean = (SelectedPlanIds.Count > 0)
+        rowAddedPlans.Style("display") = If(paymentPlanRowVisible AndAlso anyPlanSelected, "", "none")
+
+        Dim planDetailsRowVisible As Boolean = (paymentPlanRowVisible AndAlso Not String.IsNullOrEmpty(CurrentPlanId))
         rowPlanDetails.Style("display") = If(planDetailsRowVisible, "", "none")
     End Sub
 
@@ -142,28 +250,92 @@ Partial Class DesignAction
     End Sub
 
     ''' <summary>
-    ''' Fires when the user picks a different Payment Plan; reloads the corresponding
-    ''' plan-detail rows into gvPlanDetails.
+    ''' Fires when a payment plan is picked from the dropdown. Adds it to the accumulated
+    ''' set (if not already present), makes it the currently-displayed plan, and resets the
+    ''' dropdown back to its placeholder so it's ready to add another plan.
     ''' </summary>
     Protected Sub ddlPaymentPlan_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
-        LoadPlanDetails()
+        CaptureTickedDetails()
+
+        Dim planId As String = ddlPaymentPlan.SelectedValue
+
+        If Not String.IsNullOrEmpty(planId) Then
+            If Not SelectedPlanIds.Contains(planId) Then
+                SelectedPlanIds.Add(planId)
+            End If
+            CurrentPlanId = planId
+        End If
+
+        LoadAddedPlansChips()
+        LoadCurrentPlanDetails()
+        ReapplyTickedDetails()
+
+        ddlPaymentPlan.ClearSelection()
+        UpdateNeedPaymentVisibility()
     End Sub
 
     ''' <summary>
-    ''' Loads UNITSHUB_PAYMENTPLANDETAILS rows for the currently selected Payment Plan
-    ''' into gvPlanDetails.
+    ''' Fires when a chip's name is clicked (switch to viewing that plan) or its × is
+    ''' clicked (remove that plan entirely). CommandArgument carries the plan's PLAN_ID.
     ''' </summary>
-    Private Sub LoadPlanDetails()
-        Dim PLAN_ID As String = ddlPaymentPlan.SelectedValue
+    Protected Sub rptAddedPlans_ItemCommand(ByVal source As Object, ByVal e As RepeaterCommandEventArgs)
+        Dim planId As String = e.CommandArgument.ToString()
 
-        If String.IsNullOrEmpty(PLAN_ID) Then
+        CaptureTickedDetails()
+
+        If e.CommandName = "Remove" Then
+            SelectedPlanIds.Remove(planId)
+            TickedDetailKeys.RemoveAll(Function(k) k.StartsWith(planId & "::"))
+
+            If CurrentPlanId = planId Then
+                ' The removed plan was the one being viewed — fall back to whichever plan
+                ' was added most recently, or none if that was the last one.
+                CurrentPlanId = If(SelectedPlanIds.Count > 0, SelectedPlanIds(SelectedPlanIds.Count - 1), "")
+            End If
+        ElseIf e.CommandName = "View" Then
+            CurrentPlanId = planId
+        End If
+
+        LoadAddedPlansChips()
+        LoadCurrentPlanDetails()
+        ReapplyTickedDetails()
+
+        UpdateNeedPaymentVisibility()
+    End Sub
+
+    ''' <summary>Binds rptAddedPlans to SelectedPlanIds (the "chips" row).</summary>
+    Private Sub LoadAddedPlansChips()
+        Dim DT As New Data.DataTable
+        DT.Columns.Add("PLAN_ID", GetType(String))
+        DT.Columns.Add("NAME", GetType(String))
+
+        For Each planId As String In SelectedPlanIds
+            Dim item As ListItem = ddlPaymentPlan.Items.FindByValue(planId)
+            Dim planName As String = If(item IsNot Nothing, item.Text, planId)
+            DT.Rows.Add(planId, planName)
+        Next
+
+        rptAddedPlans.DataSource = DT
+        rptAddedPlans.DataBind()
+    End Sub
+
+    ''' <summary>
+    ''' Loads UNITSHUB_PAYMENTPLANDETAILS for CurrentPlanId into the single gvPlanDetails
+    ''' grid, and updates its title label. Clears both if no plan is currently selected.
+    ''' </summary>
+    Private Sub LoadCurrentPlanDetails()
+        If String.IsNullOrEmpty(CurrentPlanId) Then
+            lblCurrentPlanName.Text = ""
             gvPlanDetails.DataSource = Nothing
             gvPlanDetails.DataBind()
             Return
         End If
 
+        Dim item As ListItem = ddlPaymentPlan.Items.FindByValue(CurrentPlanId)
+        lblCurrentPlanName.Text = If(item IsNot Nothing, item.Text, CurrentPlanId)
+
         Dim DT As New Data.DataTable
-        DT = GetDataTable(EBDB, "Select * from UNITSHUB_PAYMENTPLANDETAILS where PLAN_ID = '" & PLAN_ID & "'")
+        DT = GetDataTable(EBDB, "Select * from UNITSHUB_PAYMENTPLANDETAILS where PLAN_ID = '" & CurrentPlanId.Replace("'", "''") & "'")
 
         gvPlanDetails.DataSource = DT
         gvPlanDetails.DataBind()
@@ -185,28 +357,24 @@ Partial Class DesignAction
             Return
         End If
 
+        CaptureTickedDetails()
+
         Dim model As ActionControlModel = BuildModelFromForm()
-        SaveActionControl(model)
-        lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
+
+        If String.Equals(lblMode.Text, "Edit", StringComparison.OrdinalIgnoreCase) Then
+            UpdateActionControl(model)
+            lblMessage.Text = "Action '" & model.ActionTitle & "' updated successfully."
+        Else
+            SaveActionControl(model)
+            lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
+        End If
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, True, skipPostBack:=False)
 
     End Sub
 
     Protected Sub btnCancel_Click(ByVal sender As Object, ByVal e As EventArgs)
-        'Response.Redirect(Request.RawUrl)
-
-        Dim script As String = "(function () {" &
-       "    if (window.parent && typeof window.parent.closeVendorDialog === 'function') {" &
-       "        window.parent.closeVendorDialog();" &
-       "    }" &
-       "})();"
-
-        If ScriptManager.GetCurrent(Me) IsNot Nothing Then
-            ScriptManager.RegisterStartupScript(Me, Me.GetType(), "ClosePopupOnly", script, True)
-        Else
-            Me.ClientScript.RegisterStartupScript(Me.GetType(), "ClosePopupOnly", script, True)
-        End If
-
-
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
 
     Protected Sub btnLoad_Click(ByVal sender As Object, ByVal e As EventArgs)
@@ -251,8 +419,9 @@ Partial Class DesignAction
         SafeSetSelectedValue(rblReceiveParameters, SafeString(row("RECEIVE_PARAMETERS_MODE")))
 
         chkNeedPayment.Checked = SafeBool(row("NEED_PAYMENT"))
-        Dim paymentPlanId As String = SafeString(row("PAYMENT_PLAN_ID"))
-        SafeSetSelectedValue(ddlPaymentPlan, paymentPlanId)
+        ' PAYMENT_PLAN_ID on the parent row is no longer used now that an action can have
+        ' multiple payment plans — see the plan-reloading block below instead, which reads
+        ' the actual set of plans from UNITSHUB_ACT_PAY_PLN_DETAILS.
 
         SafeSetSelectedValue(ddlToStatus, SafeString(row("TO_STATUS_ID")))
 
@@ -263,30 +432,45 @@ Partial Class DesignAction
         txtFormTitle.Text = SafeString(row("FORM_TITLE"))
         txtSelectSQL.Text = SafeString(row("SELECT_SQL"))
 
-        ' Re-bind the Payment Plan Details grid for the loaded plan, then re-tick whichever
-        ' rows were previously saved for this action.
-        If chkNeedPayment.Checked AndAlso Not String.IsNullOrEmpty(paymentPlanId) Then
-            LoadPlanDetails()
+        ' Re-check whichever payment plans were previously associated with this action,
+        ' remember which specific line items were ticked per plan, then show the first
+        ' plan's grid (the others stay remembered and reachable via their chips).
+        If chkNeedPayment.Checked Then
+            Dim planIdsDT As New Data.DataTable
+            Dim planIdsSql As String =
+                "SELECT DISTINCT PLAN_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
+                "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "' AND PLAN_ID IS NOT NULL"
+            planIdsDT = GetDataTable(EBDB, planIdsSql)
+
+            Dim loadedPlanIds As New List(Of String)
+            For Each planIdRow As Data.DataRow In planIdsDT.Rows
+                loadedPlanIds.Add(planIdRow("PLAN_ID").ToString())
+            Next
+            SelectedPlanIds = loadedPlanIds
 
             Dim detailsDT As New Data.DataTable
             Dim detailsSql As String =
-                "SELECT DETAIL_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
-                "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "'"
+                "SELECT PLAN_ID, DETAIL_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
+                "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "' AND DETAIL_ID IS NOT NULL"
             detailsDT = GetDataTable(EBDB, detailsSql)
 
-            For Each gvRow As GridViewRow In gvPlanDetails.Rows
-                If gvRow.RowType <> DataControlRowType.DataRow Then
-                    Continue For
-                End If
-
-                Dim detailId As String = gvPlanDetails.DataKeys(gvRow.RowIndex).Value.ToString()
-                Dim chk As CheckBox = CType(gvRow.FindControl("chkSelectDetail"), CheckBox)
-
-                If chk IsNot Nothing Then
-                    chk.Checked = (detailsDT.Select("DETAIL_ID = '" & detailId.Replace("'", "''") & "'").Length > 0)
-                End If
+            Dim loadedTicked As New List(Of String)
+            For Each detailRow As Data.DataRow In detailsDT.Rows
+                loadedTicked.Add(detailRow("PLAN_ID").ToString() & "::" & detailRow("DETAIL_ID").ToString())
             Next
+            TickedDetailKeys = loadedTicked
+
+            CurrentPlanId = If(SelectedPlanIds.Count > 0, SelectedPlanIds(0), "")
+
+            LoadAddedPlansChips()
+            LoadCurrentPlanDetails()
+            ReapplyTickedDetails()
         Else
+            SelectedPlanIds = New List(Of String)
+            TickedDetailKeys = New List(Of String)
+            CurrentPlanId = ""
+            rptAddedPlans.DataSource = Nothing
+            rptAddedPlans.DataBind()
             gvPlanDetails.DataSource = Nothing
             gvPlanDetails.DataBind()
         End If
@@ -342,7 +526,7 @@ Partial Class DesignAction
         model.ReceiveParametersEnabled = chkReceiveParameters.Checked
         model.ReceiveParametersMode = rblReceiveParameters.SelectedValue
         model.NeedPayment = chkNeedPayment.Checked
-        model.PaymentPlanId = If(model.NeedPayment, ddlPaymentPlan.SelectedValue, Nothing)
+        model.PaymentPlanIds = If(model.NeedPayment, New List(Of String)(SelectedPlanIds), New List(Of String)())
 
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
@@ -368,7 +552,9 @@ Partial Class DesignAction
 
     ''' <summary>
     ''' Persists the form: one row in UNITSHUB_ACTIONS, plus one row in
-    ''' UNITSHUB_ACT_PAY_PLN_DETAILS for every ticked checkbox in gvPlanDetails.
+    ''' UNITSHUB_ACT_PAY_PLN_DETAILS for every ticked checkbox across every selected
+    ''' payment plan. A plan with no ticked details still gets one row (DETAIL_ID = NULL)
+    ''' so the plan association itself isn't lost.
     ''' </summary>
     ''' <remarks>
     ''' TODO: "ExecuteNonQuery" below is a placeholder for whatever write helper your
@@ -377,6 +563,10 @@ Partial Class DesignAction
     ''' TODO: ACTION_ID / ID are VARCHAR2(5 BYTE), not DB-generated identities, so I generate
     ''' zero-padded numeric strings (e.g. "00001") via MAX(TO_NUMBER(...))+1. If your app has
     ''' an existing ID-generation routine/sequence for these tables, use that instead.
+    ''' NOTE: UNITSHUB_ACTIONS.PAYMENT_PLAN_ID is a single column and can't hold multiple
+    ''' plan ids, so it's now always saved as NULL — the actual set of plans for this
+    ''' action lives entirely in UNITSHUB_ACT_PAY_PLN_DETAILS (one row per plan, or per
+    ''' plan+detail combination).
     ''' </remarks>
     Private Sub SaveActionControl(ByVal model As ActionControlModel)
         ' 1. Generate the new ACTION_ID.
@@ -402,7 +592,7 @@ Partial Class DesignAction
             (If(model.ReceiveParametersEnabled, "1", "0")) & ", " &
             "'" & If(model.ReceiveParametersMode, "") & "', " &
             (If(model.NeedPayment, "1", "0")) & ", " &
-            (If(String.IsNullOrEmpty(model.PaymentPlanId), "NULL", "'" & model.PaymentPlanId & "'")) & ", " &
+            "NULL, " &
             (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
             "'" & If(model.Script, "").Replace("'", "''") & "', " &
             "'" & model.PreExecution & "', " &
@@ -414,37 +604,104 @@ Partial Class DesignAction
 
         ExecuteNonQuery(EBDB, insertActionSql)
 
-        ' 3. Insert one child row (with its own generated ID) for every ticked checkbox
-        '    in the Payment Plan Details grid.
-        If model.NeedPayment AndAlso Not String.IsNullOrEmpty(model.PaymentPlanId) Then
+        ' 3. Insert child detail rows for the newly generated action.
+        SavePlanDetailRows(model, actionId)
+    End Sub
+
+    ''' <summary>
+    ''' Updates the existing UNITSHUB_ACTIONS row that LoadActionControl loaded (identified
+    ''' by lblProjectID/lblSTATUSID/lblActionID), and replaces its
+    ''' UNITSHUB_ACT_PAY_PLN_DETAILS rows with the current selection.
+    ''' </summary>
+    ''' <remarks>
+    ''' The existing plan/detail rows are deleted and re-inserted from scratch rather than
+    ''' diffed — simpler and safer than trying to reconcile which specific rows changed.
+    ''' </remarks>
+    Private Sub UpdateActionControl(ByVal model As ActionControlModel)
+        Dim actionId As String = lblActionID.Text.Trim()
+
+        Dim updateActionSql As String =
+            "UPDATE UNITSHUB_ACTIONS SET " &
+            "IS_ACTIVE = " & (If(model.IsActive, "1", "0")) & ", " &
+            "ACTION_TITLE = '" & model.ActionTitle.Replace("'", "''") & "', " &
+            "ACTION_TYPE = '" & model.ActionType & "', " &
+            "IMPLEMENTER_TITLE = '" & If(model.ImplementerTitle, "").Replace("'", "''") & "', " &
+            "SHOW_IN_DEFAULT = " & (If(model.ShowInDefault, "1", "0")) & ", " &
+            "SHOW_IN_PREVIEW = " & (If(model.ShowInPreview, "1", "0")) & ", " &
+            "RECEIVE_PARAMETERS_ENABLED = " & (If(model.ReceiveParametersEnabled, "1", "0")) & ", " &
+            "RECEIVE_PARAMETERS_MODE = '" & If(model.ReceiveParametersMode, "") & "', " &
+            "NEED_PAYMENT = " & (If(model.NeedPayment, "1", "0")) & ", " &
+            "PAYMENT_PLAN_ID = NULL, " &
+            "TO_STATUS_ID = " & (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
+            "SCRIPT_TEXT = '" & If(model.Script, "").Replace("'", "''") & "', " &
+            "PRE_EXECUTION = '" & model.PreExecution & "', " &
+            "CONFIRMATION_TEXT = " & (If(String.IsNullOrEmpty(model.ConfirmationText), "NULL", "'" & model.ConfirmationText.Replace("'", "''") & "'")) & ", " &
+            "PARAMETER_TYPE = " & (If(String.IsNullOrEmpty(model.ParameterType), "NULL", "'" & model.ParameterType & "'")) & ", " &
+            "FORM_TITLE = " & (If(String.IsNullOrEmpty(model.FormTitle), "NULL", "'" & model.FormTitle.Replace("'", "''") & "'")) & ", " &
+            "SELECT_SQL = " & (If(String.IsNullOrEmpty(model.SelectSQL), "NULL", "'" & model.SelectSQL.Replace("'", "''") & "'")) & " " &
+            "WHERE PROJECT_ID = '" & model.ProjectId.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & model.StatusId.Replace("'", "''") & "' " &
+            "AND ACTION_ID = '" & actionId & "'"
+
+        ExecuteNonQuery(EBDB, updateActionSql)
+
+        Dim deleteDetailsSql As String =
+            "DELETE FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & model.ProjectId.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & model.StatusId.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+        ExecuteNonQuery(EBDB, deleteDetailsSql)
+
+        SavePlanDetailRows(model, actionId)
+    End Sub
+
+    ''' <summary>
+    ''' Inserts one child row per ticked detail (from TickedDetailKeys), across every
+    ''' selected payment plan, for the given ACTION_ID. A plan with no ticked details still
+    ''' gets one row (DETAIL_ID = NULL) so the plan association itself isn't lost. Shared by
+    ''' SaveActionControl (insert) and UpdateActionControl (update).
+    ''' </summary>
+    Private Sub SavePlanDetailRows(ByVal model As ActionControlModel, ByVal actionId As String)
+        If model.NeedPayment AndAlso model.PaymentPlanIds.Count > 0 Then
             Dim nextDetailRowIdDT As New Data.DataTable
             nextDetailRowIdDT = GetDataTable(EBDB, "SELECT NVL(MAX(TO_NUMBER(ID)), 0) AS MAX_ID FROM UNITSHUB_ACT_PAY_PLN_DETAILS")
             Dim nextDetailRowIdNumber As Integer = CInt(nextDetailRowIdDT.Rows(0)("MAX_ID"))
 
-            For Each row As GridViewRow In gvPlanDetails.Rows
-                If row.RowType <> DataControlRowType.DataRow Then
-                    Continue For
-                End If
+            For Each planId As String In model.PaymentPlanIds
+                Dim anyDetailForPlan As Boolean = False
 
-                Dim chk As CheckBox = CType(row.FindControl("chkSelectDetail"), CheckBox)
+                For Each key As String In TickedDetailKeys
+                    If key.StartsWith(planId & "::") Then
+                        anyDetailForPlan = True
+                        Dim detailId As String = key.Substring(planId.Length + 2)
 
-                If chk IsNot Nothing AndAlso chk.Checked Then
+                        nextDetailRowIdNumber += 1
+                        Dim detailRowId As String = nextDetailRowIdNumber.ToString("00000")
+
+                        InsertPlanDetailRow(detailRowId, actionId, planId, detailId)
+                    End If
+                Next
+
+                If Not anyDetailForPlan Then
+                    ' No specific line item chosen for this plan — still record that the
+                    ' plan itself applies to this action.
                     nextDetailRowIdNumber += 1
                     Dim detailRowId As String = nextDetailRowIdNumber.ToString("00000")
-                    Dim detailId As String = gvPlanDetails.DataKeys(row.RowIndex).Value.ToString()
-
-                    Dim insertDetailSql As String =
-                        "INSERT INTO UNITSHUB_ACT_PAY_PLN_DETAILS (ID, PROJECT_ID, STATUS_ID, ACTION_ID, PLAN_ID, DETAIL_ID) VALUES (" &
-                        "'" & detailRowId & "', " &
-                        "'" & lblProjectID.Text.Replace("'", "''") & "', " &
-                        "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
-                        "'" & actionId & "', " &
-                        "'" & model.PaymentPlanId & "', " &
-                        "'" & detailId.Replace("'", "''") & "')"
-
-                    ExecuteNonQuery(EBDB, insertDetailSql)
+                    InsertPlanDetailRow(detailRowId, actionId, planId, Nothing)
                 End If
             Next
         End If
+    End Sub
+
+    ''' <summary>Inserts one UNITSHUB_ACT_PAY_PLN_DETAILS row. detailId may be Nothing.</summary>
+    Private Sub InsertPlanDetailRow(ByVal detailRowId As String, ByVal actionId As String, ByVal planId As String, ByVal detailId As String)
+        Dim insertDetailSql As String =
+            "INSERT INTO UNITSHUB_ACT_PAY_PLN_DETAILS (ID, PROJECT_ID, STATUS_ID, ACTION_ID, PLAN_ID, DETAIL_ID) VALUES (" &
+            "'" & detailRowId & "', " &
+            "'" & lblProjectID.Text.Replace("'", "''") & "', " &
+            "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
+            "'" & actionId & "', " &
+            "'" & planId.Replace("'", "''") & "', " &
+            (If(String.IsNullOrEmpty(detailId), "NULL", "'" & detailId.Replace("'", "''") & "'")) & ")"
+
+        ExecuteNonQuery(EBDB, insertDetailSql)
     End Sub
 End Class
