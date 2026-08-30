@@ -86,7 +86,7 @@ Partial Class SelectOneItemFromListMultiColumns
         End If
 
         If ListParameters IsNot Nothing Then
-            SqlText = If(ListParameters.SQL, String.Empty)
+            SqlText = If(ListParameters.ItemsSQL, String.Empty)
             Label1.Text = If(ListParameters.FormTitle, String.Empty)
             HideColumnsMask = ListParameters.ColumnHideAndShow
             EditableColumnsMask = ListParameters.EditableColumns

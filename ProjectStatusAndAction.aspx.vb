@@ -1,7 +1,11 @@
 ﻿Imports System.Data
 Imports System.Drawing
+Imports System.Collections.Generic
 Public Class ProjectStatusAndAction
     Inherits System.Web.UI.Page
+
+    Dim encryNdecry As New EncryDecry
+
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles Me.Load
         If Not IsPostBack Then
             LoadProjects()
@@ -221,5 +225,89 @@ Public Class ProjectStatusAndAction
                                               "",
                                               VendorPopupHelper.PopupDisplayMode.Standard)
 
+        Dim btnShowUsers As Button = CType(e.Row.FindControl("btnShowUsers"), Button)
+        If btnShowUsers IsNot Nothing Then
+            Dim MemberListParameters As New clsListProperties
+            With MemberListParameters
+                .ItemsSQL = "Select USER_ID as ID, FULL_NAME as Name from UNITSHUB_USERS order by Name"
+.CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_PRJ_STS_ACTN_USRS where PROJECT_ID ='" & projectId & "' and STATUS_ID = '" & statusId & "' and ACTION_ID='" & actionId & "'"
+.FormTitle = "Select Users"
+                .ColumnHideAndShow = "YN"
+                .EditableColumns = "NN"
+                .ColumnsWidth = New Double() {1, 3}
+                .HoverableList = "Y"
+            End With
+            Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
+
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                                  btnShowUsers,
+                                                  "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
+                                                  400,
+                                                  600,
+                                                  PopupPlacement.Center,
+                                                  "Select Adj",
+                                                  VendorPopupHelper.PopupDisplayMode.FrameOnly)
+        End If
+
+    End Sub
+
+    ''' <summary>
+    ''' Fires when AddMultipleItemsFromList.aspx closes after Save (via
+    ''' RegisterPopupSelectionAndClose's skipPostBack:=False, which re-triggers a postback
+    ''' on the same btnShowUsers instance that opened it — this does NOT fire on the normal
+    ''' click that opens the popup, since RegisterVendorPopup's own script prevents that
+    ''' click's default postback).
+    ''' </summary>
+    ''' <remarks>
+    ''' TODO: "ExecuteNonQuery" is a placeholder for whatever write helper your project
+    ''' actually exposes (this codebase only gave me GetDataTable(conn, sql) for reads) —
+    ''' swap it for your real INSERT/UPDATE/DELETE helper.
+    ''' TODO: UNITSHUB_PRJ_STS_ACTN_USRS's exact schema wasn't given to me — I assumed an
+    ''' ID/PROJECT_ID/STATUS_ID/ACTION_ID/USER_ID shape (VARCHAR2(5)-style zero-padded ID),
+    ''' matching the convention used elsewhere in this app. Adjust column names/types if
+    ''' the real table differs.
+    ''' </remarks>
+    Protected Sub btnShowUsers_Click(sender As Object, e As EventArgs)
+        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
+            TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedItems"),
+                List(Of Dictionary(Of String, Object)))
+
+        If selectedItems Is Nothing Then
+            Return
+        End If
+
+        Dim btn As Button = CType(sender, Button)
+        Dim row As GridViewRow = CType(btn.NamingContainer, GridViewRow)
+        Dim gv As GridView = CType(row.NamingContainer, GridView)
+
+        Dim projectId As String = gv.DataKeys(row.RowIndex)("PROJECT_ID").ToString()
+        Dim statusId As String = gv.DataKeys(row.RowIndex)("STATUS_ID").ToString()
+        Dim actionId As String = gv.DataKeys(row.RowIndex)("ACTION_ID").ToString()
+
+        ' Replace this action's existing user list entirely — simpler and safer than
+        ' trying to diff which specific users were added/removed.
+        Dim deleteSql As String =
+            "DELETE FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & statusId.Replace("'", "''") & "' AND ACTION_ID = '" & actionId.Replace("'", "''") & "'"
+        ExecuteNonQuery(EBDB, deleteSql)
+
+        If selectedItems.Count > 0 Then
+            For Each item As Dictionary(Of String, Object) In selectedItems
+                Dim userId As String = If(item.ContainsKey("ID"), Convert.ToString(item("ID")), Nothing)
+
+                If String.IsNullOrEmpty(userId) Then
+                    Continue For
+                End If
+
+                Dim insertSql As String =
+                    "INSERT INTO UNITSHUB_PRJ_STS_ACTN_USRS (PROJECT_ID, STATUS_ID, ACTION_ID, USER_ID) VALUES (" &
+                    "'" & projectId.Replace("'", "''") & "', " &
+                    "'" & statusId.Replace("'", "''") & "', " &
+                    "'" & actionId.Replace("'", "''") & "', " &
+                    "'" & userId.Replace("'", "''") & "')"
+
+                ExecuteNonQuery(EBDB, insertSql)
+            Next
+        End If
     End Sub
 End Class

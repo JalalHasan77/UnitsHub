@@ -2,7 +2,8 @@
 
 Public Class clsListProperties
     Public Property ItemsSQL As String
-    Public Property CheckedItemsSQL As String
+
+    Public CheckedItemsSQL As String
     Public Property FormTitle As String
     Public Property ColumnHideAndShow As String
     Public Property EditableColumns As String

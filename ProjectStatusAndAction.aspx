@@ -289,7 +289,7 @@
                                                             <asp:GridView ID="GridView1" runat="server" AutoGenerateColumns="False"
                                                                 ShowHeader="False" GridLines="None" CellPadding="0" CellSpacing="0" Width="100%"
                                                                 CssClass="action-grid"
-                                                                DataKeyNames="ACTION_ID"
+                                                                DataKeyNames="ACTION_ID,PROJECT_ID,STATUS_ID"
                                                                 OnRowDataBound="GridView1_RowDataBound">
                                                                 <Columns>
                                                                     <asp:TemplateField>
@@ -299,7 +299,7 @@
                                                                                     <asp:CheckBox ID="chkActionTitle" runat="server" AutoPostBack="True" />
                                                                                     <asp:LinkButton ID="lnkActionTitle" runat="server" CssClass="action-link"></asp:LinkButton>
                                                                                 </div>
-                                                                                <asp:Button ID="btnShowUsers" runat="server" Text="Show Users" CssClass="lblSpacing2" />
+                                                                                <asp:Button ID="btnShowUsers" runat="server" Text="Show Users" CssClass="lblSpacing2" OnClick="btnShowUsers_Click" CausesValidation="false" />
                                                                             </div>
                                                                         </ItemTemplate>
                                                                     </asp:TemplateField>
