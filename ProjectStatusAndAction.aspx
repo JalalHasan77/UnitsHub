@@ -30,6 +30,22 @@
             letter-spacing: 0.3px;
         }
 
+        .btn-close-header {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: 8px;
+            padding: 8px 20px;
+            font-size: 13.5px;
+            font-weight: 600;
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+            cursor: pointer;
+        }
+
+        .btn-close-header:hover {
+            background-color: rgba(255, 255, 255, 0.28);
+        }
+
         .content-wrapper {
             padding: 28px 0 40px 0;
         }
@@ -238,6 +254,9 @@
 
                                 <asp:Label ID="lblPROJECTID" runat="server" Text="001"></asp:Label>
                                 <asp:Label ID="lblSTATUSID" runat="server" Text="0000"></asp:Label>
+                            </td>
+                            <td style="text-align: right; vertical-align: middle; white-space: nowrap;">
+                                <asp:Button ID="btnClose" runat="server" Text="Close" CssClass="btn-close-header" OnClick="btnClose_Click" CausesValidation="false" />
                             </td>
                             </tr>
                         </table>

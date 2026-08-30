@@ -15,6 +15,15 @@ Public Class ProjectStatusAndAction
     End Sub
 
     ''' <summary>
+    ''' Closes this popup and reloads its parent, the same way Save/Cancel already do on
+    ''' DesignAction.aspx and AddMultipleItemsFromList.aspx — skipPostBack:=False triggers
+    ''' window.parent.__doPostBack(vendorPopupContext.postBackId, '') after closing.
+    ''' </summary>
+    Protected Sub btnClose_Click(ByVal sender As Object, ByVal e As EventArgs)
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
+
+    ''' <summary>
     ''' Populates ddlProjectName from the projects table. Only called on the initial load
     ''' (not on postback) so the selection persists via ViewState instead of being re-bound.
     ''' </summary>
@@ -230,8 +239,8 @@ Public Class ProjectStatusAndAction
             Dim MemberListParameters As New clsListProperties
             With MemberListParameters
                 .ItemsSQL = "Select USER_ID as ID, FULL_NAME as Name from UNITSHUB_USERS order by Name"
-.CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_PRJ_STS_ACTN_USRS where PROJECT_ID ='" & projectId & "' and STATUS_ID = '" & statusId & "' and ACTION_ID='" & actionId & "'"
-.FormTitle = "Select Users"
+                .CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_PRJ_STS_ACTN_USRS where PROJECT_ID ='" & projectId & "' and STATUS_ID = '" & statusId & "' and ACTION_ID='" & actionId & "'"
+                .FormTitle = "Select Users"
                 .ColumnHideAndShow = "YN"
                 .EditableColumns = "NN"
                 .ColumnsWidth = New Double() {1, 3}
