@@ -193,6 +193,8 @@ Partial Class Filters
         KeepOnlyColumns(dt, L)
     End Sub
 
+    'i used this function to write dictionary values into txt files
+    'it is not necessary to system
     Private Sub WriteDictionaryToFile(
     dict As Dictionary(Of String, Integer),
     filePath As String)
@@ -215,9 +217,9 @@ Partial Class Filters
 
         For Each columnEntry In counts
             TEXT = "Column: " & columnEntry.Key & vbTab & vbTab & vbTab & CType(columnEntry.Value, Dictionary(Of String, Integer)).Count
-            If columnEntry.Key = "Size" Then
-                WriteDictionaryToFile(columnEntry.Value, IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Size.txt"))
-            End If
+            'If columnEntry.Key = "Size" Then
+            '    WriteDictionaryToFile(columnEntry.Value, IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Size.txt"))
+            'End If
             Dim DicToSort As Dictionary(Of String, Integer) = CType(columnEntry.Value, Dictionary(Of String, Integer))
 
             Dim L As New List(Of String)
@@ -366,42 +368,52 @@ Partial Class Filters
     End Function
 
     Public Function GroupDictionaryIntoRangesNumaric(
-                                                Values As Dictionary(Of String, Integer),
-                                                NumberOfRanges As Integer) As Dictionary(Of String, RangeGroupInfo)
+                                            Values As Dictionary(Of String, Integer),
+                                            NumberOfRanges As Integer) As Dictionary(Of String, RangeGroupInfo)
+
         Dim lcDic As New Dictionary(Of String, RangeGroupInfo)
 
-        Dim NumericKeys As New List(Of Double)
-        Dim KeyLookup As New Dictionary(Of Double, String)  ' maps parsed number back to its original string form
-        For Each k As String In Values.Keys
-            Dim d As Double = CDbl(k)
-            NumericKeys.Add(d)
-            If Not KeyLookup.ContainsKey(d) Then KeyLookup.Add(d, k)
+        ' Parse each key once, keeping (numeric value, original string key, frequency) together
+        ' -- avoids the old KeyLookup(Of Double, String) which could only remember ONE string
+        ' per numeric value.
+        Dim Entries As New List(Of Tuple(Of Double, String, Integer))
+        For Each kvp In Values
+            Entries.Add(Tuple.Create(CDbl(kvp.Key), kvp.Key, kvp.Value))
         Next
 
-        Dim MinValue As Double = NumericKeys.Min()
-        Dim MaxValue As Double = NumericKeys.Max()
+        Dim MinValue As Double = Entries.Min(Function(e) e.Item1)
+        Dim MaxValue As Double = Entries.Max(Function(e) e.Item1)
 
-        'Inclusive range width
-        Dim Width As Integer = Math.Ceiling((MaxValue - MinValue + 1) / NumberOfRanges)
+        Dim Width As Double = Math.Ceiling((MaxValue - MinValue + 1) / NumberOfRanges)
         Dim xLen As Integer = 10 ^ (CStr(Width).Length - 1)
         Width = Math.Floor(Width / xLen) * xLen
+        If Width <= 0 Then Width = 1 ' guard against degenerate ranges
 
         For i As Integer = 0 To NumberOfRanges - 1
             Dim FromValue As Double = MinValue + (i * Width)
-            Dim ToValue As Double = FromValue + Width '- 1
+            Dim ToValue As Double = FromValue + Width
+
+            ' make sure rounding never drops the max value from the last bucket
+            If i = NumberOfRanges - 1 Then ToValue = Math.Max(ToValue, MaxValue + 1)
 
             Dim Cnt As Integer = 0
             Dim CatList As New List(Of String)
 
-            For Each nv As Double In NumericKeys
-                If nv >= FromValue AndAlso nv < ToValue Then
-                    Cnt += 1
-                    CatList.Add(KeyLookup(nv))
+            For Each e In Entries
+                If e.Item1 >= FromValue AndAlso e.Item1 < ToValue Then
+                    Cnt += e.Item3          ' <-- FIX: sum the actual frequency, not +1 per key
+                    CatList.Add(e.Item2)
                 End If
             Next
 
-            lcDic.Add(String.Format("{0:N0} - {1:N0}", FromValue, ToValue),
-                      New RangeGroupInfo With {.Count = Cnt, .Categories = CatList})
+            ' Floor/ceiling instead of N0 rounding, so a value at the very bottom of a
+            ' bucket (like 156.5 in [156.5,160.5)) doesn't get displayed as if it rounded
+            ' out of the bucket.
+            Dim Label As String = String.Format("{0:N0} - {1:N0}",
+                                             Math.Floor(FromValue),
+                                             Math.Ceiling(ToValue) - 1)
+
+            lcDic.Add(Label, New RangeGroupInfo With {.Count = Cnt, .Categories = CatList})
         Next
 
         Return lcDic
