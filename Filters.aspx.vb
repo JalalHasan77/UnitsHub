@@ -193,7 +193,17 @@ Partial Class Filters
         KeepOnlyColumns(dt, L)
     End Sub
 
+    Private Sub WriteDictionaryToFile(
+    dict As Dictionary(Of String, Integer),
+    filePath As String)
 
+        Using writer As New IO.StreamWriter(filePath, False)
+            For Each item As KeyValuePair(Of String, Integer) In dict
+                writer.WriteLine(item.Key & "=" & item.Value)
+            Next
+        End Using
+
+    End Sub
 
 
     Private Sub MakeFilterGridView(MainTable As DataTable)
@@ -205,7 +215,9 @@ Partial Class Filters
 
         For Each columnEntry In counts
             TEXT = "Column: " & columnEntry.Key & vbTab & vbTab & vbTab & CType(columnEntry.Value, Dictionary(Of String, Integer)).Count
-
+            If columnEntry.Key = "Size" Then
+                WriteDictionaryToFile(columnEntry.Value, IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Size.txt"))
+            End If
             Dim DicToSort As Dictionary(Of String, Integer) = CType(columnEntry.Value, Dictionary(Of String, Integer))
 
             Dim L As New List(Of String)

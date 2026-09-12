@@ -642,19 +642,22 @@ Partial Class MainPage
 
 
         SQL = ""
-        SQL = SQL + vbCrLf + " SELECT "
-        SQL = SQL + vbCrLf + "     s.UnitStatus, "
-        SQL = SQL + vbCrLf + "     COUNT(a.STATUS) AS UnitCount "
-        SQL = SQL + vbCrLf + " FROM "
-        SQL = SQL + vbCrLf + "     ( "
-        SQL = SQL + vbCrLf + " Select STATUS as UnitStatus from UNITSHUB_UNITSSTATUS "
-        SQL = SQL + vbCrLf + "     ) s "
-        SQL = SQL + vbCrLf + "     LEFT JOIN " & View.Rows(0)("VIEWNAME").ToString & " a "
-        SQL = SQL + vbCrLf + "         ON upper(a.STATUS) = upper(s.UnitStatus) "
-        SQL = SQL + vbCrLf + " GROUP BY "
-        SQL = SQL + vbCrLf + "     s.UnitStatus "
-        SQL = SQL + vbCrLf + " ORDER BY "
-        SQL = SQL + vbCrLf + "     s.UnitStatus; "
+        SQL = SQL + vbCrLf + " SELECT  "
+        SQL = SQL + vbCrLf + "    s.STATUS AS UnitStatus,  "
+        SQL = SQL + vbCrLf + "    COUNT(a.STATUS) AS UnitCount  "
+        SQL = SQL + vbCrLf + " FROM  "
+        SQL = SQL + vbCrLf + "    ( "
+        SQL = SQL + vbCrLf + "        SELECT STATE_ID, STATUS  "
+        SQL = SQL + vbCrLf + "        FROM UNITSHUB_PROJECTSTATUS  "
+        SQL = SQL + vbCrLf + "        WHERE PROJECT_ID = '" & lcProjectID & "' "
+        SQL = SQL + vbCrLf + "    ) s  "
+        SQL = SQL + vbCrLf + "    LEFT JOIN UNITSHUB_PRJ001_APARTMMENTS a  "
+        SQL = SQL + vbCrLf + "        ON UPPER(a.STATUS) = UPPER(s.STATE_ID)  "
+        SQL = SQL + vbCrLf + " GROUP BY  "
+        SQL = SQL + vbCrLf + "    s.STATE_ID, s.STATUS "
+        SQL = SQL + vbCrLf + " ORDER BY  "
+        SQL = SQL + vbCrLf + "    s.STATE_ID; "
+
 
         GridView2.DataSource = DB.GetDataTable(EBDB, SQL)
         GridView2.DataBind()
@@ -789,8 +792,8 @@ Partial Class MainPage
 
                 ' Outer select field
                 If uiName.Equals("Status", StringComparison.OrdinalIgnoreCase) Then
-                    OuterFields.Add("US.STATUS AS ""Status""")
-                    OuterFields.Add("US.SUBTITLE AS ""Status_Subtitle""")   'Optional
+                    OuterFields.Add("PS.STATUS AS ""Status""")
+                    OuterFields.Add("PS.SUBTITLE AS ""Status_Subtitle""")   'Optional
                     ' Q."Status" here is still the raw STATE_ID code (before the LEFT JOIN
                     ' below overwrites the outer "Status" alias with the display name) -
                     ' carry it through under its own name so it survives as the row's real,
@@ -823,8 +826,8 @@ Partial Class MainPage
 
         sb.AppendLine(") Q")
 
-        sb.AppendLine("LEFT JOIN UNITSHUB_UNITSSTATUS US")
-        sb.AppendLine("    ON US.STATE_ID = Q.""Status""")
+        sb.AppendLine("LEFT JOIN UNITSHUB_PROJECTSTATUS PS")
+        sb.AppendLine("    ON PS.STATE_ID = Q.""Status""")
 
         Return sb.ToString()
 
@@ -1077,7 +1080,7 @@ Partial Class MainPage
     Private Function GetUnitStatusTable() As DataTable
         Return GetOrAddToCache(Of DataTable)(
             "UnitStatuses", 30,
-            Function() GetDataTable(EBDB, "SELECT STATUS, STATE_ID, SUBTITLE, STATUS_BG_COLOR, STATUS_FG_COLOR, SUBTITLE_BG_COLOR, SUBTITLE_FG_COLOR FROM UNITSHUB_UNITSSTATUS"))
+            Function() GetDataTable(EBDB, "SELECT STATUS, STATE_ID, SUBTITLE, STATUS_BG_COLOR, STATUS_FG_COLOR, SUBTITLE_BG_COLOR, SUBTITLE_FG_COLOR FROM UNITSHUB_PROJECTSTATUS"))
     End Function
 
     ''' <summary>
@@ -1272,8 +1275,8 @@ Partial Class MainPage
 
         For Each DR As DataRow In matchingRows
             Actions.Add(New WorkflowAction With {
-                .Text = DR("PERMISSION_NAME").ToString(),
-                .CommandName = DR("PERMISSION_NAME").ToString(),
+                .Text = DR("ACTION_TITLE").ToString(),
+                .CommandName = DR("ACTION_TITLE").ToString(),
                 .CommandArgument = RequestID,
                 .ActionId = DR("ACTION_ID").ToString(),
                 .Icon = DR("ICON").ToString(),
@@ -1301,40 +1304,67 @@ Partial Class MainPage
         Dim safeProjectID As String = If(ProjectID, "").Replace("'", "''")
         Dim safeUserID As String = If(UserID, "").Replace("'", "''")
 
-        Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT RP.PROJECT_ID, RP.STATE_ID, RP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
-        SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
-        SQL = SQL + vbCrLf + " FROM UnitsHub_Users U "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_USERGROUPS UG ON U.USER_ID = UG.USER_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPS G ON UG.GROUP_ID = G.GROUP_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPROLES GR ON G.GROUP_ID = GR.GROUP_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLES R ON GR.ROLE_ID = R.ROLE_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLEPERMISSIONS RP ON R.ROLE_ID = RP.ROLE_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PERMISSIONS P ON RP.ACTION_ID = P.ACTION_ID "
-        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = RP.STATE_ID "
-        SQL = SQL + vbCrLf + " WHERE U.USER_ID = '" & safeUserID & "' "
-        SQL = SQL + vbCrLf + "   AND RP.PROJECT_ID = '" & safeProjectID & "' "
-        SQL = SQL + vbCrLf + "   AND NOT EXISTS "
-        SQL = SQL + vbCrLf + "   ( "
-        SQL = SQL + vbCrLf + "       SELECT 1 "
-        SQL = SQL + vbCrLf + "       FROM UnitsHub_UserPermissions UP "
-        SQL = SQL + vbCrLf + "       WHERE UP.USER_ID = U.USER_ID "
-        SQL = SQL + vbCrLf + "         AND UP.PROJECT_ID = RP.PROJECT_ID "
-        SQL = SQL + vbCrLf + "         AND UP.STATE_ID = RP.STATE_ID "
-        SQL = SQL + vbCrLf + "         AND UP.ACTION_ID = RP.ACTION_ID "
-        SQL = SQL + vbCrLf + "         AND UP.ALLOW_DENY = 'A' "
-        SQL = SQL + vbCrLf + "   ) "
-        SQL = SQL + vbCrLf + " UNION "
-        SQL = SQL + vbCrLf + " SELECT UP.PROJECT_ID, UP.STATE_ID, UP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
-        SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
-        SQL = SQL + vbCrLf + " FROM UnitsHub_UserPermissions UP "
-        SQL = SQL + vbCrLf + " JOIN UnitsHub_Permissions P ON P.ACTION_ID = UP.ACTION_ID "
-        SQL = SQL + vbCrLf + " JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = UP.STATE_ID "
-        SQL = SQL + vbCrLf + " WHERE UP.USER_ID = '" & safeUserID & "' "
-        SQL = SQL + vbCrLf + "   AND UP.PROJECT_ID = '" & safeProjectID & "' "
-        SQL = SQL + vbCrLf + "   AND UP.ALLOW_DENY = 'A'; "
+        'Dim SQL As String = ""
+        'SQL = SQL + vbCrLf + " SELECT RP.PROJECT_ID, RP.STATE_ID, RP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
+        'SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
+        'SQL = SQL + vbCrLf + " FROM UnitsHub_Users U "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_USERGROUPS UG ON U.USER_ID = UG.USER_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPS G ON UG.GROUP_ID = G.GROUP_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPROLES GR ON G.GROUP_ID = GR.GROUP_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLES R ON GR.ROLE_ID = R.ROLE_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLEPERMISSIONS RP ON R.ROLE_ID = RP.ROLE_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PERMISSIONS P ON RP.ACTION_ID = P.ACTION_ID "
+        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = RP.STATE_ID "
+        'SQL = SQL + vbCrLf + " WHERE U.USER_ID = '" & safeUserID & "' "
+        'SQL = SQL + vbCrLf + "   AND RP.PROJECT_ID = '" & safeProjectID & "' "
+        'SQL = SQL + vbCrLf + "   AND NOT EXISTS "
+        'SQL = SQL + vbCrLf + "   ( "
+        'SQL = SQL + vbCrLf + "       SELECT 1 "
+        'SQL = SQL + vbCrLf + "       FROM UnitsHub_UserPermissions UP "
+        'SQL = SQL + vbCrLf + "       WHERE UP.USER_ID = U.USER_ID "
+        'SQL = SQL + vbCrLf + "         AND UP.PROJECT_ID = RP.PROJECT_ID "
+        'SQL = SQL + vbCrLf + "         AND UP.STATE_ID = RP.STATE_ID "
+        'SQL = SQL + vbCrLf + "         AND UP.ACTION_ID = RP.ACTION_ID "
+        'SQL = SQL + vbCrLf + "         AND UP.ALLOW_DENY = 'A' "
+        'SQL = SQL + vbCrLf + "   ) "
+        'SQL = SQL + vbCrLf + " UNION "
+        'SQL = SQL + vbCrLf + " SELECT UP.PROJECT_ID, UP.STATE_ID, UP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
+        'SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
+        'SQL = SQL + vbCrLf + " FROM UnitsHub_UserPermissions UP "
+        'SQL = SQL + vbCrLf + " JOIN UnitsHub_Permissions P ON P.ACTION_ID = UP.ACTION_ID "
+        'SQL = SQL + vbCrLf + " JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = UP.STATE_ID "
+        'SQL = SQL + vbCrLf + " WHERE UP.USER_ID = '" & safeUserID & "' "
+        'SQL = SQL + vbCrLf + "   AND UP.PROJECT_ID = '" & safeProjectID & "' "
+        'SQL = SQL + vbCrLf + "   AND UP.ALLOW_DENY = 'A'; "
 
-        Return GetDataTable(EBDB, SQL)
+        'Return GetDataTable(EBDB, SQL)
+        Dim SQL As String = ""
+        SQL = Sql + vbCrLf + "Select  "
+        Sql = Sql + vbCrLf + "         U.PROJECT_ID,  "
+        Sql = Sql + vbCrLf + "         U.STATUS_ID, "
+        Sql = Sql + vbCrLf + "         U.ACTION_ID, "
+        Sql = Sql + vbCrLf + "         A.ICON, "
+        Sql = Sql + vbCrLf + "         A.ACTION_TITLE, "
+        Sql = Sql + vbCrLf + "         PS.STATUS as STATUS_NAME, "
+        Sql = Sql + vbCrLf + "         PS.SUBTITLE as STATUS_SUBTITLE "
+        Sql = Sql + vbCrLf + "from "
+        Sql = Sql + vbCrLf + "         UNITSHUB_PRJ_STS_ACTN_USRS U "
+        Sql = Sql + vbCrLf + "inner join "
+        Sql = Sql + vbCrLf + "         UNITSHUB_ACTIONS A  "
+        Sql = Sql + vbCrLf + "on "
+        Sql = Sql + vbCrLf + "         U.PROJECT_ID = A.PROJECT_ID "
+        Sql = Sql + vbCrLf + "         and U.STATUS_ID = A.STATUS_ID "
+        Sql = Sql + vbCrLf + "         and A.ACTION_ID = U.ACTION_ID "
+        Sql = Sql + vbCrLf + "inner join "
+        Sql = Sql + vbCrLf + "         UNITSHUB_PROJECTSTATUS PS "
+        Sql = Sql + vbCrLf + "on "
+        Sql = Sql + vbCrLf + "         PS.STATE_ID = U.STATUS_ID "
+        Sql = Sql + vbCrLf + "         and PS.PROJECT_ID = U.PROJECT_ID "
+        Sql = Sql + vbCrLf + "where "
+        SQL = SQL + vbCrLf + "         U.PROJECT_ID = '" & ProjectID & "' "
+        SQL = Sql + vbCrLf + "         and "
+        SQL = SQL + vbCrLf + "         U.USER_ID='" & UserID & "' "
+        Return GetDataTable(EBDB, Sql)
     End Function
 
     ''' <summary>
