@@ -583,6 +583,128 @@
         .auto-style4 {
             width: 100%;
         }
+
+    .attr-properties-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .attr-properties-table td {
+        padding: 2px 4px;
+    }
+
+    .attr-properties-table input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 14px;
+        font-family: Arial;
+        color: #333333;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+
+    .attr-properties-table input[type="text"]:focus {
+        outline: none;
+        border-color: #4a90d9;
+        box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+    }
+
+    .attr-properties-table span {
+        font-family: Arial;
+        font-size: 14px;
+        color: #333333;
+    }
+
+    .icon-toolbar {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+
+    .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        border: 1px solid #ccc;
+        background-color: #ffffff;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .icon-btn:hover {
+        background-color: #f2f2f2;
+        border-color: #999;
+    }
+
+    .icon-btn:active {
+        background-color: #e6e6e6;
+    }
+
+    .icon-btn-icon {
+        font-size: 19px;
+        line-height: 1;
+    }
+
+    .icon-btn-add .icon-btn-icon {
+        color: #4caf50;
+    }
+
+    .icon-btn-delete .icon-btn-icon {
+        color: #e74c3c;
+    }
+
+    .icon-btn-move .icon-btn-icon {
+        color: #4a90d9;
+    }
+
+    .add-item-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 6px;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background-color: #f9f9f9;
+        box-sizing: border-box;
+    }
+
+    .add-item-textbox {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 14px;
+        font-family: Arial;
+        color: #333333;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+
+    .add-item-textbox:focus {
+        outline: none;
+        border-color: #4a90d9;
+        box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+    }
+
+    .add-item-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .btn-cancel {
+        background-color: #6c757d;
+        border-color: #6c757d;
+    }
+
+    .btn-cancel:hover {
+        background-color: #5c636a;
+        border-color: #565e64;
+    }
     </style>
  
 
@@ -770,18 +892,53 @@
                                             </tr>
                                             <tr>
                                                 <td style="vertical-align: top;width:15%">
+                                                    <div class="icon-toolbar">
+                                                        <asp:LinkButton ID="btnAddNodeType" runat="server" CssClass="icon-btn icon-btn-add" ToolTip="Add"><span class="icon-btn-icon">&#10133;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnDeleteNodeType" runat="server" CssClass="icon-btn icon-btn-delete" ToolTip="Delete"><span class="icon-btn-icon">&#128465;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnMoveUpNodeType" runat="server" CssClass="icon-btn icon-btn-move" ToolTip="Move Up"><span class="icon-btn-icon">&#9650;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnMoveDownNodeType" runat="server" CssClass="icon-btn icon-btn-move" ToolTip="Move Down"><span class="icon-btn-icon">&#9660;</span></asp:LinkButton>
+                                                    </div>
+                                                </td>
+                                                <td style="vertical-align: top;width:2%">
+                                                    &nbsp;</td>
+                                                <td style="vertical-align: top;width:55%">
+                                                    <div class="icon-toolbar">
+                                                        <asp:LinkButton ID="btnAddAttribute" runat="server" CssClass="icon-btn icon-btn-add" ToolTip="Add" OnClick="btnAddAttribute_Click"><span class="icon-btn-icon">&#10133;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnDeleteAttribute" runat="server" CssClass="icon-btn icon-btn-delete" ToolTip="Delete"><span class="icon-btn-icon">&#128465;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnMoveUpAttribute" runat="server" CssClass="icon-btn icon-btn-move" ToolTip="Move Up"><span class="icon-btn-icon">&#9650;</span></asp:LinkButton>
+                                                        <asp:LinkButton ID="btnMoveDownAttribute" runat="server" CssClass="icon-btn icon-btn-move" ToolTip="Move Down"><span class="icon-btn-icon">&#9660;</span></asp:LinkButton>
+                                                    </div>
+                                                    <asp:Panel ID="pnlAddAttribute" runat="server" CssClass="add-item-panel" Visible="False">
+                                                        <asp:TextBox ID="txbxNewAttributeName" runat="server" CssClass="add-item-textbox" placeholder="Attribute name"></asp:TextBox>
+                                                        <div class="add-item-actions">
+                                                            <asp:LinkButton ID="btnConfirmAddAttribute" runat="server" CssClass="btn-bootstrap" OnClick="btnConfirmAddAttribute_Click">Add</asp:LinkButton>
+                                                            <asp:LinkButton ID="btnCancelAddAttribute" runat="server" CssClass="btn-bootstrap btn-cancel" CausesValidation="False" OnClick="btnCancelAddAttribute_Click">Cancel</asp:LinkButton>
+                                                        </div>
+                                                    </asp:Panel>
+                                                </td>
+                                                <td style="vertical-align: top;width:2%">
+                                                    &nbsp;</td>
+                                                <td style="vertical-align: top;width:20%">
+                                                    <div class="add-item-actions">
+                                                        <asp:LinkButton ID="btnUpdate" runat="server" CssClass="btn-bootstrap" OnClick="btnUpdate_Click">Update</asp:LinkButton>
+                                                        <asp:LinkButton ID="btnCancel" runat="server" CssClass="btn-bootstrap btn-cancel" CausesValidation="False" OnClick="btnCancel_Click">Cancel</asp:LinkButton>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="vertical-align: top;width:15%">
                                                     <asp:ListBox ID="ListBox1" runat="server" Width="100%" CssClass="styled-listbox" AutoPostBack="True" OnSelectedIndexChanged="ListBox1_SelectedIndexChanged"></asp:ListBox>
                                                 </td>
                                                 <td style="vertical-align: top;width:2%">
                                                     &nbsp;</td>
                                                 <td style="vertical-align: top;width:55%">
-                                                    <asp:ListBox ID="ListBox2" runat="server" Width="100%" CssClass="styled-listbox"></asp:ListBox>
+                                                    <asp:ListBox ID="ListBox2" runat="server" Width="100%" CssClass="styled-listbox" AutoPostBack="True" OnSelectedIndexChanged="ListBox2_SelectedIndexChanged"></asp:ListBox>
                                                     </td>
                                                 <td style="vertical-align: top;width:2%">
                                                     &nbsp;</td>
                                                 <td style="vertical-align: top;width:20%">
-                                                    <asp:Panel ID="Panel1" runat="server">
-                                                        <table class="auto-style4">
+                                                    <asp:Panel ID="Panel1" runat="server" Visible="False">
+                                                        <table class="attr-properties-table">
                                                             <tr>
                                                                 <td>
                                                                     <asp:TextBox ID="txbxName" runat="server"></asp:TextBox>

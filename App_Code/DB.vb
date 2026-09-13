@@ -1,4 +1,5 @@
 ﻿Imports System.Data
+Imports System.Data.SqlClient
 
 Public Module DB
 
@@ -125,7 +126,13 @@ Public Module DB
         ExecuteNonQuery(DBConnection, SQL)
     End Sub
 
-    Sub ExecuteNonQuery(ByVal DBConnection As String, ByVal SQL As String)
+    Function ExecuteNonQuery(ByVal DBConnection As String,
+                         ByVal SQL As String,
+                         ParamArray Parameters() As SqlParameter) As Integer
+
+        ' Substitute parameters
+        SQL = SubstituteParameters(SQL, Parameters)
+
         Dim Dcom As New Data.OleDb.OleDbCommand
         Dim Dcon As New Data.OleDb.OleDbConnection
 
@@ -133,30 +140,62 @@ Public Module DB
         Dcom.Connection = Dcon
         Dcom.CommandText = SQL
 
-        'MsgBox(System.AppDomain.CurrentDomain.BaseDirectory)
-
-
-
+        Dim AffectedRow As Integer = 0
 
         Try
-            Dcom.Connection.Open()
-        Catch ex As Exception
+            Dcon.Open()
+            AffectedRow = Dcom.ExecuteNonQuery()
 
-        End Try
-
-        Try
-            Dcom.ExecuteNonQuery()
         Catch ex As Exception
             MsgBox(ex.Message)
+
+        Finally
+            If Dcon.State <> ConnectionState.Closed Then
+                Dcon.Close()
+            End If
         End Try
 
-        Try
-            Dcom.Connection.Close()
-        Catch ex As Exception
+        Return AffectedRow
 
-        End Try
+    End Function
 
-    End Sub
+    Private Function SubstituteParameters(ByVal SQL As String,
+                                      ParamArray Parameters() As SqlParameter) As String
+
+        If Parameters Is Nothing OrElse Parameters.Length = 0 Then
+            Return SQL
+        End If
+
+        For Each P As SqlParameter In Parameters
+
+            Dim Value As String
+
+            If P.Value Is Nothing OrElse P.Value Is DBNull.Value Then
+                Value = "NULL"
+
+            ElseIf TypeOf P.Value Is String Then
+                Value = "'" & P.Value.ToString().Replace("'", "''") & "'"
+
+            ElseIf TypeOf P.Value Is DateTime Then
+                Value = "'" & DirectCast(P.Value, DateTime).ToString("yyyy-MM-dd HH:mm:ss") & "'"
+
+            ElseIf TypeOf P.Value Is Boolean Then
+                Value = If(CBool(P.Value), "1", "0")
+
+            Else
+                Value = P.Value.ToString()
+
+            End If
+
+            SQL = SQL.Replace(P.ParameterName, Value)
+
+        Next
+
+        Return SQL
+
+    End Function
+
+
 
     Function RetreiveScalarInteger(ByVal Field As String,
                                        ByVal Table As String,
