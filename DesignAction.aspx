@@ -27,19 +27,16 @@
 
         body {
             font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif;
-            background: radial-gradient(circle at top left, #eef2ff, var(--bg) 55%);
+            background: var(--bg);
             margin: 0;
-            padding: 36px 20px;
+            padding: 0;
             color: var(--ink);
         }
 
         .action-panel {
-            max-width: 760px;
-            margin: 0 auto;
+            width: 100%;
+            min-height: 100vh;
             background-color: #ffffff;
-            border-radius: 22px;
-            overflow: hidden;
-            box-shadow: 0 25px 60px -20px rgba(30, 41, 59, 0.35);
         }
 
         /* ---------- Header ---------- */
