@@ -178,7 +178,11 @@
 #menuContainer{float: left;}
 
         /* ---------- Tab-body content (migrated from DesignAction) ---------- */
-        .tab-body-inner { padding: 22px 4px 6px; }
+        .tab-body-inner {
+            padding: 22px 4px 6px;
+            height: 500px;
+            overflow-y: auto;
+        }
 
         .form-row {
             display: flex;
@@ -473,8 +477,9 @@
             display: flex;
             justify-content: flex-end;
             gap: 10px;
-            margin-top: 12px;
-            padding: 0 4px 18px;
+            margin: 12px -15px 0 -15px;
+            padding: 20px 19px 18px;
+            border-top: 1px solid #000000;
         }
 
         .btn-save, .btn-cancel {
@@ -513,6 +518,8 @@
             font-size: 13.5px;
             font-weight: 600;
         }
+
+        .msg-success:empty { display: none; }
 
         @media (max-width: 560px) {
             .form-label { width: 100%; padding-top: 0; }
@@ -698,6 +705,16 @@
                                                                 </div>
 
                                                                 <div class="form-row">
+                                                                    <div class="form-label">Show in</div>
+                                                                    <div class="form-control-cell">
+                                                                        <asp:CheckBoxList ID="cblShowIn" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="chip-list">
+                                                                            <asp:ListItem Text="Show In Default" Value="Default" Selected="True" />
+                                                                            <asp:ListItem Text="Show In Preview" Value="Preview" />
+                                                                        </asp:CheckBoxList>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="form-row">
                                                                     <div class="form-label">Action Title</div>
                                                                     <div class="form-control-cell">
                                                                         <asp:TextBox ID="txtActionTitle" runat="server" CssClass="txt-input" placeholder="e.g. Delete Record" />
@@ -730,16 +747,6 @@
                                                                     <div class="form-label">Implementer Title</div>
                                                                     <div class="form-control-cell">
                                                                         <asp:TextBox ID="txtImplementerTitle" runat="server" CssClass="txt-input" placeholder="Maker, Checker, etc" />
-                                                                    </div>
-                                                                </div>
-
-                                                                <div class="form-row">
-                                                                    <div class="form-label">Show in</div>
-                                                                    <div class="form-control-cell">
-                                                                        <asp:CheckBoxList ID="cblShowIn" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="chip-list">
-                                                                            <asp:ListItem Text="Show In Default" Value="Default" Selected="True" />
-                                                                            <asp:ListItem Text="Show In Preview" Value="Preview" />
-                                                                        </asp:CheckBoxList>
                                                                     </div>
                                                                 </div>
 
@@ -807,6 +814,7 @@
 
                                                         <%-- ===================== AutoTransfer (intentionally empty) ===================== --%>
                                                         <asp:View ID="View3" runat="server">
+                                                            <div class="tab-body-inner"></div>
                                                         </asp:View>
 
                                                         <%-- ===================== Parameters and Script ===================== --%>
@@ -911,7 +919,7 @@
                                                         <asp:Button ID="btnSave" runat="server" Text="Save Action" CssClass="btn-save" OnClick="btnSave_Click" />
                                                     </div>
 
-                                                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-success" />
+                                                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-success" Visible="false" />
 
                                                 </td>
                                             </tr>

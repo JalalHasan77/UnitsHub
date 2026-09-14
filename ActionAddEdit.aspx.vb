@@ -148,6 +148,7 @@ Partial Class ActionAddEdit
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
+            Menu3.Items(0).Selected = True
             ' Only override the markup's placeholder text (e.g. "001" / "0000") when the query
             ' string actually supplies a value — otherwise Request.QueryString(...) returns
             ' Nothing and silently blanks out lblProjectID/lblSTATUSID.
@@ -166,7 +167,9 @@ Partial Class ActionAddEdit
             If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
                 lblMode.Text = Request.QueryString("Mode")
             End If
-
+            lblMode.Text = "Edit"
+            lblSTATUSID.Text = "0000"
+            lblActionID.Text = "00001"
             LoadPaymentPlans()
             LoadStatuses()
             ' TODO: replace with a real record load when editing an existing action.
@@ -386,6 +389,7 @@ Partial Class ActionAddEdit
             SaveActionControl(model)
             lblMessage.Text = "Action '" & model.ActionTitle & "' saved successfully."
         End If
+        lblMessage.Visible = True
 
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, True, skipPostBack:=False)
 
@@ -420,6 +424,7 @@ Partial Class ActionAddEdit
 
         If actionDT.Rows.Count = 0 Then
             lblMessage.Text = "No saved action found for this Project / Status / Action ID."
+            lblMessage.Visible = True
             Return
         End If
 
@@ -480,6 +485,11 @@ Partial Class ActionAddEdit
 
             CurrentPlanId = If(SelectedPlanIds.Count > 0, SelectedPlanIds(0), "")
 
+            ' Reflect that same "first designated plan" choice in the dropdown itself -
+            ' otherwise it would sit on the "Select Payment Plan" placeholder while the
+            ' chips/grid below already show a plan as selected.
+            SafeSetSelectedValue(ddlPaymentPlan, CurrentPlanId)
+
             LoadAddedPlansChips()
             LoadCurrentPlanDetails()
             ReapplyTickedDetails()
@@ -497,6 +507,7 @@ Partial Class ActionAddEdit
         UpdatePreExecutionVisibility()
 
         lblMessage.Text = "Action '" & txtActionTitle.Text & "' loaded."
+        lblMessage.Visible = True
     End Sub
 
     ''' <summary>Returns "" for Nothing/DBNull instead of throwing.</summary>
