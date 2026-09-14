@@ -544,7 +544,7 @@ Partial Class ModifyNodesAttributes
         Dim RowsAffected As Integer = DB.ExecuteNonQuery(EBDB_CS, updateSql,
                          New SqlParameter("@NameInUi", NameInUi),
                          New SqlParameter("@Searchable", If(Searchable, 1, 0)),
-                         New SqlParameter("@ShowInUi", If(ShowInUi, 1, 0)),
+                         New SqlParameter("@ShowInUi", If(ShowInUi, "Y", "N")),
                          New SqlParameter("@ProjectID", ProjectID),
                          New SqlParameter("@NodeTypeID", NodeTypeID),
                          New SqlParameter("@DisplayOrder", CInt(DisplayOrder)))
@@ -558,7 +558,7 @@ Partial Class ModifyNodesAttributes
                              New SqlParameter("@DisplayOrder", CInt(DisplayOrder)),
                              New SqlParameter("@NameInUi", NameInUi),
                              New SqlParameter("@Searchable", If(Searchable, 1, 0)),
-                             New SqlParameter("@ShowInUi", If(ShowInUi, 1, 0)))
+                             New SqlParameter("@ShowInUi", If(ShowInUi, "Y", "N")))
         End If
     End Sub
 
