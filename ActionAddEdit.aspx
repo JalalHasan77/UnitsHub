@@ -417,6 +417,72 @@
 
         .plan-chip-remove:hover { opacity: 1; color: #dc2626; }
 
+        /* ---------- AutoTransfer tab: one card per UNITSHUB_ATP_GROUPS row ---------- */
+        .atp-group-block {
+            border: 1.5px solid #94a3b8;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+
+        .atp-group-block:last-child { margin-bottom: 0; }
+
+        .atp-group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background-color: #1e3a8a;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .atp-group-dash {
+            display: inline-block;
+            width: 16px;
+            height: 5px;
+            border-radius: 3px;
+            background-color: #ffffff;
+            margin-right: 10px;
+        }
+
+        .atp-group-title { flex: 1; font-size: 14px; font-weight: 700; color: #ffffff; }
+
+        .atp-details-grid {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13.5px;
+        }
+
+        .atp-details-grid th {
+            background-color: #dbeafe;
+            color: #000000;
+            text-align: left;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+        }
+
+        .atp-details-grid td {
+            padding: 9px 16px;
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            color: var(--ink);
+        }
+
+        .atp-details-grid th:last-child,
+        .atp-details-grid td:last-child { border-right: none; }
+
+        .atp-details-grid th:nth-child(n+2),
+        .atp-details-grid td:nth-child(n+2) { text-align: center; }
+
+        .atp-details-grid tr:last-child td { border-bottom: none; }
+        .atp-details-grid tr:hover td { background-color: #f8fafc; }
+
         .select-users-btn {
             display: inline-flex;
             align-items: center;
@@ -556,6 +622,24 @@
             }
         }
 
+        // ---------- AutoTransfer tab: Need AutoTransfer checkbox -> Plan dropdown / groups ----------
+        // Mirrors togglePaymentPlanVisibility(): JS only ever force-disables/force-hides;
+        // actually SHOWING the groups block (once a plan is picked) is left to the server,
+        // since only it knows whether a plan is currently selected after postback.
+        function toggleAutoTransferVisibility() {
+            var chk = document.getElementById('<%= chkNeedAutoTransfer.ClientID %>');
+            var ddl = document.getElementById('<%= ddlAutoTransferPlan.ClientID %>');
+            var groupsRow = document.getElementById('<%= rowAutoTransferGroups.ClientID %>');
+
+            if (!chk || !ddl || !groupsRow) { return; }
+
+            ddl.disabled = !chk.checked;
+
+            if (!chk.checked) {
+                groupsRow.style.display = 'none';
+            }
+        }
+
         // ---------- Pre-Execution tab: fully self-contained cascade ----------
         function togglePreExecutionVisibility() {
             var radios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
@@ -607,6 +691,7 @@
         if (document.addEventListener) {
             document.addEventListener('DOMContentLoaded', function () {
                 togglePaymentPlanVisibility();
+                toggleAutoTransferVisibility();
                 togglePreExecutionVisibility();
 
                 var preExecutionRadios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
@@ -812,9 +897,65 @@
                                                             </div>
                                                         </asp:View>
 
-                                                        <%-- ===================== AutoTransfer (intentionally empty) ===================== --%>
+                                                        <%-- ===================== AutoTransfer ===================== --%>
                                                         <asp:View ID="View3" runat="server">
-                                                            <div class="tab-body-inner"></div>
+                                                            <div class="tab-body-inner">
+
+                                                                <div class="form-row" id="rowNeedAutoTransfer">
+                                                                    <div class="form-label"></div>
+                                                                    <div class="form-control-cell">
+                                                                        <label class="toggle-inline">
+                                                                            <asp:CheckBox ID="chkNeedAutoTransfer" runat="server" AutoPostBack="true"
+                                                                                OnCheckedChanged="chkNeedAutoTransfer_CheckedChanged"
+                                                                                onchange="toggleAutoTransferVisibility();" />
+                                                                            Need AutoTransfer
+                                                                        </label>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="form-row" id="rowAutoTransferPlan">
+                                                                    <div class="form-label">AutoTransfer Plan</div>
+                                                                    <div class="form-control-cell">
+                                                                        <asp:DropDownList ID="ddlAutoTransferPlan" runat="server" CssClass="ddl-input"
+                                                                            AutoPostBack="true" OnSelectedIndexChanged="ddlAutoTransferPlan_SelectedIndexChanged" />
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="form-row" id="rowAutoTransferGroups" runat="server" style="flex-basis:100%;">
+                                                                    <div class="form-control-cell" style="flex-basis:100%;">
+
+                                                                        <asp:Repeater ID="rptAutoTransferGroups" runat="server" OnItemDataBound="rptAutoTransferGroups_ItemDataBound">
+                                                                            <ItemTemplate>
+                                                                                <div class="atp-group-block">
+                                                                                    <div class="atp-group-header">
+                                                                                        <span class="atp-group-dash"></span>
+                                                                                        <span class="atp-group-title"><%# Eval("GROUP_TITLE") %></span>
+                                                                                    </div>
+                                                                                    <asp:GridView ID="gvGroupDetails" runat="server" AutoGenerateColumns="False"
+                                                                                        CssClass="atp-details-grid" GridLines="None"
+                                                                                        DataKeyNames="DETAIL_ID"
+                                                                                        EmptyDataText="No lines found for this group.">
+                                                                                        <Columns>
+                                                                                            <asp:BoundField DataField="ACCOUNT_DESCRIPTION" HeaderText="Account" />
+                                                                                            <asp:BoundField DataField="TYPE_OF_ESCROW" HeaderText="Escrow Type" />
+                                                                                            <asp:BoundField DataField="ACCOUNT_NUMBER" HeaderText="Account No." />
+                                                                                            <asp:BoundField DataField="BRANCH" HeaderText="Branch" />
+                                                                                            <asp:BoundField DataField="SYSTEM_NAME" HeaderText="System" />
+                                                                                            <asp:BoundField DataField="DEBIT" HeaderText="Debit" DataFormatString="{0:N3}" />
+                                                                                            <asp:BoundField DataField="CREDIT" HeaderText="Credit" DataFormatString="{0:N3}" />
+                                                                                        </Columns>
+                                                                                    </asp:GridView>
+                                                                                </div>
+                                                                            </ItemTemplate>
+                                                                        </asp:Repeater>
+
+                                                                        <asp:Label ID="lblNoAutoTransferGroups" runat="server" CssClass="plan-details-empty"
+                                                                            Text="No auto-transfer groups found for this plan." Visible="false" />
+
+                                                                    </div>
+                                                                </div>
+
+                                                            </div>
                                                         </asp:View>
 
                                                         <%-- ===================== Parameters and Script ===================== --%>

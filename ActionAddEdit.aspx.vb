@@ -28,6 +28,8 @@ Partial Class ActionAddEdit
         Public Property ParameterType As String
         Public Property FormTitle As String
         Public Property SelectSQL As String
+        Public Property NeedAutoTransfer As Boolean
+        Public Property AutoTransferPlanId As String
     End Class
 
     ''' <summary>
@@ -167,10 +169,11 @@ Partial Class ActionAddEdit
             If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
                 lblMode.Text = Request.QueryString("Mode")
             End If
-            lblMode.Text = "Edit"
-            lblSTATUSID.Text = "0000"
-            lblActionID.Text = "00001"
+            'lblMode.Text = "Edit"
+            'lblSTATUSID.Text = "0000"
+            'lblActionID.Text = "00001"
             LoadPaymentPlans()
+            LoadAutoTransferPlans()
             LoadStatuses()
             ' TODO: replace with a real record load when editing an existing action.
             LoadDefaults()
@@ -185,6 +188,7 @@ Partial Class ActionAddEdit
         End If
 
         UpdateNeedPaymentVisibility()
+        UpdateAutoTransferVisibility()
         UpdatePreExecutionVisibility()
     End Sub
 
@@ -250,6 +254,120 @@ Partial Class ActionAddEdit
         ddlPaymentPlan.DataBind()
 
         ddlPaymentPlan.Items.Insert(0, New ListItem("Select Payment Plan", ""))
+    End Sub
+
+    ''' <summary>
+    ''' Shows/hides the AutoTransfer groups block and enables/disables ddlAutoTransferPlan,
+    ''' based on the Need AutoTransfer checkbox (and, for the groups block, whether a plan
+    ''' is actually selected). Mirrors the client-side toggleAutoTransferVisibility() script
+    ''' and the Payments tab's UpdateNeedPaymentVisibility().
+    ''' </summary>
+    Private Sub UpdateAutoTransferVisibility()
+        ddlAutoTransferPlan.Enabled = chkNeedAutoTransfer.Checked
+
+        Dim groupsVisible As Boolean = chkNeedAutoTransfer.Checked AndAlso Not String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue)
+        rowAutoTransferGroups.Style("display") = If(groupsVisible, "", "none")
+    End Sub
+
+    ''' <summary>
+    ''' Populates ddlAutoTransferPlan from UNITSHUB_AUTOTRANSFERPLAN. Only called on the
+    ''' initial load (not on postback) so the selection persists via ViewState instead of
+    ''' being re-bound. Mirrors LoadPaymentPlans().
+    ''' </summary>
+    Private Sub LoadAutoTransferPlans()
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select PLAN_ID, NAME from UNITSHUB_AUTOTRANSFERPLAN")
+
+        ddlAutoTransferPlan.Items.Clear()
+        ddlAutoTransferPlan.DataSource = DT
+        ddlAutoTransferPlan.DataTextField = "NAME"
+        ddlAutoTransferPlan.DataValueField = "PLAN_ID"
+        ddlAutoTransferPlan.DataBind()
+
+        ddlAutoTransferPlan.Items.Insert(0, New ListItem("Select Plan", ""))
+    End Sub
+
+    ''' <summary>
+    ''' Fires when Need AutoTransfer is ticked/unticked. When unticked, the picked plan and
+    ''' any loaded groups are cleared so a stale grid isn't left bound if the box is
+    ''' re-ticked later with a different plan in mind.
+    ''' </summary>
+    Protected Sub chkNeedAutoTransfer_CheckedChanged(ByVal sender As Object, ByVal e As EventArgs)
+        If Not chkNeedAutoTransfer.Checked Then
+            ddlAutoTransferPlan.ClearSelection()
+            rptAutoTransferGroups.DataSource = Nothing
+            rptAutoTransferGroups.DataBind()
+            lblNoAutoTransferGroups.Visible = False
+        End If
+
+        UpdateAutoTransferVisibility()
+    End Sub
+
+    ''' <summary>
+    ''' Fires when a plan is picked from ddlAutoTransferPlan. Loads that plan's groups (from
+    ''' UNITSHUB_ATP_GROUPS) into rptAutoTransferGroups; each group's own detail lines (from
+    ''' UNITSHUB_ATP_DETAILS) are then bound into that group's nested GridView by
+    ''' rptAutoTransferGroups_ItemDataBound as each group row is bound.
+    ''' </summary>
+    Protected Sub ddlAutoTransferPlan_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        LoadAutoTransferGroups()
+        UpdateAutoTransferVisibility()
+    End Sub
+
+    ''' <summary>
+    ''' Loads UNITSHUB_ATP_GROUPS for the currently selected AutoTransfer plan into
+    ''' rptAutoTransferGroups (one "card" per group, per the Reservation Fees mock-up).
+    ''' </summary>
+    ''' <remarks>
+    ''' UNITSHUB_ATP_GROUPS: PLAN_ID, GROUP_ID, GROUP_TITLE, SORT_ORDER.
+    ''' UNITSHUB_ATP_DETAILS: DETAIL_ID, GROUP_ID, ACCOUNT_DESCRIPTION, TYPE_OF_ESCROW,
+    ''' ACCOUNT_NUMBER, BRANCH, SYSTEM_NAME, SORT_ORDER, DEBIT, CREDIT.
+    ''' </remarks>
+    Private Sub LoadAutoTransferGroups()
+        Dim planId As String = ddlAutoTransferPlan.SelectedValue
+
+        If String.IsNullOrEmpty(planId) Then
+            rptAutoTransferGroups.DataSource = Nothing
+            rptAutoTransferGroups.DataBind()
+            lblNoAutoTransferGroups.Visible = False
+            Return
+        End If
+
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select GROUP_ID, GROUP_TITLE from UNITSHUB_ATP_GROUPS where PLAN_ID = '" & planId.Replace("'", "''") & "' Order By SORT_ORDER, GROUP_ID")
+
+        rptAutoTransferGroups.DataSource = DT
+        rptAutoTransferGroups.DataBind()
+
+        lblNoAutoTransferGroups.Visible = (DT.Rows.Count = 0)
+    End Sub
+
+    ''' <summary>
+    ''' For each group card bound into rptAutoTransferGroups, loads that group's own lines
+    ''' from UNITSHUB_ATP_DETAILS into its nested gvGroupDetails GridView.
+    ''' </summary>
+    Protected Sub rptAutoTransferGroups_ItemDataBound(ByVal sender As Object, ByVal e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then
+            Return
+        End If
+
+        Dim groupRow As Data.DataRowView = TryCast(e.Item.DataItem, Data.DataRowView)
+        If groupRow Is Nothing Then
+            Return
+        End If
+
+        Dim groupId As String = groupRow("GROUP_ID").ToString()
+
+        Dim gv As GridView = TryCast(e.Item.FindControl("gvGroupDetails"), GridView)
+        If gv Is Nothing Then
+            Return
+        End If
+
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select DETAIL_ID, ACCOUNT_DESCRIPTION, TYPE_OF_ESCROW, ACCOUNT_NUMBER, BRANCH, SYSTEM_NAME, DEBIT, CREDIT from UNITSHUB_ATP_DETAILS where GROUP_ID = '" & groupId.Replace("'", "''") & "' Order By SORT_ORDER, DETAIL_ID")
+
+        gv.DataSource = DT
+        gv.DataBind()
     End Sub
 
     ''' <summary>
@@ -446,6 +564,10 @@ Partial Class ActionAddEdit
         ' multiple payment plans — see the plan-reloading block below instead, which reads
         ' the actual set of plans from UNITSHUB_ACT_PAY_PLN_DETAILS.
 
+        chkNeedAutoTransfer.Checked = SafeBool(row("NEED_AUTOTRANSFER"))
+        ' AUTOTRANSFER_PLAN_ID is restored below, once chkNeedAutoTransfer is known, so the
+        ' groups/details grid can be reloaded for that plan in the same step.
+
         SafeSetSelectedValue(ddlToStatus, SafeString(row("TO_STATUS_ID")))
 
         txtScript.Text = SafeString(row("SCRIPT_TEXT"))
@@ -503,7 +625,21 @@ Partial Class ActionAddEdit
             gvPlanDetails.DataBind()
         End If
 
+        ' Re-select the previously chosen AutoTransfer plan and reload its groups/details
+        ' (from UNITSHUB_ATP_GROUPS / UNITSHUB_ATP_DETAILS) via the same code path the
+        ' dropdown's SelectedIndexChanged uses.
+        If chkNeedAutoTransfer.Checked Then
+            SafeSetSelectedValue(ddlAutoTransferPlan, SafeString(row("AUTOTRANSFER_PLAN_ID")))
+            LoadAutoTransferGroups()
+        Else
+            ddlAutoTransferPlan.ClearSelection()
+            rptAutoTransferGroups.DataSource = Nothing
+            rptAutoTransferGroups.DataBind()
+            lblNoAutoTransferGroups.Visible = False
+        End If
+
         UpdateNeedPaymentVisibility()
+        UpdateAutoTransferVisibility()
         UpdatePreExecutionVisibility()
 
         lblMessage.Text = "Action '" & txtActionTitle.Text & "' loaded."
@@ -560,6 +696,9 @@ Partial Class ActionAddEdit
         model.NeedPayment = chkNeedPayment.Checked
         model.PaymentPlanIds = If(model.NeedPayment, New List(Of String)(SelectedPlanIds), New List(Of String)())
 
+        model.NeedAutoTransfer = chkNeedAutoTransfer.Checked
+        model.AutoTransferPlanId = If(model.NeedAutoTransfer AndAlso Not String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue), ddlAutoTransferPlan.SelectedValue, Nothing)
+
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
         model.ConfirmationText = If(model.PreExecution = "Confirmation", txtConfirmationText.Text.Trim(), Nothing)
@@ -610,7 +749,7 @@ Partial Class ActionAddEdit
         Dim insertActionSql As String =
             "INSERT INTO UNITSHUB_ACTIONS (PROJECT_ID, STATUS_ID, ACTION_ID, IS_ACTIVE, ACTION_TITLE, ACTION_TYPE, " &
             "IMPLEMENTER_TITLE, SHOW_IN_DEFAULT, SHOW_IN_PREVIEW, RECEIVE_PARAMETERS_ENABLED, RECEIVE_PARAMETERS_MODE, " &
-            "NEED_PAYMENT, PAYMENT_PLAN_ID, TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
+            "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
             "PARAMETER_TYPE, FORM_TITLE, SELECT_SQL) VALUES (" &
             "'" & lblProjectID.Text.Replace("'", "''") & "', " &
             "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
@@ -625,6 +764,8 @@ Partial Class ActionAddEdit
             "'" & If(model.ReceiveParametersMode, "") & "', " &
             (If(model.NeedPayment, "1", "0")) & ", " &
             "NULL, " &
+            (If(model.NeedAutoTransfer, "1", "0")) & ", " &
+            (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
             (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
             "'" & If(model.Script, "").Replace("'", "''") & "', " &
             "'" & model.PreExecution & "', " &
@@ -664,6 +805,8 @@ Partial Class ActionAddEdit
             "RECEIVE_PARAMETERS_MODE = '" & If(model.ReceiveParametersMode, "") & "', " &
             "NEED_PAYMENT = " & (If(model.NeedPayment, "1", "0")) & ", " &
             "PAYMENT_PLAN_ID = NULL, " &
+            "NEED_AUTOTRANSFER = " & (If(model.NeedAutoTransfer, "1", "0")) & ", " &
+            "AUTOTRANSFER_PLAN_ID = " & (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
             "TO_STATUS_ID = " & (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
             "SCRIPT_TEXT = '" & If(model.Script, "").Replace("'", "''") & "', " &
             "PRE_EXECUTION = '" & model.PreExecution & "', " &

@@ -177,7 +177,7 @@ Public Class ProjectStatusAndAction
         If lnkAddNewAction IsNot Nothing Then
             Dim L As LinkButton = lnkAddNewAction
 
-            Dim popupUrl As String = "DesignAction.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+            Dim popupUrl As String = "ActionAddEdit.aspx?ProjectID=" & Server.UrlEncode(projectId) &
                                       "&StatusID=" & Server.UrlEncode(statusId) &
                                       "&Mode=New"
             VendorPopupHelper.RegisterVendorPopup(Me,
@@ -221,7 +221,7 @@ Public Class ProjectStatusAndAction
         Dim statusId As String = rowView("STATUS_ID").ToString()
         Dim actionId As String = rowView("ACTION_ID").ToString()
 
-        Dim popupUrl As String = "DesignAction.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+        Dim popupUrl As String = "ActionAddEdit.aspx?ProjectID=" & Server.UrlEncode(projectId) &
                                   "&StatusID=" & Server.UrlEncode(statusId) &
                                   "&ActionID=" & Server.UrlEncode(actionId) &
                                   "&Mode=Edit"
