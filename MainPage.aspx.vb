@@ -828,6 +828,7 @@ Partial Class MainPage
 
         sb.AppendLine("LEFT JOIN UNITSHUB_PROJECTSTATUS PS")
         sb.AppendLine("    ON PS.STATE_ID = Q.""Status""")
+        sb.AppendLine("    AND PS.PROJECT_ID = '" & projectId.Replace("'", "''") & "'")
 
         Return sb.ToString()
 
@@ -1339,32 +1340,32 @@ Partial Class MainPage
 
         'Return GetDataTable(EBDB, SQL)
         Dim SQL As String = ""
-        SQL = Sql + vbCrLf + "Select  "
-        Sql = Sql + vbCrLf + "         U.PROJECT_ID,  "
-        Sql = Sql + vbCrLf + "         U.STATUS_ID, "
-        Sql = Sql + vbCrLf + "         U.ACTION_ID, "
-        Sql = Sql + vbCrLf + "         A.ICON, "
-        Sql = Sql + vbCrLf + "         A.ACTION_TITLE, "
-        Sql = Sql + vbCrLf + "         PS.STATUS as STATUS_NAME, "
-        Sql = Sql + vbCrLf + "         PS.SUBTITLE as STATUS_SUBTITLE "
-        Sql = Sql + vbCrLf + "from "
-        Sql = Sql + vbCrLf + "         UNITSHUB_PRJ_STS_ACTN_USRS U "
-        Sql = Sql + vbCrLf + "inner join "
-        Sql = Sql + vbCrLf + "         UNITSHUB_ACTIONS A  "
-        Sql = Sql + vbCrLf + "on "
-        Sql = Sql + vbCrLf + "         U.PROJECT_ID = A.PROJECT_ID "
-        Sql = Sql + vbCrLf + "         and U.STATUS_ID = A.STATUS_ID "
-        Sql = Sql + vbCrLf + "         and A.ACTION_ID = U.ACTION_ID "
-        Sql = Sql + vbCrLf + "inner join "
-        Sql = Sql + vbCrLf + "         UNITSHUB_PROJECTSTATUS PS "
-        Sql = Sql + vbCrLf + "on "
-        Sql = Sql + vbCrLf + "         PS.STATE_ID = U.STATUS_ID "
-        Sql = Sql + vbCrLf + "         and PS.PROJECT_ID = U.PROJECT_ID "
-        Sql = Sql + vbCrLf + "where "
+        SQL = SQL + vbCrLf + "Select  "
+        SQL = SQL + vbCrLf + "         U.PROJECT_ID,  "
+        SQL = SQL + vbCrLf + "         U.STATUS_ID, "
+        SQL = SQL + vbCrLf + "         U.ACTION_ID, "
+        SQL = SQL + vbCrLf + "         A.ICON, "
+        SQL = SQL + vbCrLf + "         A.ACTION_TITLE, "
+        SQL = SQL + vbCrLf + "         PS.STATUS as STATUS_NAME, "
+        SQL = SQL + vbCrLf + "         PS.SUBTITLE as STATUS_SUBTITLE "
+        SQL = SQL + vbCrLf + "from "
+        SQL = SQL + vbCrLf + "         UNITSHUB_PRJ_STS_ACTN_USRS U "
+        SQL = SQL + vbCrLf + "inner join "
+        SQL = SQL + vbCrLf + "         UNITSHUB_ACTIONS A  "
+        SQL = SQL + vbCrLf + "on "
+        SQL = SQL + vbCrLf + "         U.PROJECT_ID = A.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         and U.STATUS_ID = A.STATUS_ID "
+        SQL = SQL + vbCrLf + "         and A.ACTION_ID = U.ACTION_ID "
+        SQL = SQL + vbCrLf + "inner join "
+        SQL = SQL + vbCrLf + "         UNITSHUB_PROJECTSTATUS PS "
+        SQL = SQL + vbCrLf + "on "
+        SQL = SQL + vbCrLf + "         PS.STATE_ID = U.STATUS_ID "
+        SQL = SQL + vbCrLf + "         and PS.PROJECT_ID = U.PROJECT_ID "
+        SQL = SQL + vbCrLf + "where "
         SQL = SQL + vbCrLf + "         U.PROJECT_ID = '" & ProjectID & "' "
-        SQL = Sql + vbCrLf + "         and "
+        SQL = SQL + vbCrLf + "         and "
         SQL = SQL + vbCrLf + "         U.USER_ID='" & UserID & "' "
-        Return GetDataTable(EBDB, Sql)
+        Return GetDataTable(EBDB, SQL)
     End Function
 
     ''' <summary>

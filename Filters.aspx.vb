@@ -34,6 +34,8 @@ Partial Class Filters
     End Sub
 
 
+
+
     Sub RefreshData()
         Dim CachedTable As DataTable = TryCast(Session("FilterMainTable"), DataTable)
         If CachedTable Is Nothing Then Exit Sub
@@ -47,14 +49,40 @@ Partial Class Filters
         ' and blow up with "does not contain a property with the name 'Reference'".
         Dim MainTable As DataTable = CachedTable.Copy()
 
-        Dim Filter As String = BuildFilterExpression(GetCheckedCategories())
+        Dim CheckedFilters As Dictionary(Of String, List(Of String)) = GetCheckedCategories()
+
+        ' Combine the checkbox-derived filters with the Unit Ref textbox on top, using a
+        ' fresh dictionary copy so this doesn't also write "Reference" into
+        ' Session("Result") (which GetCheckedCategories() owns and rebuilds from the
+        ' checkbox tree on every call).
+        Dim CombinedFilters As New Dictionary(Of String, List(Of String))(CheckedFilters)
+
+        Dim UnitRefText As String = txtUnitRef.Text.Trim()
+        If UnitRefText <> "" Then
+            ' e.g. ([Reference] = 'ABC123')
+            CombinedFilters("Reference") = New List(Of String) From {UnitRefText}
+        End If
+
+        Dim Filter As String = BuildFilterExpression(CombinedFilters)
 
 
         'Refine table to show only "Searchable Fields" — only needs to run once per session,
         'not on every postback, since MainTable/ProjectID don't change afterward.
         Dim DT As New DataTable
         DT = GetDataTable(EBDB, "Select NAME_IN_UI from UNITSHUB_ATTRIBUTES_PROPERTIES where PROJECT_ID='" & Label3.Text & "' and SEARCHABEL = 'Y'")
-        KeepOnlyColumns(MainTable, DT)
+
+        ' "Reference" must always survive here regardless of the SEARCHABEL config above -
+        ' the Unit Ref search box filters on it directly (see CombinedFilters("Reference")
+        ' above). If it got stripped, MainTable.Select(Filter) below would throw
+        ' "Cannot find column [Reference]" as soon as txtUnitRef has text.
+        Dim SearchableColumns As New List(Of String)
+        For Each DR As DataRow In DT.Rows
+            SearchableColumns.Add(DR(0).ToString())
+        Next
+        If Not SearchableColumns.Contains("Reference", StringComparer.OrdinalIgnoreCase) Then
+            SearchableColumns.Add("Reference")
+        End If
+        KeepOnlyColumns(MainTable, SearchableColumns)
 
         If Filter.Trim <> "" Then
             Dim DR() As DataRow
@@ -669,6 +697,9 @@ Partial Class Filters
         Else
             Me.ClientScript.RegisterStartupScript(Me.GetType(), "ClosePopupOnly", script, True)
         End If
+    End Sub
+    Protected Sub btnSearchCustomer_Click(sender As Object, e As EventArgs) Handles btnSearchCustomer.Click
+        RefreshData()
     End Sub
 End Class
 

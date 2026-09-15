@@ -40,6 +40,68 @@
             flex: 0 0 auto;
         }
 
+        .adj-search {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex: 0 0 auto;
+        }
+
+        .search-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .search-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-row label {
+            flex: 0 0 150px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .search-input {
+            flex: 1 1 auto;
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: Arial, Helvetica, sans-serif;
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+        }
+
+        .btn-search-small {
+            align-self: center;
+            margin-top: 6px;
+            height: 26px;
+            padding: 0 14px;
+            border: none;
+            border-radius: 6px;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-search-small:hover {
+            background: #1d4ed8;
+        }
+
         .filters-scroll {
             flex: 1 1 auto;
             overflow-y: auto;
@@ -95,7 +157,7 @@
 
         .adj-buttons {
             display: flex;
-            justify-content: flex-end;
+            justify-content: center;
             gap: 10px;
             margin-top: 18px;
             padding-top: 14px;
@@ -151,6 +213,24 @@
                 <%-- State holders: not user-facing, kept out of the visual flow --%>
                 <asp:Label ID="Label3" runat="server" Text="Label" style="display:none"></asp:Label>
                 <asp:HiddenField ID="hfFilter" runat="server" />
+            </div>
+
+            <div class="adj-search">
+                <div class="search-field">
+                    <div class="search-row">
+                        <label for="<%= txtUnitRef.ClientID %>">Unit Ref.</label>
+                        <asp:TextBox ID="txtUnitRef" runat="server" CssClass="search-input"></asp:TextBox>
+                    </div>
+
+                </div>
+                <div class="search-field">
+                    <div class="search-row">
+                        <label for="<%= txtCustomerNameOrCPR.ClientID %>">Customer Name or CPR:</label>
+                        <asp:TextBox ID="txtCustomerNameOrCPR" runat="server" CssClass="search-input"></asp:TextBox>
+                    </div>
+                   
+                    <asp:Button ID="btnSearchCustomer" runat="server" Text="Search" CssClass="btn-search-small" />
+                </div>
             </div>
 
             <div class="filters-scroll">
