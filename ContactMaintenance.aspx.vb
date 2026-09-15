@@ -17,7 +17,7 @@ Partial Class ContactMaintenance
 
     Protected Sub calDOB_SelectionChanged(sender As Object, e As EventArgs) Handles calDOB.SelectionChanged
         Try
-            txtDOB.Text = calDOB.SelectedDate.ToString("dd/MM/yyyy")
+            txtDOB.Text = calDOB.SelectedDate.ToString("yyyy-MM-dd")
             CalculateAge()
 
             ' Keep the calendar hidden again after a date has been picked
@@ -30,7 +30,7 @@ Partial Class ContactMaintenance
 
     Protected Sub calIssueDate_SelectionChanged(sender As Object, e As EventArgs) Handles calIssueDate.SelectionChanged
         Try
-            txtIssueDate.Text = calIssueDate.SelectedDate.ToString("dd/MM/yyyy")
+            txtIssueDate.Text = calIssueDate.SelectedDate.ToString("yyyy-MM-dd")
 
             ' Keep the calendar hidden again after a date has been picked
             pnlCalendarIssue.Style("display") = "none"
@@ -42,7 +42,7 @@ Partial Class ContactMaintenance
 
     Protected Sub calExpiryDate_SelectionChanged(sender As Object, e As EventArgs) Handles calExpiryDate.SelectionChanged
         Try
-            txtExpiryDate.Text = calExpiryDate.SelectedDate.ToString("dd/MM/yyyy")
+            txtExpiryDate.Text = calExpiryDate.SelectedDate.ToString("yyyy-MM-dd")
 
             ' Keep the calendar hidden again after a date has been picked
             pnlCalendarExpiry.Style("display") = "none"
@@ -96,7 +96,7 @@ Partial Class ContactMaintenance
     Private Sub CalculateAge()
         Dim dob As Date
 
-        If Date.TryParseExact(txtDOB.Text, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, dob) Then
+        If Date.TryParseExact(txtDOB.Text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, dob) Then
             Dim today As Date = Date.Today
             Dim age As Integer = today.Year - dob.Year
 

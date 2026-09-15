@@ -416,8 +416,28 @@
 
         }
 
-        function toggleCalendar(panelId) {
-            var pnl = document.getElementById(panelId);
+        function hasClass(el, className) {
+            return el && el.className && (' ' + el.className + ' ').indexOf(' ' + className + ' ') > -1;
+        }
+
+        function toggleCalendar(btn) {
+            // Walk up to the containing .date-input-group, then find its .calendar-popup
+            var group = btn;
+            while (group && group.nodeType === 1 && !hasClass(group, 'date-input-group')) {
+                group = group.parentNode;
+            }
+            if (!group) { return; }
+
+            var candidates = group.getElementsByTagName('*');
+            var pnl = null;
+            for (var i = 0; i < candidates.length; i++) {
+                if (hasClass(candidates[i], 'calendar-popup')) {
+                    pnl = candidates[i];
+                    break;
+                }
+            }
+            if (!pnl) { return; }
+
             if (pnl.style.display === 'none' || pnl.style.display === '') {
                 pnl.style.display = 'block';
             } else {
@@ -526,7 +546,7 @@
                                                                             <div class="form-control-cell">
                                                                                 <div class="date-input-group">
                                                                                     <asp:TextBox ID="txtDOB" runat="server" CssClass="txt-input" ReadOnly="true" />
-                                                                                    <asp:Button ID="btnToggleCalendar" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar('<%= pnlCalendar.ClientID %>'); return false;" />
+                                                                                    <asp:Button ID="btnToggleCalendar" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar(this); return false;" />
                                                                                     <asp:Panel ID="pnlCalendar" runat="server" CssClass="calendar-popup" Style="display:none;">
                                                                                         <asp:Calendar ID="calDOB" runat="server" OnSelectionChanged="calDOB_SelectionChanged" SelectionMode="Day"></asp:Calendar>
                                                                                     </asp:Panel>
@@ -639,7 +659,7 @@
                                                                                 <div class="form-control-cell-sm">
                                                                                     <div class="date-input-group">
                                                                                         <asp:TextBox ID="txtIssueDate" runat="server" CssClass="txt-input" ReadOnly="true" />
-                                                                                        <asp:Button ID="btnToggleCalendarIssue" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar('<%= pnlCalendarIssue.ClientID %>'); return false;" />
+                                                                                        <asp:Button ID="btnToggleCalendarIssue" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar(this); return false;" />
                                                                                         <asp:Panel ID="pnlCalendarIssue" runat="server" CssClass="calendar-popup" Style="display:none;">
                                                                                             <asp:Calendar ID="calIssueDate" runat="server" OnSelectionChanged="calIssueDate_SelectionChanged" SelectionMode="Day"></asp:Calendar>
                                                                                         </asp:Panel>
@@ -651,7 +671,7 @@
                                                                                 <div class="form-control-cell-sm">
                                                                                     <div class="date-input-group">
                                                                                         <asp:TextBox ID="txtExpiryDate" runat="server" CssClass="txt-input" ReadOnly="true" />
-                                                                                        <asp:Button ID="btnToggleCalendarExpiry" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar('<%= pnlCalendarExpiry.ClientID %>'); return false;" />
+                                                                                        <asp:Button ID="btnToggleCalendarExpiry" runat="server" Text="Cal" CssClass="cal-btn" CausesValidation="false" OnClientClick="toggleCalendar(this); return false;" />
                                                                                         <asp:Panel ID="pnlCalendarExpiry" runat="server" CssClass="calendar-popup" Style="display:none;">
                                                                                             <asp:Calendar ID="calExpiryDate" runat="server" OnSelectionChanged="calExpiryDate_SelectionChanged" SelectionMode="Day"></asp:Calendar>
                                                                                         </asp:Panel>
