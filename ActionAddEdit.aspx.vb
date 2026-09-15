@@ -30,6 +30,8 @@ Partial Class ActionAddEdit
         Public Property SelectSQL As String
         Public Property NeedAutoTransfer As Boolean
         Public Property AutoTransferPlanId As String
+        Public Property NeedDialogue As Boolean
+        Public Property DialogueText As String
     End Class
 
     ''' <summary>
@@ -189,6 +191,7 @@ Partial Class ActionAddEdit
 
         UpdateNeedPaymentVisibility()
         UpdateAutoTransferVisibility()
+        UpdateOpenADialogueVisibility()
         UpdatePreExecutionVisibility()
     End Sub
 
@@ -237,6 +240,16 @@ Partial Class ActionAddEdit
 
         Dim planDetailsRowVisible As Boolean = (paymentPlanRowVisible AndAlso Not String.IsNullOrEmpty(CurrentPlanId))
         rowPlanDetails.Style("display") = If(planDetailsRowVisible, "", "none")
+    End Sub
+
+    ''' <summary>
+    ''' Enables/disables txtOpenADialogueText based on the Open A Dialogue checkbox.
+    ''' Mirrors the client-side toggleOpenADialogueVisibility() script; called on every
+    ''' Page_Load (initial and postback) so the server-side Enabled state always matches
+    ''' the checkbox's current (possibly just-restored-from-ViewState) value.
+    ''' </summary>
+    Private Sub UpdateOpenADialogueVisibility()
+        txtOpenADialogueText.Enabled = chkOpenADialogue.Checked
     End Sub
 
     ''' <summary>
@@ -553,6 +566,10 @@ Partial Class ActionAddEdit
         SafeSetSelectedValue(ddlActionType, SafeString(row("ACTION_TYPE")))
         txtImplementerTitle.Text = SafeString(row("IMPLEMENTER_TITLE"))
 
+        chkOpenADialogue.Checked = SafeBool(row("NEED_DIALOGUE"))
+        txtOpenADialogueText.Text = SafeString(row("DIALOGUE_TEXT"))
+
+
         cblShowIn.Items.FindByValue("Default").Selected = SafeBool(row("SHOW_IN_DEFAULT"))
         cblShowIn.Items.FindByValue("Preview").Selected = SafeBool(row("SHOW_IN_PREVIEW"))
 
@@ -640,6 +657,7 @@ Partial Class ActionAddEdit
 
         UpdateNeedPaymentVisibility()
         UpdateAutoTransferVisibility()
+        UpdateOpenADialogueVisibility()
         UpdatePreExecutionVisibility()
 
         lblMessage.Text = "Action '" & txtActionTitle.Text & "' loaded."
@@ -682,6 +700,9 @@ Partial Class ActionAddEdit
         model.ActionTitle = txtActionTitle.Text.Trim()
         model.ActionType = ddlActionType.SelectedValue
         model.ImplementerTitle = txtImplementerTitle.Text.Trim()
+
+        model.NeedDialogue = chkOpenADialogue.Checked
+        model.DialogueText = If(model.NeedDialogue, txtOpenADialogueText.Text.Trim(), Nothing)
 
         ' NOTE: preserved as-is from DesignAction - To Status is only saved when Action
         ' Type = "Change Status", even though the To Status field itself is now always
@@ -749,7 +770,8 @@ Partial Class ActionAddEdit
         Dim insertActionSql As String =
             "INSERT INTO UNITSHUB_ACTIONS (PROJECT_ID, STATUS_ID, ACTION_ID, IS_ACTIVE, ACTION_TITLE, ACTION_TYPE, " &
             "IMPLEMENTER_TITLE, SHOW_IN_DEFAULT, SHOW_IN_PREVIEW, RECEIVE_PARAMETERS_ENABLED, RECEIVE_PARAMETERS_MODE, " &
-            "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
+            "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, NEED_DIALOGUE, DIALOGUE_TEXT, " &
+            "TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
             "PARAMETER_TYPE, FORM_TITLE, SELECT_SQL) VALUES (" &
             "'" & lblProjectID.Text.Replace("'", "''") & "', " &
             "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
@@ -766,6 +788,8 @@ Partial Class ActionAddEdit
             "NULL, " &
             (If(model.NeedAutoTransfer, "1", "0")) & ", " &
             (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
+            (If(model.NeedDialogue, "1", "0")) & ", " &
+            (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
             "'" & If(model.Script, "").Replace("'", "''") & "', " &
             "'" & model.PreExecution & "', " &
@@ -807,6 +831,8 @@ Partial Class ActionAddEdit
             "PAYMENT_PLAN_ID = NULL, " &
             "NEED_AUTOTRANSFER = " & (If(model.NeedAutoTransfer, "1", "0")) & ", " &
             "AUTOTRANSFER_PLAN_ID = " & (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
+            "NEED_DIALOGUE = " & (If(model.NeedDialogue, "1", "0")) & ", " &
+            "DIALOGUE_TEXT = " & (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             "TO_STATUS_ID = " & (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
             "SCRIPT_TEXT = '" & If(model.Script, "").Replace("'", "''") & "', " &
             "PRE_EXECUTION = '" & model.PreExecution & "', " &

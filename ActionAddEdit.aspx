@@ -640,6 +640,16 @@
             }
         }
 
+        // ---------- General tab: Open A Dialogue checkbox -> adjacent textbox ----------
+        function toggleOpenADialogueVisibility() {
+            var chk = document.getElementById('<%= chkOpenADialogue.ClientID %>');
+            var txt = document.getElementById('<%= txtOpenADialogueText.ClientID %>');
+
+            if (!chk || !txt) { return; }
+
+            txt.disabled = !chk.checked;
+        }
+
         // ---------- Pre-Execution tab: fully self-contained cascade ----------
         function togglePreExecutionVisibility() {
             var radios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
@@ -692,6 +702,7 @@
             document.addEventListener('DOMContentLoaded', function () {
                 togglePaymentPlanVisibility();
                 toggleAutoTransferVisibility();
+                toggleOpenADialogueVisibility();
                 togglePreExecutionVisibility();
 
                 var preExecutionRadios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
@@ -825,6 +836,18 @@
                                                                     <div class="form-label">To Status</div>
                                                                     <div class="form-control-cell">
                                                                         <asp:DropDownList ID="ddlToStatus" runat="server" CssClass="ddl-input" />
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="form-row">
+                                                                    <div class="form-label">
+                                                                        <label class="toggle-inline">
+                                                                            <asp:CheckBox ID="chkOpenADialogue" runat="server" onchange="toggleOpenADialogueVisibility();" />
+                                                                            Open A Dialogue
+                                                                        </label>
+                                                                    </div>
+                                                                    <div class="form-control-cell">
+                                                                        <asp:TextBox ID="txtOpenADialogueText" runat="server" CssClass="txt-input" Enabled="false" />
                                                                     </div>
                                                                 </div>
 
