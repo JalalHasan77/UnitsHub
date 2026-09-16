@@ -67,7 +67,108 @@ Partial Class ContactMaintenance
     End Sub
 
     Protected Sub btnLoad_Click(sender As Object, e As EventArgs) Handles btnLoad.Click
-        ' TODO: load an existing contact's saved details back into the form fields
+        Try
+            LoadContact("000527")
+
+        Catch ex As Exception
+            lblMessage.Text = "An error occurred while loading: " & ex.Message
+            lblMessage.Visible = True
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' Loads the UNITSHUB_CONTACTS row with the given ID back into the form fields
+    ''' across View1 (General), View2 (Contact Details / Email) and View3 (Address Details).
+    ''' </summary>
+    ''' <remarks>
+    ''' TODO: "GetDataTable" below is the same placeholder used in SaveContact / ActionAddEdit
+    ''' for whatever read helper your project actually exposes — swap it for your real one.
+    ''' TODO: contactId is hard-coded to "000527" for now per the current requirement; wire this
+    ''' up to however contacts are actually selected/navigated to once that's available.
+    ''' </remarks>
+    Private Sub LoadContact(ByVal contactId As String)
+        Dim dt As New DataTable
+        dt = GetDataTable(EBDB, "SELECT * FROM UNITSHUB_CONTACTS WHERE ID = '" & contactId.Replace("'", "''") & "'")
+
+        If dt.Rows.Count = 0 Then
+            lblMessage.Text = "No contact found with ID " & contactId & "."
+            lblMessage.Visible = True
+            Return
+        End If
+
+        Dim row As DataRow = dt.Rows(0)
+
+        txtFullName.Text = DbString(row, "NAME")
+        txtArabicName.Text = DbString(row, "ARABICNAME")
+        SetDropDownValue(ddlGender, DbString(row, "GENDER"))
+        txtDOB.Text = DbDateString(row, "DOB")
+        txtAge.Text = DbString(row, "AGE")
+        txtNationalID.Text = DbString(row, "NATIONALID")
+        SetDropDownValue(ddlNationality, DbString(row, "NATIONALITY"))
+        txtMobile1.Text = DbString(row, "MOBILE")
+        txtMobile2.Text = DbString(row, "BUSINESSPHONE")
+        txtHomePhone.Text = DbString(row, "HOMEPHONE")
+        txtFax.Text = DbString(row, "FAX")
+        txtPOBox.Text = DbString(row, "POBOX")
+        txtEmail.Text = DbString(row, "EMAIL")
+        txtPassportNo.Text = DbString(row, "PASSPORTNO")
+        txtIssueDate.Text = DbDateString(row, "PASSPORTISSUE")
+        txtExpiryDate.Text = DbDateString(row, "PASSPORTEXPIRY")
+        SetDropDownValue(ddlCountry, DbString(row, "COUNTRY"))
+        txtCity.Text = DbString(row, "CITY")
+        txtBlock.Text = DbString(row, "BLOCK")
+        txtRoad.Text = DbString(row, "ROAD")
+        txtBuilding.Text = DbString(row, "BUILDING")
+        txtFlat.Text = DbString(row, "FLAT")
+
+        lblMessage.Text = "Loaded contact " & contactId & "."
+        lblMessage.Visible = True
+    End Sub
+
+    ''' <summary>Reads a column as a plain string, treating DBNull as empty.</summary>
+    Private Function DbString(ByVal row As DataRow, ByVal columnName As String) As String
+        If row.IsNull(columnName) Then
+            Return ""
+        End If
+
+        Return row(columnName).ToString()
+    End Function
+
+    ''' <summary>Reads a date-ish column and formats it as yyyy-MM-dd, treating DBNull as empty.</summary>
+    Private Function DbDateString(ByVal row As DataRow, ByVal columnName As String) As String
+        If row.IsNull(columnName) Then
+            Return ""
+        End If
+
+        Dim value As Object = row(columnName)
+
+        If TypeOf value Is Date Then
+            Return CType(value, Date).ToString("yyyy-MM-dd")
+        End If
+
+        Dim parsed As Date
+        If Date.TryParse(value.ToString(), parsed) Then
+            Return parsed.ToString("yyyy-MM-dd")
+        End If
+
+        Return value.ToString()
+    End Function
+
+    ''' <summary>
+    ''' Selects the dropdown item matching the given value, if one exists; leaves the
+    ''' current selection unchanged otherwise (e.g. if the DB value isn't one of the
+    ''' fixed list options, such as Gender/Nationality/Country only offering one choice today).
+    ''' </summary>
+    Private Sub SetDropDownValue(ByVal ddl As DropDownList, ByVal value As String)
+        If String.IsNullOrEmpty(value) Then
+            Return
+        End If
+
+        Dim item As ListItem = ddl.Items.FindByValue(value)
+        If item IsNot Nothing Then
+            ddl.ClearSelection()
+            item.Selected = True
+        End If
     End Sub
 
     Protected Sub btnCancel_Click(sender As Object, e As EventArgs) Handles btnCancel.Click
@@ -81,8 +182,7 @@ Partial Class ContactMaintenance
                 Return
             End If
 
-            ' TODO: persist the General / Contact Details / Address values captured
-            ' across View1, View2 and View3 to the database
+            SaveContact()
 
             lblMessage.Text = "Contact details saved successfully."
             lblMessage.Visible = True
@@ -92,6 +192,92 @@ Partial Class ContactMaintenance
             lblMessage.Visible = True
         End Try
     End Sub
+
+    ''' <summary>
+    ''' Inserts one row into UNITSHUB_CONTACTS from the values captured across
+    ''' View1 (General), View2 (Contact Details / Email) and View3 (Address Details).
+    ''' </summary>
+    ''' <remarks>
+    ''' TODO: "ExecuteNonQuery"/"GetDataTable" below are placeholders for whatever
+    ''' read/write helpers your project actually exposes (same placeholders used in
+    ''' ActionAddEdit's SaveActionControl) — swap them for your real ones. "EBDB" is
+    ''' assumed to be the same shared connection object/string used elsewhere in the app.
+    ''' TODO: ID is assumed to be a VARCHAR2 column (not a DB-generated identity), so it's
+    ''' generated here as a zero-padded 6-digit numeric string (e.g. "000001") via
+    ''' MAX(TO_NUMBER(ID))+1 — the same approach ActionAddEdit uses for ACTION_ID. If
+    ''' UNITSHUB_CONTACTS.ID is instead an identity/sequence column, remove this step and
+    ''' let the DB assign it.
+    ''' TODO: DOB / PassportIssue / PassportExpiry are inserted via TO_DATE(..., 'YYYY-MM-DD')
+    ''' on the assumption they are Oracle DATE columns; if they're actually VARCHAR2, use
+    ''' SqlText(...) for them instead of SqlDate(...).
+    ''' </remarks>
+    Private Sub SaveContact()
+        ' 1. Generate the new zero-padded contact ID.
+        Dim nextIdDT As New DataTable
+        nextIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ID)), 0) + 1, 6, '0') AS NEXT_ID FROM UNITSHUB_CONTACTS")
+        Dim contactId As String = nextIdDT.Rows(0)("NEXT_ID").ToString()
+
+        ' 2. Insert the contact row.
+        Dim insertSql As String =
+            "INSERT INTO UNITSHUB_CONTACTS (ID, NAME, ARABICNAME, GENDER, DOB, AGE, NATIONALID, NATIONALITY, " &
+            "MOBILE, BUSINESSPHONE, HOMEPHONE, FAX, POBOX, EMAIL, PASSPORTNO, PASSPORTISSUE, PASSPORTEXPIRY, " &
+            "COUNTRY, CITY, BLOCK, ROAD, BUILDING, FLAT) VALUES (" &
+            "'" & contactId & "', " &
+            SqlText(txtFullName.Text) & ", " &
+            SqlText(txtArabicName.Text) & ", " &
+            SqlText(ddlGender.SelectedValue) & ", " &
+            SqlDate(txtDOB.Text) & ", " &
+            SqlNumber(txtAge.Text) & ", " &
+            SqlText(txtNationalID.Text) & ", " &
+            SqlText(ddlNationality.SelectedValue) & ", " &
+            SqlText(txtMobile1.Text) & ", " &
+            SqlText(txtMobile2.Text) & ", " &
+            SqlText(txtHomePhone.Text) & ", " &
+            SqlText(txtFax.Text) & ", " &
+            SqlText(txtPOBox.Text) & ", " &
+            SqlText(txtEmail.Text) & ", " &
+            SqlText(txtPassportNo.Text) & ", " &
+            SqlDate(txtIssueDate.Text) & ", " &
+            SqlDate(txtExpiryDate.Text) & ", " &
+            SqlText(ddlCountry.SelectedValue) & ", " &
+            SqlText(txtCity.Text) & ", " &
+            SqlText(txtBlock.Text) & ", " &
+            SqlText(txtRoad.Text) & ", " &
+            SqlText(txtBuilding.Text) & ", " &
+            SqlText(txtFlat.Text) &
+            ")"
+
+        ExecuteNonQuery(EBDB, insertSql)
+    End Sub
+
+    ''' <summary>Wraps a string value as a quoted, apostrophe-escaped SQL literal, or NULL when empty.</summary>
+    Private Function SqlText(ByVal value As String) As String
+        If String.IsNullOrEmpty(value) Then
+            Return "NULL"
+        End If
+
+        Return "'" & value.Replace("'", "''") & "'"
+    End Function
+
+    ''' <summary>Wraps a yyyy-MM-dd date string as an Oracle TO_DATE(...) literal, or NULL when empty.</summary>
+    Private Function SqlDate(ByVal value As String) As String
+        If String.IsNullOrEmpty(value) Then
+            Return "NULL"
+        End If
+
+        Return "TO_DATE('" & value.Replace("'", "''") & "', 'YYYY-MM-DD')"
+    End Function
+
+    ''' <summary>Passes a numeric value through unquoted, or NULL when empty/non-numeric.</summary>
+    Private Function SqlNumber(ByVal value As String) As String
+        Dim result As Integer
+
+        If Integer.TryParse(value, result) Then
+            Return result.ToString()
+        End If
+
+        Return "NULL"
+    End Function
 
     Private Sub CalculateAge()
         Dim dob As Date
@@ -114,4 +300,3 @@ Partial Class ContactMaintenance
         End If
     End Sub
 End Class
-
