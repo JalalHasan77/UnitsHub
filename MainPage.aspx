@@ -790,6 +790,7 @@
         </div>
     </ItemTemplate>
 </asp:DataList>
+                                        
                                         <br />
 
                                         <div style="gap: 8px;width:100%;align-content:flex-end">
@@ -807,55 +808,65 @@
                                         </div>
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
                                         <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS,NodeId">
-                                            <AlternatingRowStyle BackColor="White" ForeColor="#284775" HorizontalAlign="Center" />
+    <AlternatingRowStyle BackColor="White" ForeColor="#284775" HorizontalAlign="Center" />
+    <Columns>
+        <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">
+            <ItemTemplate>
+
+                <div class="actionMenu">
+
+                    <button type="button" class="actionButton" onclick="toggleMenu(this, event)">
+                        &#8942;
+                    </button>
+
+<div class="actionPopup" onclick="if (event.target.tagName !== 'A') { event.stopPropagation(); }">
+    <asp:GridView ID="GridView4" runat="server" AutoGenerateColumns="False" ShowHeader="False" OnRowDataBound="GridView4_RowDataBound">
                                             <Columns>
-                                                <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">
+                                                <asp:TemplateField HeaderText="lnkAction">
                                                     <ItemTemplate>
-
-                                                        <div class="actionMenu">
-
-    <button type="button" class="actionButton" onclick="toggleMenu(this, event)">
-        &#8942;
-    </button>
-
-    <div class="actionPopup" onclick="event.stopPropagation();">
-        <asp:PlaceHolder ID="phActions" runat="server" />
-    </div>
-
-</div>
-
+                                                        <asp:LinkButton ID="LinkButton3" runat="server" Font-Names="Arial" Font-Size="13px" OnClick="LinkButton3_Command">LinkButton</asp:LinkButton>
                                                     </ItemTemplate>
-
-<HeaderStyle CssClass="actionsHeaderHidden"></HeaderStyle>
-                                                    <ItemStyle HorizontalAlign="Center" />
-                                                </asp:TemplateField>
-                                                <asp:TemplateField HeaderText="Status">
-                                                    <ItemTemplate>
-                                                        <div id="statusCard" runat="server" class="statusCard">
-                                                            <div id="statusTitle" runat="server" class="statusTitle">
-                                                                <%# Eval("STATUS") %>
-                                                            </div>
-
-                                                            <div id="statusSubtitle" runat="server" class="statusSubtitle">
-                                                                <%# Eval("Status_Subtitle") %>
-                                                            </div>
-                                                        </div>
-                                                    </ItemTemplate>
-                                                    <ItemStyle Width="106px" HorizontalAlign="Center" />
-                                                    <HeaderStyle Width="106px" HorizontalAlign="Center" />
                                                 </asp:TemplateField>
                                             </Columns>
-                                            <EditRowStyle BackColor="#999999" HorizontalAlign="Center" />
-                                            <FooterStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center" />
-                                            <HeaderStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center"/>
-                                            <PagerStyle BackColor="#284775" ForeColor="White" HorizontalAlign="Center" />
-                                            <RowStyle BackColor="#F7F6F3" ForeColor="#333333" HorizontalAlign="Center" />
-                                            <SelectedRowStyle BackColor="#E2DED6" Font-Bold="True" ForeColor="#333333" />
-                                            <SortedAscendingCellStyle BackColor="#E9E7E2" />
-                                            <SortedAscendingHeaderStyle BackColor="#506C8C" />
-                                            <SortedDescendingCellStyle BackColor="#FFFDF8" />
-                                            <SortedDescendingHeaderStyle BackColor="#6F8DAE" />
                                         </asp:GridView>
+    <asp:PlaceHolder ID="phActions" runat="server" />
+    
+</div>
+
+                </div>
+
+            </ItemTemplate>
+
+            <HeaderStyle CssClass="actionsHeaderHidden"></HeaderStyle>
+            <ItemStyle HorizontalAlign="Center" />
+        </asp:TemplateField>
+        <asp:TemplateField HeaderText="Status">
+            <ItemTemplate>
+                <div id="statusCard" runat="server" class="statusCard">
+                    <div id="statusTitle" runat="server" class="statusTitle">
+                        <%# Eval("STATUS") %>
+                    </div>
+
+                    <div id="statusSubtitle" runat="server" class="statusSubtitle">
+                        <%# Eval("Status_Subtitle") %>
+                    </div>
+                </div>
+            </ItemTemplate>
+            <ItemStyle Width="106px" HorizontalAlign="Center" />
+            <HeaderStyle Width="106px" HorizontalAlign="Center" />
+        </asp:TemplateField>
+    </Columns>
+    <EditRowStyle BackColor="#999999" HorizontalAlign="Center" />
+    <FooterStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center" />
+    <HeaderStyle BackColor="#5D7B9D" Font-Bold="True" ForeColor="White" HorizontalAlign="Center"/>
+    <PagerStyle BackColor="#284775" ForeColor="White" HorizontalAlign="Center" />
+    <RowStyle BackColor="#F7F6F3" ForeColor="#333333" HorizontalAlign="Center" />
+    <SelectedRowStyle BackColor="#E2DED6" Font-Bold="True" ForeColor="#333333" />
+    <SortedAscendingCellStyle BackColor="#E9E7E2" />
+    <SortedAscendingHeaderStyle BackColor="#506C8C" />
+    <SortedDescendingCellStyle BackColor="#FFFDF8" />
+    <SortedDescendingHeaderStyle BackColor="#6F8DAE" />
+</asp:GridView>
                                         </div>
                                     </td>
                                     <td style="width: 10%; vertical-align: top;">

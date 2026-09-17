@@ -13,6 +13,7 @@ Partial Class MainPage
 
     Private Shared ReadOnly BadgeColors As String() = {"badge-blue", "badge-green", "badge-orange", "badge-purple", "badge-teal", "badge-pink"}
     Private Const ConfirmationPopupReturnKey As String = "AddAdjustmentAndClose"
+    Private Const OpenActionPopupReturnKey As String = "OpenActionAndClose"
     Private encryNdecry As New EncryDecry
 
     ''' <summary>
@@ -101,7 +102,8 @@ Partial Class MainPage
                                       1000, 0,
                                       PopupPlacement.Center,
                                       "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      returnKey:=OpenActionPopupReturnKey)
 
         'lnkConfirmation
 
@@ -279,6 +281,26 @@ Partial Class MainPage
             Dim NodeId As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("NodeId"))
 
             Dim Actions As List(Of WorkflowAction) = GetAvailableActions(RequestID, State)
+            Dim returnValue As New DataTable("returnValue")
+
+            ' Define columns
+            returnValue.Columns.Add("ID", GetType(Integer))
+            returnValue.Columns.Add("Name", GetType(String))
+            returnValue.Columns.Add("Value", GetType(String))
+
+            ' Add sample rows
+            returnValue.Rows.Add(1, "S. Jalal Hasan", "Husband")
+            returnValue.Rows.Add(2, "Elmeera Yousif", "Wife")
+
+            Dim GV As GridView
+            GV = row.FindControl("GridView4")
+
+            GV.DataSource = Actions
+            GV.DataBind()
+
+
+
+
             PopulateActions(ph, Actions, NodeId)
         Next
     End Sub
@@ -1061,8 +1083,38 @@ Partial Class MainPage
         Dim SubtitleText As String =
             Convert.ToString(DataBinder.Eval(e.Row.DataItem, "Status_Subtitle"))
 
+        '===============================================
+        '===============================================
+
+        'Dim returnValue As New DataTable("returnValue")
+
+        '' Define columns
+        'returnValue.Columns.Add("ID", GetType(Integer))
+        'returnValue.Columns.Add("Name", GetType(String))
+        'returnValue.Columns.Add("Value", GetType(String))
+
+        '' Add sample rows
+        'returnValue.Rows.Add(1, "S. Jalal Hasan", "Husband")
+        'returnValue.Rows.Add(2, "Elmeera Yousif", "Wife")
+
+        Dim GV As GridView
+        GV = e.Row.FindControl("GridView4")
+
+
+
+        '===============================================
+        '===============================================
+
+
+
+
         Dim Actions As List(Of WorkflowAction) =
             GetAvailableActions(RequestID, State)
+
+        GV.DataSource = Actions
+        GV.DataBind()
+
+
 
         PopulateActions(ph, Actions, NodeId)
 
@@ -1168,19 +1220,19 @@ Partial Class MainPage
     ''' </summary>
     Protected Sub GridView1_RowCommand(sender As Object, e As GridViewCommandEventArgs) Handles GridView1.RowCommand
 
-        If e.CommandName <> "ExecuteAction" Then Exit Sub
+        'If e.CommandName <> "ExecuteAction" Then Exit Sub
 
-        Dim parts As String() = Convert.ToString(e.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 4, StringSplitOptions.None)
-        If parts.Length <> 4 Then Exit Sub
+        'Dim parts As String() = Convert.ToString(e.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 4, StringSplitOptions.None)
+        'If parts.Length <> 4 Then Exit Sub
 
-        Dim RequestID As String = parts(0)
-        Dim ActionID As String = parts(1)
-        Dim NodeId As String = parts(2)
-        Dim StateID As String = parts(3)
+        'Dim RequestID As String = parts(0)
+        'Dim ActionID As String = parts(1)
+        'Dim NodeId As String = parts(2)
+        'Dim StateID As String = parts(3)
 
-        'MsgBox(RequestID & vbCrLf & ActionID & vbCrLf & NodeId & vbCrLf & StateID)
+        ''MsgBox(RequestID & vbCrLf & ActionID & vbCrLf & NodeId & vbCrLf & StateID)
 
-        ExecuteWorkflowAction(RequestID, ActionID, NodeId, StateID)
+        'ExecuteWorkflowAction(RequestID, ActionID, NodeId, StateID)
 
     End Sub
 
@@ -1195,18 +1247,6 @@ Partial Class MainPage
     ''' it just pops up the row's Node_ID and returns without hitting the DB or
     ''' rebinding - adjust HistoryPermissionName below if your configured
     ''' PERMISSION_NAME text for it isn't exactly "History".
-    '''
-    ''' TODO: replace the placeholder below with your real transition logic for every
-    ''' other action, e.g.:
-    '''   DB.ExecuteNonQuery(EBDB,
-    '''       "EXEC sp_ExecuteUnitAction @RequestID = '" & RequestID.Replace("'", "''") & "', " &
-    '''       "@ActionID = '" & ActionID.Replace("'", "''") & "', " &
-    '''       "@UserID = '" & GetCurrentUserID().Replace("'", "''") & "'")
-    ''' (or however this system records that ACTION_ID was performed on RequestID and
-    ''' advances its STATE_ID - adjust to whatever stored proc/table your workflow
-    ''' engine actually uses; DB.ExecuteNonQuery is a guess at the write-side
-    ''' counterpart to the DB.GetDataTable/DB.RetreiveScalarSTRING helpers already
-    ''' used elsewhere in this file - swap in whatever your DB helper class calls it).
     ''' </summary>
     Private Const HistoryPermissionName As String = "History"
 
@@ -1223,6 +1263,41 @@ Partial Class MainPage
 
         If String.Equals(Action_Title, HistoryPermissionName, StringComparison.OrdinalIgnoreCase) Then
             ShowNodeIdMessageBox(NodeId)
+            Exit Sub
+        End If
+
+        ' The Project 001 / Action 00001 / State 0000 entry opens the ConfirmBox
+        ' popup on click (see PopulateActions/IsConfirmationPopupAction) instead
+        ' of running straight through. By the time THIS postback runs - the one
+        ' __doPostBack fires from inside ConfirmBox's btnOK_Click - the popup's
+        ' selection is already sitting in Session under ConfirmationPopupReturnKey,
+        ' exactly the way lnkConfirmation_Click reads its own. Read it once here
+        ' (GetPopupReturnValue clears it after reading, same as everywhere else)
+        ' and branch out before falling into the generic ACTION_TYPE logic below,
+        ' since that logic doesn't know anything about the popup's data.
+        If String.Equals(If(ActionID, "").Trim(), ConfirmationPopupActionId, StringComparison.OrdinalIgnoreCase) AndAlso
+           String.Equals(If(StateID, "").Trim(), ConfirmationPopupStateId, StringComparison.OrdinalIgnoreCase) AndAlso
+           String.Equals(DropDownList1.SelectedItem.Value, ConfirmationPopupProjectId, StringComparison.OrdinalIgnoreCase) Then
+
+            Dim confirmationData As DataTable =
+                TryCast(VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey), DataTable)
+
+            If confirmationData Is Nothing Then
+                ' Cancel was clicked in the popup (or it never ran) - nothing was
+                ' saved to Session, so there's nothing to act on.
+                Exit Sub
+            End If
+
+            ' TODO: replace with whatever this action actually needs to do with
+            ' the rows ConfirmBox_aspx.vb's btnOK_Click built, e.g.:
+            For Each row As DataRow In confirmationData.Rows
+                Dim id As Integer = Convert.ToInt32(row("ID"))
+                Dim name As String = Convert.ToString(row("Name"))
+                Dim value As String = Convert.ToString(row("Value"))
+                ' ... persist / apply these against RequestID/NodeId as needed ...
+            Next
+
+            loadData()
             Exit Sub
         End If
 
@@ -1327,10 +1402,6 @@ Partial Class MainPage
     ''' (set once per loadData() call by GetStatusAttributeDisplayOrder), not tied to
     ''' any specific grid row, so it's safe to read here regardless of which row's
     ''' action triggered this.
-    '''
-    ''' TODO: DB.ExecuteNonQuery is a guess at this project's write-side DB helper -
-    ''' swap in whatever this codebase actually calls (see the TODO comment above
-    ''' ExecuteWorkflowAction for the same caveat).
     ''' </summary>
     Private Sub ApplyNodeStatusChange(NodeId As String, ToStatusId As String)
         Dim safeNodeId As String = If(NodeId, "").Replace("'", "''")
@@ -1388,27 +1459,6 @@ Partial Class MainPage
         ClientScript.RegisterStartupScript(Me.GetType(), "ShowNodeId_" & Guid.NewGuid().ToString("N"), script, True)
     End Sub
 
-    'Private Sub AddAction(ph As PlaceHolder,
-    '                  Text As String,
-    '                  Command As String)
-
-    '    Dim li As New LiteralControl("<li>")
-
-    '    ph.Controls.Add(li)
-
-    '    Dim btn As New LinkButton()
-
-    '    btn.Text = Text
-    '    btn.CommandName = Command
-    '    btn.CssClass = "dropdown-item"
-
-    '    ph.Controls.Add(btn)
-
-    '    ph.Controls.Add(New LiteralControl("</li>"))
-
-    'End Sub
-
-
     ''' <summary>
     ''' Returns the actions available to the current user, for the currently selected
     ''' project (DropDownList1), filtered down to the given row's STATE_ID (its
@@ -1450,6 +1500,7 @@ Partial Class MainPage
                 .Text = DR("ACTION_TITLE").ToString(),
                 .CommandName = DR("ACTION_TITLE").ToString(),
                 .CommandArgument = RequestID,
+                .ProjectId = DR("PROJECT_ID").ToString(),
                 .ActionId = DR("ACTION_ID").ToString(),
                 .StateId = DR("STATUS_ID").ToString(),
                 .Icon = DR("ICON").ToString(),
@@ -1463,54 +1514,12 @@ Partial Class MainPage
     ''' <summary>
     ''' Loads every action the given user is allowed to perform on the given project,
     ''' across all STATE_IDs, mirroring the role-based + user-override permission
-    ''' model: role-derived permissions (via group -> role -> role permissions) are
-    ''' returned unless a matching user-level override for that exact PROJECT_ID/
-    ''' STATE_ID/ACTION_ID already grants it explicitly (to avoid duplicating it, since
-    ''' the second half of the UNION adds it back in) or denies it, and any user-level
-    ''' ALLOW override is added on top even if no role would otherwise grant it.
-    ''' Joins UNITSHUB_UNITSSTATUS so each row carries its STATUS name/SUBTITLE
-    ''' alongside the STATE_ID code, since that's what the grid's rows key off of.
-    ''' Caller (GetAvailableActions) filters the returned table down to one status
-    ''' per grid row.
+    ''' model.
     ''' </summary>
     Private Function LoadAvailableActionsForProject(ByVal ProjectID As String, ByVal UserID As String) As DataTable
         Dim safeProjectID As String = If(ProjectID, "").Replace("'", "''")
         Dim safeUserID As String = If(UserID, "").Replace("'", "''")
 
-        'Dim SQL As String = ""
-        'SQL = SQL + vbCrLf + " SELECT RP.PROJECT_ID, RP.STATE_ID, RP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
-        'SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
-        'SQL = SQL + vbCrLf + " FROM UnitsHub_Users U "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_USERGROUPS UG ON U.USER_ID = UG.USER_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPS G ON UG.GROUP_ID = G.GROUP_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_GROUPROLES GR ON G.GROUP_ID = GR.GROUP_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLES R ON GR.ROLE_ID = R.ROLE_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ROLEPERMISSIONS RP ON R.ROLE_ID = RP.ROLE_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PERMISSIONS P ON RP.ACTION_ID = P.ACTION_ID "
-        'SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = RP.STATE_ID "
-        'SQL = SQL + vbCrLf + " WHERE U.USER_ID = '" & safeUserID & "' "
-        'SQL = SQL + vbCrLf + "   AND RP.PROJECT_ID = '" & safeProjectID & "' "
-        'SQL = SQL + vbCrLf + "   AND NOT EXISTS "
-        'SQL = SQL + vbCrLf + "   ( "
-        'SQL = SQL + vbCrLf + "       SELECT 1 "
-        'SQL = SQL + vbCrLf + "       FROM UnitsHub_UserPermissions UP "
-        'SQL = SQL + vbCrLf + "       WHERE UP.USER_ID = U.USER_ID "
-        'SQL = SQL + vbCrLf + "         AND UP.PROJECT_ID = RP.PROJECT_ID "
-        'SQL = SQL + vbCrLf + "         AND UP.STATE_ID = RP.STATE_ID "
-        'SQL = SQL + vbCrLf + "         AND UP.ACTION_ID = RP.ACTION_ID "
-        'SQL = SQL + vbCrLf + "         AND UP.ALLOW_DENY = 'A' "
-        'SQL = SQL + vbCrLf + "   ) "
-        'SQL = SQL + vbCrLf + " UNION "
-        'SQL = SQL + vbCrLf + " SELECT UP.PROJECT_ID, UP.STATE_ID, UP.ACTION_ID, P.ICON, P.PERMISSION_NAME, "
-        'SQL = SQL + vbCrLf + "        US.STATUS AS STATUS_NAME, US.SUBTITLE AS STATUS_SUBTITLE "
-        'SQL = SQL + vbCrLf + " FROM UnitsHub_UserPermissions UP "
-        'SQL = SQL + vbCrLf + " JOIN UnitsHub_Permissions P ON P.ACTION_ID = UP.ACTION_ID "
-        'SQL = SQL + vbCrLf + " JOIN UNITSHUB_UNITSSTATUS US ON US.STATE_ID = UP.STATE_ID "
-        'SQL = SQL + vbCrLf + " WHERE UP.USER_ID = '" & safeUserID & "' "
-        'SQL = SQL + vbCrLf + "   AND UP.PROJECT_ID = '" & safeProjectID & "' "
-        'SQL = SQL + vbCrLf + "   AND UP.ALLOW_DENY = 'A'; "
-
-        'Return GetDataTable(EBDB, SQL)
         Dim SQL As String = ""
         SQL = SQL + vbCrLf + "Select  "
         SQL = SQL + vbCrLf + "         U.PROJECT_ID,  "
@@ -1542,28 +1551,31 @@ Partial Class MainPage
 
     ''' <summary>
     ''' Separator packed between RequestID, ActionId and NodeId inside each
-    ''' LinkButton's CommandArgument (GridViewCommandEventArgs only gives you
-    ''' CommandName + CommandArgument, so all three values ride in the one string) -
-    ''' unpacked again in GridView1_RowCommand.
+    ''' LinkButton's CommandArgument.
     ''' </summary>
     Private Const ActionCommandArgSeparator As String = "|"
 
     ''' <summary>
-    ''' Builds a stable, ASP.NET-ID-safe control ID for an action button, derived
-    ''' from the row's NodeId and the action's ActionId (both always present -
-    ''' NodeId identifies the row, ActionId the specific action within it, so the
-    ''' pair is unique per button). MUST be deterministic: PopulateActions is called
-    ''' fresh every DataBind AND every RepopulateGridActionsIfNeeded() postback, and
-    ''' the resulting LinkButton's UniqueID has to match, byte-for-byte, the ID the
-    ''' browser already has (from whatever response last rendered that row) for
-    ''' __EVENTTARGET to resolve back to this control - a random ID (e.g.
-    ''' Guid.NewGuid()) would mint a brand-new ID on every postback, so the ID the
-    ''' browser posts back would never match anything in the freshly-rebuilt control
-    ''' tree, ASP.NET would silently fail to find the control, and the postback
-    ''' event (and GridView1_RowCommand) would never fire at all - which is exactly
-    ''' the "clicking an action does nothing" symptom this fixes. Only letters,
-    ''' digits and underscore are valid in a control ID, so anything else in
-    ''' NodeId/ActionId is replaced with "_".
+    ''' Identifies the one specific (Project, Action, State) menu entry that
+    ''' should open the ConfirmBox popup instead of executing its workflow
+    ''' action directly.
+    ''' </summary>
+    Private Const ConfirmationPopupProjectId As String = "001"
+    Private Const ConfirmationPopupActionId As String = "00001"
+    Private Const ConfirmationPopupStateId As String = "0000"
+
+    ''' <summary>
+    ''' True when act is the (Project, Action, State) entry that should trigger
+    ''' the ConfirmBox popup on click.
+    ''' </summary>
+    Private Function IsConfirmationPopupAction(act As WorkflowAction) As Boolean
+        Return String.Equals(If(act.ProjectId, "").Trim(), ConfirmationPopupProjectId, StringComparison.OrdinalIgnoreCase) AndAlso
+               String.Equals(If(act.ActionId, "").Trim(), ConfirmationPopupActionId, StringComparison.OrdinalIgnoreCase) AndAlso
+               String.Equals(If(act.StateId, "").Trim(), ConfirmationPopupStateId, StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    ''' <summary>
+    ''' Builds a stable, ASP.NET-ID-safe control ID for an action button.
     ''' </summary>
     Private Function BuildActionButtonId(NodeId As String, ActionId As String) As String
         Dim raw As String = "cmd_" & If(NodeId, "") & "_" & If(ActionId, "")
@@ -1587,35 +1599,139 @@ Partial Class MainPage
             Dim btn As New LinkButton()
 
             btn.ID = BuildActionButtonId(NodeId, act.ActionId)
-
             btn.Text = act.Icon & " " & act.Text
-
-            ' Every action LinkButton raises the SAME CommandName ("ExecuteAction") -
-            ' the actual action to run is carried in CommandArgument as
-            ' "RequestID|ActionId|NodeId" and dispatched generically in
-            ' GridView1_RowCommand. Routing on PERMISSION_NAME (act.CommandName)
-            ' would break the moment someone renames a permission in the DB or adds
-            ' a new one; ACTION_ID is the table's real, stable key.
-            btn.CommandName = "ExecuteAction"
-
-            btn.CommandArgument = act.CommandArgument & ActionCommandArgSeparator & act.ActionId & ActionCommandArgSeparator & NodeId & ActionCommandArgSeparator & act.StateId
-
             btn.CssClass = "menuItem"
-
             btn.CausesValidation = False
 
-            ph.Controls.Add(btn)
+            ' Attach execution payload for RowCommand bubbling
+            btn.CommandName = "ExecuteAction"
+            btn.CommandArgument = act.CommandArgument & ActionCommandArgSeparator &
+                              act.ActionId & ActionCommandArgSeparator &
+                              NodeId & ActionCommandArgSeparator &
+                              act.StateId
 
+            ' Check if this is the specific Confirmation popup action
+            If IsConfirmationPopupAction(act) Then
+                btn.Attributes.Add("Confirm", "IamConfirm")
+                ' Target lnkConfirmation so returning from the popup lands in lnkConfirmation_Click
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                      btn,
+                                      "ConfirmBox.aspx",
+                                      600, 250,
+                                      PopupPlacement.Center,
+                                      "",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      returnKey:=ConfirmationPopupReturnKey)
+            Else
+                ' Standard actions bubble through lnkOpenAction_Click
+                btn.Attributes.Add("Confirm", "IamNotConfirm")
+                AddHandler btn.Command, AddressOf lnkOpenAction_Click
+            End If
+
+            ph.Controls.Add(btn)
             ph.Controls.Add(New LiteralControl("</div>"))
 
         Next
 
     End Sub
 
+    Protected Sub lnkOpenAction_Click(sender As Object, e As EventArgs) Handles lnkOpenAction.Click
+        ' Executed when a standard action button is clicked
+        MsgBox("Here")
+        loadData()
+    End Sub
+
     Protected Sub lnkConfirmation_Click(sender As Object, e As EventArgs) Handles lnkConfirmation.Click
+        ' Executed when ConfirmBox.aspx completes and returns data
         Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
         If returnValue Is Nothing Then Exit Sub
 
+        MsgBox("Confirmed")
+
+        Dim confirmationData As DataTable = TryCast(returnValue, DataTable)
+        If confirmationData IsNot Nothing Then
+            For Each row As DataRow In confirmationData.Rows
+                Dim id As Integer = Convert.ToInt32(row("ID"))
+                Dim name As String = Convert.ToString(row("Name"))
+                Dim value As String = Convert.ToString(row("Value"))
+                ' Process confirmed items...
+            Next
+        End If
+
+        loadData()
+    End Sub
+
+
+
+    ''' <summary>
+    ''' Binds each GridView4 row's LinkButton3 to its WorkflowAction, and packs the
+    ''' same RequestID|ActionID|NodeId|StateID payload used elsewhere (see
+    ''' PopulateActions/GridView1_RowCommand) into CommandArgument. GridView4's own
+    ''' row/WorkflowAction has no NodeId of its own, so it's read off the *outer*
+    ''' GridView1 row this GridView4 lives inside (via NamingContainer + DataKeys),
+    ''' the same way RepopulateGridActionsIfNeeded() reads it.
+    ''' </summary>
+    Protected Sub GridView4_RowDataBound(sender As Object, e As GridViewRowEventArgs)
+        If e.Row.RowType = DataControlRowType.DataRow Then
+            Dim l As LinkButton = TryCast(e.Row.FindControl("LinkButton3"), LinkButton)
+            If l Is Nothing Then Exit Sub
+
+            Dim oneAction As WorkflowAction = DirectCast(e.Row.DataItem, WorkflowAction)
+            l.Text = oneAction.CommandName
+            'Project 001 / Action 00001 / State 0000
+            If oneAction.ProjectId = "001" And oneAction.ActionId = "00001" And oneAction.StateId = "0000" Then
+                l.Attributes.Add("Confirm", "IamConfirm")
+                ' Target lnkConfirmation so returning from the popup lands in lnkConfirmation_Click
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                      l,
+                                      "ConfirmBox.aspx",
+                                      600, 250,
+                                      PopupPlacement.Center,
+                                      "",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      returnKey:=ConfirmationPopupReturnKey)
+            End If
+
+
+            Dim innerGrid As GridView = DirectCast(sender, GridView)
+            Dim outerRow As GridViewRow = DirectCast(innerGrid.NamingContainer, GridViewRow)
+            Dim NodeId As String = Convert.ToString(GridView1.DataKeys(outerRow.RowIndex)("NodeId"))
+
+            l.CommandName = "ExecuteAction"
+            l.CommandArgument = oneAction.CommandArgument & ActionCommandArgSeparator &
+                                 oneAction.ActionId & ActionCommandArgSeparator &
+                                 NodeId & ActionCommandArgSeparator &
+                                 oneAction.StateId
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Handles LinkButton3's click (wired via OnClick in markup, plain Click
+    ''' event - not Command). Since Click's EventArgs carries no
+    ''' CommandName/CommandArgument, both are read directly off the LinkButton
+    ''' itself (sender), which GridView4_RowDataBound already populated. Mirrors
+    ''' GridView1_RowCommand: same "ExecuteAction" CommandName, same
+    ''' RequestID|ActionID|NodeId|StateID CommandArgument layout, so it just
+    ''' unpacks and runs it the same way.
+    ''' </summary>
+    Protected Sub LinkButton3_Command(sender As Object, e As EventArgs)
+
+
+
+        MsgBox("Here")
+        'Dim l As LinkButton = DirectCast(sender, LinkButton)
+
+        'If l.CommandName <> "ExecuteAction" Then Exit Sub
+
+        'Dim parts As String() = Convert.ToString(l.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 4, StringSplitOptions.None)
+        'If parts.Length <> 4 Then Exit Sub
+
+        'Dim RequestID As String = parts(0)
+        'Dim ActionID As String = parts(1)
+        'Dim NodeId As String = parts(2)
+        'Dim StateID As String = parts(3)
+
+        'ExecuteWorkflowAction(RequestID, ActionID, NodeId, StateID)
     End Sub
 End Class
 
@@ -1623,8 +1739,9 @@ Public Class WorkflowAction
     Public Property Text As String
     Public Property CommandName As String
     Public Property CommandArgument As String
+    Public Property ProjectId As String
     Public Property ActionId As String
-    Public Property StateId As String   ' NEW
+    Public Property StateId As String
     Public Property Icon As String
     Public Property CssClass As String = "menuItem"
     Public Property StatusSubtitle As String

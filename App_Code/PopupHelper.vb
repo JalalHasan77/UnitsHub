@@ -105,14 +105,14 @@ Public Module VendorPopupHelper
     End Sub
 
     Public Sub RegisterVendorPopup(ByVal page As Page,
-                               ByVal triggerControl As WebControl,
-                               ByVal popupPageUrl As String,
-                               ByVal popupWidth As Integer,
-                               ByVal popupHeight As Integer,
-                               ByVal placement As PopupPlacement,
-                               Optional ByVal popupTitle As String = "",
-                               Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard,
-                               Optional ByVal returnKey As String = "")
+                                   ByVal triggerControl As WebControl,
+                                   ByVal popupPageUrl As String,
+                                   ByVal popupWidth As Integer,
+                                   ByVal popupHeight As Integer,
+                                   ByVal placement As PopupPlacement,
+                                   Optional ByVal popupTitle As String = "",
+                                   Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard,
+                                   Optional ByVal returnKey As String = "")
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
         If triggerControl Is Nothing Then Throw New ArgumentNullException("triggerControl")
@@ -124,17 +124,17 @@ Public Module VendorPopupHelper
         Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl, returnKey)
 
         Dim clientScript As String = BuildOpenDialogScript(
-        resolvedUrl,
-        popupTitle,
-        popupWidth,
-        popupHeight,
-        placement,
-        triggerControl.UniqueID,
-        "",
-        "",
-        "",
-        "",
-        displayMode)
+            resolvedUrl,
+            popupTitle,
+            popupWidth,
+            popupHeight,
+            placement,
+            triggerControl.UniqueID,
+            "",
+            "",
+            "",
+            "",
+            displayMode)
 
         triggerControl.Attributes("onclick") = clientScript
     End Sub
