@@ -696,6 +696,10 @@
                                 <asp:LinkButton ID="lnkOpenAction" runat="server">Open Actions</asp:LinkButton>
 
                                 <br />
+
+                                <asp:LinkButton ID="lnkConfirmation" runat="server">Open Confirmation</asp:LinkButton>
+
+                                <br />
                                 <br />
                                 <asp:LinkButton ID="LinkButton1" runat="server" PostBackUrl="AutoTransferPlanForm.aspx?PlanID=00001">LinkButton</asp:LinkButton>
 
@@ -722,6 +726,7 @@
                                             <div class="unit-filter-control">
                                                 <asp:DropDownList ID="DropDownList1" runat="server" CssClass="styled-dropdown" Font-Names="Arial" AutoPostBack="True">
                                                 </asp:DropDownList>
+                                                <asp:Label ID="lblDisplayOrder" runat="server"></asp:Label>
                                             </div>
                                         </div>
                                         <table cellpadding="0" class="auto-style2">
@@ -872,6 +877,9 @@
                 </div>
             </div>
         </div>
+
+        <%# Eval("FIELD_NAME") %>
+        <asp:Button ID="btnConfirmAction" runat="server" Text="" CausesValidation="False" style="display:none;" />
 
 </form>
 </body>

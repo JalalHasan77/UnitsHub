@@ -102,6 +102,16 @@ Partial Class MainPage
                                       "",
                                       VendorPopupHelper.PopupDisplayMode.FrameOnly)
 
+        'lnkConfirmation
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      lnkConfirmation,
+                                      "ConfirmBox.aspx",
+                                      600, 250,
+                                      PopupPlacement.Center,
+                                      "",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+
 
         PopulateSideMenu()
         RepopulateGridActionsIfNeeded()
@@ -543,6 +553,30 @@ Partial Class MainPage
 
     End Sub
 
+    ''' <summary>
+    ''' Returns the DISPLAY_ORDER configured in UNITSHUB_ATTRIBUTES for the "Status"
+    ''' attribute. This is a single small admin-configured value that's the same for
+    ''' every project/user and essentially never changes, so - like GetColumnAliases/
+    ''' BuildPivotSql's aliases/VisibleFields lookups below - it's cached via
+    ''' GetOrAddToCache rather than hit on every loadData() call (project switch,
+    ''' Approve/Bounce, etc.), which would otherwise add a DB round-trip per postback
+    ''' for a value that's effectively static.
+    ''' </summary>
+    Private Function GetStatusAttributeDisplayOrder(ProjectID As String, Node_Type As String) As String
+        Dim sql1 As String = "SELECT DISPLAY_ORDER FROM UNITSHUB_ATTRIBUTES WHERE ATTRIBUTE_NAME = 'Status' " &
+                " AND PROJECT_ID='" & ProjectID & "' and NODE_TYPE_ID='" & Node_Type & "'"
+        Dim ID As String = DB.RetreiveScalarSTRING(EBDB, sql1)
+        GetStatusAttributeDisplayOrder = ID
+
+        'Return GetOrAddToCache(Of String)(
+        '    "DisplayOrder_Status_Attribute", 30,
+        '    Function()
+        '        Dim sql As String = "SELECT DISPLAY_ORDER FROM UNITSHUB_ATTRIBUTES WHERE ATTRIBUTE_NAME = 'Status' " &
+        '        " AND PROJECT_ID='" & ProjectID & "' and NODE_TYPE_ID='" & Node_Type & "'"
+        '        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, sql))
+        '    End Function)
+    End Function
+
     Sub loadData(Optional Filter As String = "")
         Dim SQL As String = ""
         Dim DT As New DataTable
@@ -562,6 +596,9 @@ Partial Class MainPage
 
             Exit Sub
         End If
+
+
+
         'Build the SQL to get units
 
         'Get "Units" of the Selected project: it is the lowest 
@@ -583,6 +620,13 @@ Partial Class MainPage
         aliases = GetColumnAliases(projectId:=lcProjectID, nodeTypeId:=UnitType)
         SQL = ""
         SQL = BuildPivotSql(aliases:=aliases, projectId:=lcProjectID, Node_Type_ID:=UnitType)
+
+        '=============================================================
+        ' Cached lookup (see GetStatusAttributeDisplayOrder) - runs once per app-cache
+        ' window, not once per node/row, so it adds no measurable delay here even
+        ' though loadData() itself re-runs on every project switch/Approve/Bounce.
+        lblDisplayOrder.Text = GetStatusAttributeDisplayOrder(ProjectID:=DropDownList1.SelectedItem.Value,
+                                                              Node_Type:=UnitType)
 
 
         Dim DT0 As New DataTable
@@ -1124,16 +1168,17 @@ Partial Class MainPage
 
         If e.CommandName <> "ExecuteAction" Then Exit Sub
 
-        Dim parts As String() = Convert.ToString(e.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 3, StringSplitOptions.None)
-        If parts.Length <> 3 Then Exit Sub
+        Dim parts As String() = Convert.ToString(e.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 4, StringSplitOptions.None)
+        If parts.Length <> 4 Then Exit Sub
 
         Dim RequestID As String = parts(0)
         Dim ActionID As String = parts(1)
         Dim NodeId As String = parts(2)
+        Dim StateID As String = parts(3)
 
-        'MsgBox(RequestID & vbCrLf & ActionID & vbCrLf & NodeId)
+        'MsgBox(RequestID & vbCrLf & ActionID & vbCrLf & NodeId & vbCrLf & StateID)
 
-        ExecuteWorkflowAction(RequestID, ActionID, NodeId)
+        ExecuteWorkflowAction(RequestID, ActionID, NodeId, StateID)
 
     End Sub
 
@@ -1163,19 +1208,6 @@ Partial Class MainPage
     ''' </summary>
     Private Const HistoryPermissionName As String = "History"
 
-    Private Sub ExecuteWorkflowAction(RequestID As String, ActionID As String, NodeId As String)
-        Dim permissionName As String = GetPermissionNameForAction(ActionID)
-
-        If String.Equals(permissionName, HistoryPermissionName, StringComparison.OrdinalIgnoreCase) Then
-            ShowNodeIdMessageBox(NodeId)
-            Exit Sub ' view-only action - nothing changed, no need to rebind
-        End If
-
-        ' TODO: your action-execution logic here - update RequestID's STATE_ID
-        ' according to ActionID, log who did it (GetCurrentUserID()) and when, etc.
-
-        loadData() ' rebind so the grid (status card + actions menu) reflects the new state
-    End Sub
 
     ''' <summary>
     ''' Looks up the PERMISSION_NAME for a given ACTION_ID from the same per-project/
@@ -1184,7 +1216,139 @@ Partial Class MainPage
     ''' route on PERMISSION_NAME text directly (see GridView1_RowCommand's comment on
     ''' why ACTION_ID, not text, is what's used for dispatch).
     ''' </summary>
-    Private Function GetPermissionNameForAction(ActionID As String) As String
+    Private Sub ExecuteWorkflowAction(RequestID As String, ActionID As String, NodeId As String, StateID As String)
+        Dim Action_Title As String = GetActionAndStateForAction(StateID, ActionID)
+
+        If String.Equals(Action_Title, HistoryPermissionName, StringComparison.OrdinalIgnoreCase) Then
+            ShowNodeIdMessageBox(NodeId)
+            Exit Sub
+        End If
+
+        ' TODO: your action-execution logic here - can now use StateID directly
+        MsgBox("RequestID" & RequestID & vbCrLf &
+            "ActionID: " & ActionID & vbCrLf &
+            "NodeId: " & NodeId & vbCrLf &
+            "StateID: " & StateID)
+
+        Dim DT As New DataTable
+        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & DropDownList1.SelectedItem.Value & "' and  STATUS_ID = '" & StateID & "' and ACTION_ID = '" & ActionID & "'")
+
+        If DT.Rows.Count = 0 Then Exit Sub
+
+        Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
+        Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
+
+        ' If the action is configured with PRE_EXECUTION = "Confirmation", the status
+        ' change must NOT happen on this postback. Instead we stash what we'd need to
+        ' apply it (NodeId/ToStatusId) in Session and pop a client-side confirm() -
+        ' WebForms has no synchronous server-side way to "wait" for the user's answer,
+        ' so if they click OK the confirm script triggers a second, hidden postback
+        ' (btnConfirmAction) that actually performs the change. See
+        ' ShowConfirmationThenApply/btnConfirmAction_Click below.
+        Select Case DT.Rows(0)("ACTION_TYPE").ToString
+            Case "CHANGE"
+
+                If String.Equals(PreExecution, "Confirmation", StringComparison.OrdinalIgnoreCase) Then
+                    Dim ConfirmationText As String = Convert.ToString(DT.Rows(0)("CONFIRMATION_TEXT"))
+                    ShowConfirmationThenApply(NodeId, ToStatusId, ConfirmationText)
+                    Exit Sub
+                End If
+
+                ApplyNodeStatusChange(NodeId, ToStatusId)
+
+            Case ""
+
+        End Select
+
+        loadData()
+    End Sub
+
+    ''' <summary>
+    ''' Holds just enough state to finish a confirmed action on the follow-up
+    ''' postback fired by btnConfirmAction (see ShowConfirmationThenApply). Kept as
+    ''' its own small class, rather than several loose Session keys, so there's a
+    ''' single thing to null-check/clear in btnConfirmAction_Click.
+    ''' </summary>
+    Private Class PendingConfirmAction
+        Public Property NodeId As String
+        Public Property ToStatusId As String
+    End Class
+
+    Private Const PendingConfirmActionSessionKey As String = "PendingConfirmAction"
+
+    ''' <summary>
+    ''' Stashes the pending Node/ToStatus change in Session, then registers a
+    ''' client-side confirm(ConfirmationText). If the user clicks OK, the script
+    ''' calls __doPostBack for the hidden btnConfirmAction button, which re-enters the
+    ''' page (running Page_Load/RepopulateGridActionsIfNeeded as usual) and then fires
+    ''' btnConfirmAction_Click, which is the only place that actually applies the
+    ''' change. If the user clicks Cancel, nothing further happens and the stashed
+    ''' Session value is simply overwritten/ignored next time.
+    ''' </summary>
+    Private Sub ShowConfirmationThenApply(NodeId As String, ToStatusId As String, ConfirmationText As String)
+        Session(PendingConfirmActionSessionKey) = New PendingConfirmAction With {
+            .NodeId = NodeId,
+            .ToStatusId = ToStatusId
+        }
+
+        Dim safeMessage As String = HttpUtility.JavaScriptStringEncode(If(ConfirmationText, "Are you sure?"))
+        Dim script As String =
+            "if (confirm('" & safeMessage & "')) { " &
+            "__doPostBack(" & HttpUtility.JavaScriptStringEncode(btnConfirmAction.UniqueID, True) & ", ''); " &
+            "}"
+
+        ClientScript.RegisterStartupScript(Me.GetType(), "ConfirmAction_" & Guid.NewGuid().ToString("N"), script, True)
+    End Sub
+
+    ''' <summary>
+    ''' Fires on the hidden postback triggered from the confirm() script in
+    ''' ShowConfirmationThenApply once the user clicks OK. btnConfirmAction is a
+    ''' plain, always-hidden server Button added to MainPage.aspx purely as a
+    ''' postback target - it has no visible UI of its own.
+    ''' </summary>
+    Protected Sub btnConfirmAction_Click(sender As Object, e As EventArgs) Handles btnConfirmAction.Click
+        Dim pending As PendingConfirmAction = TryCast(Session(PendingConfirmActionSessionKey), PendingConfirmAction)
+        Session.Remove(PendingConfirmActionSessionKey)
+
+        If pending Is Nothing Then Exit Sub
+
+        ApplyNodeStatusChange(pending.NodeId, pending.ToStatusId)
+        loadData()
+    End Sub
+
+    ''' <summary>
+    ''' Applies the workflow transition itself: sets the Status attribute's value for
+    ''' this Node to ToStatusId. UNITSHUB_NODE_ATTRIBUTE_VALUE stores one row per
+    ''' (NODE_ID, DISPLAY_ORDER) attribute slot with the actual value in VALUE_TEXT
+    ''' (see BuildPivotSql's "v.VALUE_TEXT" usage above) - lblDisplayOrder.Text is the
+    ''' DISPLAY_ORDER of the "Status" attribute for the current project/unit type
+    ''' (set once per loadData() call by GetStatusAttributeDisplayOrder), not tied to
+    ''' any specific grid row, so it's safe to read here regardless of which row's
+    ''' action triggered this.
+    '''
+    ''' TODO: DB.ExecuteNonQuery is a guess at this project's write-side DB helper -
+    ''' swap in whatever this codebase actually calls (see the TODO comment above
+    ''' ExecuteWorkflowAction for the same caveat).
+    ''' </summary>
+    Private Sub ApplyNodeStatusChange(NodeId As String, ToStatusId As String)
+        Dim safeNodeId As String = If(NodeId, "").Replace("'", "''")
+        Dim safeToStatusId As String = If(ToStatusId, "").Replace("'", "''")
+        Dim safeDisplayOrder As String = If(lblDisplayOrder.Text, "").Replace("'", "''")
+
+        Dim SQL As String = "UPDATE UNITSHUB_NODE_ATTRIBUTE_VALUE " &
+                             "SET VALUE_TEXT = '" & safeToStatusId & "' " &
+                             "WHERE NODE_ID = '" & safeNodeId & "' " &
+                             "  AND DISPLAY_ORDER = '" & safeDisplayOrder & "'"
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+
+
+
+
+
+    Private Function GetActionAndStateForAction(StateID As String, ActionID As String) As String
         Dim lcProjectID As String = DropDownList1.SelectedItem.Value
         Dim UserID As String = GetCurrentUserID()
         Dim cacheKey As String = lcProjectID & "|" & UserID
@@ -1196,13 +1360,18 @@ Partial Class MainPage
         End If
 
         Dim match As DataRow = actionsTable.AsEnumerable().
-            FirstOrDefault(Function(r) String.Equals(Convert.ToString(r("ACTION_ID")).Trim(),
-                                                       If(ActionID, "").Trim(),
-                                                       StringComparison.OrdinalIgnoreCase))
+        FirstOrDefault(Function(r) String.Equals(Convert.ToString(r("ACTION_ID")).Trim(),
+                                                   If(ActionID, "").Trim(),
+                                                   StringComparison.OrdinalIgnoreCase) _
+                              AndAlso
+                              String.Equals(Convert.ToString(r("STATUS_ID")).Trim(),
+                                                   If(StateID, "").Trim(),
+                                                   StringComparison.OrdinalIgnoreCase))
 
         If match Is Nothing Then Return ""
-        Return Convert.ToString(match("PERMISSION_NAME"))
+        Return Convert.ToString(match("ACTION_TITLE"))
     End Function
+
 
     ''' <summary>
     ''' Shows the row's Node_ID in a client-side (browser) message box. A server-side
@@ -1280,6 +1449,7 @@ Partial Class MainPage
                 .CommandName = DR("ACTION_TITLE").ToString(),
                 .CommandArgument = RequestID,
                 .ActionId = DR("ACTION_ID").ToString(),
+                .StateId = DR("STATUS_ID").ToString(),
                 .Icon = DR("ICON").ToString(),
                 .StatusSubtitle = DR("STATUS_SUBTITLE").ToString()
             })
@@ -1426,7 +1596,7 @@ Partial Class MainPage
             ' a new one; ACTION_ID is the table's real, stable key.
             btn.CommandName = "ExecuteAction"
 
-            btn.CommandArgument = act.CommandArgument & ActionCommandArgSeparator & act.ActionId & ActionCommandArgSeparator & NodeId
+            btn.CommandArgument = act.CommandArgument & ActionCommandArgSeparator & act.ActionId & ActionCommandArgSeparator & NodeId & ActionCommandArgSeparator & act.StateId
 
             btn.CssClass = "menuItem"
 
@@ -1440,16 +1610,20 @@ Partial Class MainPage
 
     End Sub
 
+    Protected Sub lnkConfirmation_Click(sender As Object, e As EventArgs) Handles lnkConfirmation.Click
+        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, "AddAdjustmentAndClose")
+        If returnValue Is Nothing Then Exit Sub
+
+    End Sub
 End Class
 
 Public Class WorkflowAction
-
     Public Property Text As String
     Public Property CommandName As String
     Public Property CommandArgument As String
     Public Property ActionId As String
+    Public Property StateId As String   ' NEW
     Public Property Icon As String
     Public Property CssClass As String = "menuItem"
     Public Property StatusSubtitle As String
-
 End Class
