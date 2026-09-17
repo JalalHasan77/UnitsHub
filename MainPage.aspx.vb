@@ -255,16 +255,17 @@ Partial Class MainPage
     End Function
 
     ''' <summary>
-    ''' The Actions LinkButtons inside each row's phActions PlaceHolder are added
-    ''' dynamically in RowDataBound, which only fires when GridView1.DataBind() runs
-    ''' (e.g. from loadData()). Postbacks that don't rebind the grid - like the Columns
-    ''' dialog's btnColumns_Click, which only toggles cell Visible flags - still reconstruct
-    ''' the grid's declared row/cell/placeholder structure from ViewState, but NOT those
-    ''' dynamically-added child controls, since ViewState only persists their state, not
-    ''' their existence. Left alone, phActions ends up empty on any such postback. Re-adding
-    ''' them here, on every postback before RaisePostBackEvent, keeps them present (and able
-    ''' to raise their own postback events, e.g. clicking Approve) regardless of which
-    ''' control triggered the postback. DataKeyNames is used instead of DataItem, which is
+    ''' GridView4 (the Actions menu inside each row) is bound dynamically in
+    ''' RowDataBound, which only fires when GridView1.DataBind() runs (e.g. from
+    ''' loadData()). Postbacks that don't rebind the grid - like the Columns
+    ''' dialog's btnColumns_Click, which only toggles cell Visible flags - still
+    ''' reconstruct the grid's declared row/cell/control structure from ViewState,
+    ''' but a nested GridView's own rows aren't preserved that way since they came
+    ''' from a DataBind, not markup. Left alone, GridView4 ends up empty on any
+    ''' such postback. Re-binding it here, on every postback before
+    ''' RaisePostBackEvent, keeps its rows present (and able to raise their own
+    ''' postback events, e.g. clicking an action) regardless of which control
+    ''' triggered the postback. DataKeyNames is used instead of DataItem, which is
     ''' only populated during an actual DataBind.
     ''' </summary>
     Private Sub RepopulateGridActionsIfNeeded()
@@ -273,35 +274,17 @@ Partial Class MainPage
         For Each row As GridViewRow In GridView1.Rows
             If row.RowType <> DataControlRowType.DataRow Then Continue For
 
-            Dim ph As PlaceHolder = TryCast(row.FindControl("phActions"), PlaceHolder)
-            If ph Is Nothing OrElse ph.Controls.Count > 0 Then Continue For
+            Dim GV As GridView = TryCast(row.FindControl("GridView4"), GridView)
+            If GV Is Nothing OrElse GV.Rows.Count > 0 Then Continue For
 
             Dim RequestID As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("Reference"))
             Dim State As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("STATUS"))
             Dim NodeId As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("NodeId"))
 
             Dim Actions As List(Of WorkflowAction) = GetAvailableActions(RequestID, State)
-            Dim returnValue As New DataTable("returnValue")
-
-            ' Define columns
-            returnValue.Columns.Add("ID", GetType(Integer))
-            returnValue.Columns.Add("Name", GetType(String))
-            returnValue.Columns.Add("Value", GetType(String))
-
-            ' Add sample rows
-            returnValue.Rows.Add(1, "S. Jalal Hasan", "Husband")
-            returnValue.Rows.Add(2, "Elmeera Yousif", "Wife")
-
-            Dim GV As GridView
-            GV = row.FindControl("GridView4")
 
             GV.DataSource = Actions
             GV.DataBind()
-
-
-
-
-            PopulateActions(ph, Actions, NodeId)
         Next
     End Sub
 
@@ -777,8 +760,8 @@ Partial Class MainPage
     ''' <summary>
     ''' Wires the Filter popup to btnFilter. Needs to run after any postback that
     ''' rebinds the grid (both a full loadData() and a filter-only ApplyFilterToGrid()),
-    ''' since - like phActions above - this dynamic wiring isn't preserved by ViewState
-    ''' on its own.
+    ''' since - like GridView4's actions above - this dynamic wiring isn't preserved by
+    ''' ViewState on its own.
     ''' </summary>
     Private Sub RegisterFilterPopup()
         VendorPopupHelper.RegisterVendorPopup(Me,
@@ -1065,9 +1048,6 @@ Partial Class MainPage
         'Dim WorkflowEngine As New WorkflowAction
 
 
-        Dim ph As PlaceHolder =
-    CType(e.Row.FindControl("phActions"), PlaceHolder)
-
         Dim RequestID As String =
             CStr(DataBinder.Eval(e.Row.DataItem, "Reference"))
 
@@ -1076,9 +1056,6 @@ Partial Class MainPage
 
         Dim StateId As String =
             Convert.ToString(DataBinder.Eval(e.Row.DataItem, "StateId"))
-
-        Dim NodeId As String =
-            Convert.ToString(DataBinder.Eval(e.Row.DataItem, "NodeId"))
 
         Dim SubtitleText As String =
             Convert.ToString(DataBinder.Eval(e.Row.DataItem, "Status_Subtitle"))
@@ -1113,10 +1090,6 @@ Partial Class MainPage
 
         GV.DataSource = Actions
         GV.DataBind()
-
-
-
-        PopulateActions(ph, Actions, NodeId)
 
         ApplyStatusCardColors(e.Row, StateId, SubtitleText)
 
@@ -1212,11 +1185,11 @@ Partial Class MainPage
 
     ''' <summary>
     ''' Fires when any LinkButton inside a GridView1 row raises a command - including
-    ''' every action LinkButton added dynamically in PopulateActions, whose Command
+    ''' every action LinkButton inside a row's nested GridView4, whose Command
     ''' events bubble up automatically because they live inside a GridView row.
-    ''' All action LinkButtons share the one CommandName ("ExecuteAction" - see
-    ''' PopulateActions), so what actually runs is decided by the ACTION_ID packed
-    ''' into CommandArgument, not by CommandName/PERMISSION_NAME text.
+    ''' All action LinkButtons share the one CommandName ("ExecuteAction"), so what
+    ''' actually runs is decided by the ACTION_ID packed into CommandArgument, not
+    ''' by CommandName/PERMISSION_NAME text.
     ''' </summary>
     Protected Sub GridView1_RowCommand(sender As Object, e As GridViewCommandEventArgs) Handles GridView1.RowCommand
 
@@ -1267,7 +1240,7 @@ Partial Class MainPage
         End If
 
         ' The Project 001 / Action 00001 / State 0000 entry opens the ConfirmBox
-        ' popup on click (see PopulateActions/IsConfirmationPopupAction) instead
+        ' popup on click (see GridView4_RowDataBound) instead
         ' of running straight through. By the time THIS postback runs - the one
         ' __doPostBack fires from inside ConfirmBox's btnOK_Click - the popup's
         ' selection is already sitting in Session under ConfirmationPopupReturnKey,
@@ -1574,67 +1547,6 @@ Partial Class MainPage
                String.Equals(If(act.StateId, "").Trim(), ConfirmationPopupStateId, StringComparison.OrdinalIgnoreCase)
     End Function
 
-    ''' <summary>
-    ''' Builds a stable, ASP.NET-ID-safe control ID for an action button.
-    ''' </summary>
-    Private Function BuildActionButtonId(NodeId As String, ActionId As String) As String
-        Dim raw As String = "cmd_" & If(NodeId, "") & "_" & If(ActionId, "")
-        Dim sb As New System.Text.StringBuilder(raw.Length)
-        For Each c As Char In raw
-            sb.Append(If(Char.IsLetterOrDigit(c), c, "_"c))
-        Next
-        Return sb.ToString()
-    End Function
-
-    Private Sub PopulateActions(ph As PlaceHolder,
-                            Actions As List(Of WorkflowAction),
-                            NodeId As String)
-
-        ph.Controls.Clear()
-
-        For Each act As WorkflowAction In Actions
-
-            ph.Controls.Add(New LiteralControl("<div class='menuRow'>"))
-
-            Dim btn As New LinkButton()
-
-            btn.ID = BuildActionButtonId(NodeId, act.ActionId)
-            btn.Text = act.Icon & " " & act.Text
-            btn.CssClass = "menuItem"
-            btn.CausesValidation = False
-
-            ' Attach execution payload for RowCommand bubbling
-            btn.CommandName = "ExecuteAction"
-            btn.CommandArgument = act.CommandArgument & ActionCommandArgSeparator &
-                              act.ActionId & ActionCommandArgSeparator &
-                              NodeId & ActionCommandArgSeparator &
-                              act.StateId
-
-            ' Check if this is the specific Confirmation popup action
-            If IsConfirmationPopupAction(act) Then
-                btn.Attributes.Add("Confirm", "IamConfirm")
-                ' Target lnkConfirmation so returning from the popup lands in lnkConfirmation_Click
-                VendorPopupHelper.RegisterVendorPopup(Me,
-                                      btn,
-                                      "ConfirmBox.aspx",
-                                      600, 250,
-                                      PopupPlacement.Center,
-                                      "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      returnKey:=ConfirmationPopupReturnKey)
-            Else
-                ' Standard actions bubble through lnkOpenAction_Click
-                btn.Attributes.Add("Confirm", "IamNotConfirm")
-                AddHandler btn.Command, AddressOf lnkOpenAction_Click
-            End If
-
-            ph.Controls.Add(btn)
-            ph.Controls.Add(New LiteralControl("</div>"))
-
-        Next
-
-    End Sub
-
     Protected Sub lnkOpenAction_Click(sender As Object, e As EventArgs) Handles lnkOpenAction.Click
         ' Executed when a standard action button is clicked
         MsgBox("Here")
@@ -1666,7 +1578,7 @@ Partial Class MainPage
     ''' <summary>
     ''' Binds each GridView4 row's LinkButton3 to its WorkflowAction, and packs the
     ''' same RequestID|ActionID|NodeId|StateID payload used elsewhere (see
-    ''' PopulateActions/GridView1_RowCommand) into CommandArgument. GridView4's own
+    ''' GridView1_RowCommand) into CommandArgument. GridView4's own
     ''' row/WorkflowAction has no NodeId of its own, so it's read off the *outer*
     ''' GridView1 row this GridView4 lives inside (via NamingContainer + DataKeys),
     ''' the same way RepopulateGridActionsIfNeeded() reads it.

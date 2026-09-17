@@ -831,8 +831,7 @@
                                                 </asp:TemplateField>
                                             </Columns>
                                         </asp:GridView>
-    <asp:PlaceHolder ID="phActions" runat="server" />
-    
+
 </div>
 
                 </div>
