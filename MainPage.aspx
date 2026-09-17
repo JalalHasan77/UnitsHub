@@ -820,11 +820,13 @@
                     </button>
 
 <div class="actionPopup" onclick="if (event.target.tagName !== 'A') { event.stopPropagation(); }">
-    <asp:GridView ID="GridView4" runat="server" AutoGenerateColumns="False" ShowHeader="False" OnRowDataBound="GridView4_RowDataBound">
+    <asp:GridView ID="GridView4" runat="server" AutoGenerateColumns="False" ShowHeader="False" GridLines="None" CellPadding="0" CellSpacing="0" BorderWidth="0" OnRowDataBound="GridView4_RowDataBound">
                                             <Columns>
                                                 <asp:TemplateField HeaderText="lnkAction">
                                                     <ItemTemplate>
-                                                        <asp:LinkButton ID="LinkButton3" runat="server" Font-Names="Arial" Font-Size="13px" OnClick="LinkButton3_Command">LinkButton</asp:LinkButton>
+                                                        <div class="menuRow">
+                                                            <asp:LinkButton ID="LinkButton3" runat="server" CssClass="menuItem" CausesValidation="False" OnClick="LinkButton3_Command">LinkButton</asp:LinkButton>
+                                                        </div>
                                                     </ItemTemplate>
                                                 </asp:TemplateField>
                                             </Columns>

@@ -1677,7 +1677,7 @@ Partial Class MainPage
             If l Is Nothing Then Exit Sub
 
             Dim oneAction As WorkflowAction = DirectCast(e.Row.DataItem, WorkflowAction)
-            l.Text = oneAction.CommandName
+            l.Text = oneAction.Icon & " " & oneAction.CommandName
             'Project 001 / Action 00001 / State 0000
             If oneAction.ProjectId = "001" And oneAction.ActionId = "00001" And oneAction.StateId = "0000" Then
                 l.Attributes.Add("Confirm", "IamConfirm")
