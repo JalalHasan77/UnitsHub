@@ -12,6 +12,7 @@ Partial Class MainPage
     Inherits System.Web.UI.Page
 
     Private Shared ReadOnly BadgeColors As String() = {"badge-blue", "badge-green", "badge-orange", "badge-purple", "badge-teal", "badge-pink"}
+    Private Const ConfirmationPopupReturnKey As String = "AddAdjustmentAndClose"
     Private encryNdecry As New EncryDecry
 
     ''' <summary>
@@ -110,7 +111,8 @@ Partial Class MainPage
                                       600, 250,
                                       PopupPlacement.Center,
                                       "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      returnKey:=ConfirmationPopupReturnKey)
 
 
         PopulateSideMenu()
@@ -1611,7 +1613,7 @@ Partial Class MainPage
     End Sub
 
     Protected Sub lnkConfirmation_Click(sender As Object, e As EventArgs) Handles lnkConfirmation.Click
-        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, "AddAdjustmentAndClose")
+        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
         If returnValue Is Nothing Then Exit Sub
 
     End Sub

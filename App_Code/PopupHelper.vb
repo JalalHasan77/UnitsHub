@@ -30,7 +30,8 @@ Public Module VendorPopupHelper
                                    ByVal selectedVendorTextField As HiddenField,
                                    ByVal displayTextBox As TextBox,
                                    Optional ByVal popupTitle As String = "",
-                                   Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
+                                   Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard,
+                                   Optional ByVal returnKey As String = "")
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
         If triggerControl Is Nothing Then Throw New ArgumentNullException("triggerControl")
@@ -42,7 +43,7 @@ Public Module VendorPopupHelper
         RegisterVendorPopupMarkup(page)
         RegisterVendorPopupScript(page)
 
-        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl)
+        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl, returnKey)
 
         Dim clientScript As String = BuildOpenDialogScript(
             resolvedUrl,
@@ -71,7 +72,8 @@ Public Module VendorPopupHelper
                                    ByVal displayValueLabel As Label,
                                    ByVal displayTextLabel As Label,
                                    Optional ByVal popupTitle As String = "",
-                                   Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
+                                   Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard,
+                                   Optional ByVal returnKey As String = "")
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
         If triggerControl Is Nothing Then Throw New ArgumentNullException("triggerControl")
@@ -84,7 +86,7 @@ Public Module VendorPopupHelper
         RegisterVendorPopupMarkup(page)
         RegisterVendorPopupScript(page)
 
-        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl)
+        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl, returnKey)
 
         Dim clientScript As String = BuildOpenDialogScript(
             resolvedUrl,
@@ -109,7 +111,8 @@ Public Module VendorPopupHelper
                                ByVal popupHeight As Integer,
                                ByVal placement As PopupPlacement,
                                Optional ByVal popupTitle As String = "",
-                               Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard)
+                               Optional ByVal displayMode As PopupDisplayMode = PopupDisplayMode.Standard,
+                               Optional ByVal returnKey As String = "")
 
         If page Is Nothing Then Throw New ArgumentNullException("page")
         If triggerControl Is Nothing Then Throw New ArgumentNullException("triggerControl")
@@ -118,7 +121,7 @@ Public Module VendorPopupHelper
         RegisterVendorPopupMarkup(page)
         RegisterVendorPopupScript(page)
 
-        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl)
+        Dim resolvedUrl As String = ResolvePopupUrl(page, popupPageUrl, returnKey)
 
         Dim clientScript As String = BuildOpenDialogScript(
         resolvedUrl,
@@ -741,13 +744,49 @@ Public Module VendorPopupHelper
         Return sb.ToString()
     End Function
 
-    Private Function ResolvePopupUrl(ByVal page As Page, ByVal popupPageUrl As String) As String
+    ''' <summary>
+    ''' Query-string key used to pass the caller-supplied "returnKey" (see
+    ''' RegisterVendorPopup) through to the popup page, so the popup and its
+    ''' opener agree on the key without either side hardcoding it twice.
+    ''' </summary>
+    Private Const ReturnKeyQueryStringParam As String = "vpKey"
+
+    Private Function ResolvePopupUrl(ByVal page As Page, ByVal popupPageUrl As String, Optional ByVal returnKey As String = "") As String
         If popupPageUrl Is Nothing Then Return "about:blank"
 
         popupPageUrl = popupPageUrl.Trim()
         If popupPageUrl = String.Empty Then Return "about:blank"
 
-        Return page.ResolveClientUrl(popupPageUrl)
+        Dim resolvedUrl As String = page.ResolveClientUrl(popupPageUrl)
+
+        If Not String.IsNullOrWhiteSpace(returnKey) Then
+            Dim separator As String = If(resolvedUrl.Contains("?"), "&", "?")
+            resolvedUrl &= separator & ReturnKeyQueryStringParam & "=" & HttpUtility.UrlEncode(returnKey)
+        End If
+
+        Return resolvedUrl
+    End Function
+
+    ''' <summary>
+    ''' Reads, on the popup page, the returnKey that the opener passed into
+    ''' RegisterVendorPopup. Use this instead of hardcoding the same string
+    ''' literal that was used when the popup was registered.
+    ''' </summary>
+    ''' <param name="page">The popup page (e.g. Me from ConfirmBox.aspx.vb).</param>
+    ''' <param name="defaultKey">
+    ''' Fallback used only if no key was passed on the URL (e.g. the popup was
+    ''' opened directly, outside of RegisterVendorPopup, during testing).
+    ''' </param>
+    Public Function GetPopupReturnKey(ByVal page As Page, Optional ByVal defaultKey As String = "VendorPopupSelectionAndClose") As String
+        If page Is Nothing Then Throw New ArgumentNullException("page")
+
+        Dim keyFromQueryString As String = page.Request.QueryString(ReturnKeyQueryStringParam)
+
+        If String.IsNullOrWhiteSpace(keyFromQueryString) Then
+            Return defaultKey
+        End If
+
+        Return keyFromQueryString
     End Function
 
     Private Function JsEncode(ByVal value As String) As String

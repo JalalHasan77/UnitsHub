@@ -19,22 +19,24 @@ Partial Class ConfirmBox
 
     End Sub
     Protected Sub btnOK_Click(sender As Object, e As EventArgs) Handles btnOK.Click
-        Dim returnValue As New DataTable("returnValue")
+        'Dim returnValue As New DataTable("returnValue")
 
-        ' Define columns
-        returnValue.Columns.Add("ID", GetType(Integer))
-        returnValue.Columns.Add("Name", GetType(String))
-        returnValue.Columns.Add("Value", GetType(String))
+        '' Define columns
+        'returnValue.Columns.Add("ID", GetType(Integer))
+        'returnValue.Columns.Add("Name", GetType(String))
+        'returnValue.Columns.Add("Value", GetType(String))
 
-        ' Add sample rows
-        returnValue.Rows.Add(1, "S. Jalal Hasan", "Husband")
-        returnValue.Rows.Add(2, "Elmeera Yousif", "Wife")
+        '' Add sample rows
+        'returnValue.Rows.Add(1, "S. Jalal Hasan", "Husband")
+        'returnValue.Rows.Add(2, "Elmeera Yousif", "Wife")
 
+        Dim returnValue As Boolean = True
+        Dim returnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
 
         VendorPopupHelper.RegisterPopupSelectionAndClose(
             page:=Me,
             returnValue:=returnValue,
-            startupScriptKey:="AddAdjustmentAndClose",
+            startupScriptKey:=returnKey,
             skipPostBack:=False)
     End Sub
 End Class
