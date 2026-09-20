@@ -1384,7 +1384,7 @@ Partial Class MainPage
         Dim SQL As String = "UPDATE UNITSHUB_NODE_ATTRIBUTE_VALUE " &
                              "SET VALUE_TEXT = '" & safeToStatusId & "' " &
                              "WHERE NODE_ID = '" & safeNodeId & "' " &
-                             "  AND DISPLAY_ORDER = '" & safeDisplayOrder & "'"
+                             "  AND DISPLAY_ORDER = '" & CInt(safeDisplayOrder).ToString("000") & "'"
 
         DB.ExecuteNonQuery(EBDB_CS, SQL)
     End Sub
@@ -1477,7 +1477,28 @@ Partial Class MainPage
                 .ActionId = DR("ACTION_ID").ToString(),
                 .StateId = DR("STATUS_ID").ToString(),
                 .Icon = DR("ICON").ToString(),
-                .StatusSubtitle = DR("STATUS_SUBTITLE").ToString()
+                .StatusSubtitle = DR("STATUS_SUBTITLE").ToString(),
+                .ToStatusId = DR("TO_STATUS_ID").ToString(),
+                .PreExecution = DR("PRE_EXECUTION").ToString(),
+                .ActionType = DR("ACTION_TYPE").ToString(),
+                .ConfirmationText = DR("CONFIRMATION_TEXT").ToString(),
+                .IsActive = DR("IS_ACTIVE").ToString(),
+                .ImplementerTitle = DR("IMPLEMENTER_TITLE").ToString(),
+                .ShowInDefault = DR("SHOW_IN_DEFAULT").ToString(),
+                .ShowInPreview = DR("SHOW_IN_PREVIEW").ToString(),
+                .ReceiveParametersEnabled = DR("RECEIVE_PARAMETERS_ENABLED").ToString(),
+                .ReceiveParametersMode = DR("RECEIVE_PARAMETERS_MODE").ToString(),
+                .NeedPayment = DR("NEED_PAYMENT").ToString(),
+                .PaymentPlanId = DR("PAYMENT_PLAN_ID").ToString(),
+                .ScriptText = DR("SCRIPT_TEXT").ToString(),
+                .ParameterType = DR("PARAMETER_TYPE").ToString(),
+                .FormTitle = DR("FORM_TITLE").ToString(),
+                .SelectSql = DR("SELECT_SQL").ToString(),
+                .CreatedDate = DR("CREATED_DATE").ToString(),
+                .NeedAutotransfer = DR("NEED_AUTOTRANSFER").ToString(),
+                .AutotransferPlanId = DR("AUTOTRANSFER_PLAN_ID").ToString(),
+                .NeedDialogue = DR("NEED_DIALOGUE").ToString(),
+                .DialogueText = DR("DIALOGUE_TEXT").ToString()
             })
         Next
 
@@ -1498,10 +1519,31 @@ Partial Class MainPage
         SQL = SQL + vbCrLf + "         U.PROJECT_ID,  "
         SQL = SQL + vbCrLf + "         U.STATUS_ID, "
         SQL = SQL + vbCrLf + "         U.ACTION_ID, "
-        SQL = SQL + vbCrLf + "         A.ICON, "
-        SQL = SQL + vbCrLf + "         A.ACTION_TITLE, "
         SQL = SQL + vbCrLf + "         PS.STATUS as STATUS_NAME, "
-        SQL = SQL + vbCrLf + "         PS.SUBTITLE as STATUS_SUBTITLE "
+        SQL = SQL + vbCrLf + "         PS.SUBTITLE as STATUS_SUBTITLE, "
+        SQL = SQL + vbCrLf + "         A.IS_ACTIVE, "
+        SQL = SQL + vbCrLf + "         A.ACTION_TITLE, "
+        SQL = SQL + vbCrLf + "         A.ACTION_TYPE, "
+        SQL = SQL + vbCrLf + "         A.IMPLEMENTER_TITLE, "
+        SQL = SQL + vbCrLf + "         A.SHOW_IN_DEFAULT, "
+        SQL = SQL + vbCrLf + "         A.SHOW_IN_PREVIEW, "
+        SQL = SQL + vbCrLf + "         A.RECEIVE_PARAMETERS_ENABLED, "
+        SQL = SQL + vbCrLf + "         A.RECEIVE_PARAMETERS_MODE, "
+        SQL = SQL + vbCrLf + "         A.NEED_PAYMENT, "
+        SQL = SQL + vbCrLf + "         A.PAYMENT_PLAN_ID, "
+        SQL = SQL + vbCrLf + "         A.TO_STATUS_ID, "
+        SQL = SQL + vbCrLf + "         A.SCRIPT_TEXT, "
+        SQL = SQL + vbCrLf + "         A.PRE_EXECUTION, "
+        SQL = SQL + vbCrLf + "         A.CONFIRMATION_TEXT, "
+        SQL = SQL + vbCrLf + "         A.PARAMETER_TYPE, "
+        SQL = SQL + vbCrLf + "         A.FORM_TITLE, "
+        SQL = SQL + vbCrLf + "         A.SELECT_SQL, "
+        SQL = SQL + vbCrLf + "         A.CREATED_DATE, "
+        SQL = SQL + vbCrLf + "         A.ICON, "
+        SQL = SQL + vbCrLf + "         A.NEED_AUTOTRANSFER, "
+        SQL = SQL + vbCrLf + "         A.AUTOTRANSFER_PLAN_ID, "
+        SQL = SQL + vbCrLf + "         A.NEED_DIALOGUE, "
+        SQL = SQL + vbCrLf + "         A.DIALOGUE_TEXT "
         SQL = SQL + vbCrLf + "from "
         SQL = SQL + vbCrLf + "         UNITSHUB_PRJ_STS_ACTN_USRS U "
         SQL = SQL + vbCrLf + "inner join "
@@ -1548,6 +1590,8 @@ Partial Class MainPage
     End Function
 
     Protected Sub lnkOpenAction_Click(sender As Object, e As EventArgs) Handles lnkOpenAction.Click
+        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
+        If returnValue Is Nothing Then Exit Sub
         ' Executed when a standard action button is clicked
         MsgBox("Here")
         loadData()
@@ -1588,15 +1632,23 @@ Partial Class MainPage
             Dim l As LinkButton = TryCast(e.Row.FindControl("LinkButton3"), LinkButton)
             If l Is Nothing Then Exit Sub
 
+            Dim innerGrid As GridView = DirectCast(sender, GridView)
+            Dim outerRow As GridViewRow = DirectCast(innerGrid.NamingContainer, GridViewRow)
+            Dim NodeId As String = Convert.ToString(GridView1.DataKeys(outerRow.RowIndex)("NodeId"))
+
+
             Dim oneAction As WorkflowAction = DirectCast(e.Row.DataItem, WorkflowAction)
             l.Text = oneAction.Icon & " " & oneAction.CommandName
-            'Project 001 / Action 00001 / State 0000
+            l.Attributes.Add("ProjectId", oneAction.ProjectId)
+            l.Attributes.Add("ActionId", oneAction.ActionId)
+            l.Attributes.Add("StateId", oneAction.StateId)
+            l.Attributes.Add("NodeID", NodeId)
+
             If oneAction.ProjectId = "001" And oneAction.ActionId = "00001" And oneAction.StateId = "0000" Then
-                l.Attributes.Add("Confirm", "IamConfirm")
-                ' Target lnkConfirmation so returning from the popup lands in lnkConfirmation_Click
+                Dim A = oneAction.ConfirmationText
                 VendorPopupHelper.RegisterVendorPopup(Me,
                                       l,
-                                      "ConfirmBox.aspx",
+                                      "ConfirmBox.aspx?Message=" & encryNdecry.Encrypt(oneAction.ConfirmationText),
                                       600, 250,
                                       PopupPlacement.Center,
                                       "",
@@ -1604,16 +1656,11 @@ Partial Class MainPage
                                       returnKey:=ConfirmationPopupReturnKey)
             End If
 
-
-            Dim innerGrid As GridView = DirectCast(sender, GridView)
-            Dim outerRow As GridViewRow = DirectCast(innerGrid.NamingContainer, GridViewRow)
-            Dim NodeId As String = Convert.ToString(GridView1.DataKeys(outerRow.RowIndex)("NodeId"))
-
-            l.CommandName = "ExecuteAction"
-            l.CommandArgument = oneAction.CommandArgument & ActionCommandArgSeparator &
-                                 oneAction.ActionId & ActionCommandArgSeparator &
-                                 NodeId & ActionCommandArgSeparator &
-                                 oneAction.StateId
+            'l.CommandName = "ExecuteAction"
+            'l.CommandArgument = oneAction.CommandArgument & ActionCommandArgSeparator &
+            '                     oneAction.ActionId & ActionCommandArgSeparator &
+            '                     NodeId & ActionCommandArgSeparator &
+            '                     oneAction.StateId
         End If
     End Sub
 
@@ -1628,22 +1675,35 @@ Partial Class MainPage
     ''' </summary>
     Protected Sub LinkButton3_Command(sender As Object, e As EventArgs)
 
+        'Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
+        'If returnValue Is Nothing Then Exit Sub
 
 
-        MsgBox("Here")
-        'Dim l As LinkButton = DirectCast(sender, LinkButton)
+        Dim L As LinkButton
+        L = CType(sender, LinkButton)
 
-        'If l.CommandName <> "ExecuteAction" Then Exit Sub
+        Dim ProjectId As String = L.Attributes("ProjectId")
+        Dim ActionId As String = L.Attributes("ActionId")
+        Dim StateId As String = L.Attributes("StateId")
+        Dim NodeId As String = L.Attributes("NodeId")
 
-        'Dim parts As String() = Convert.ToString(l.CommandArgument).Split(New String() {ActionCommandArgSeparator}, 4, StringSplitOptions.None)
-        'If parts.Length <> 4 Then Exit Sub
+        Dim DT As New DataTable
+        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & ProjectId & "' and  STATUS_ID = '" & StateId & "' and ACTION_ID = '" & ActionId & "'")
 
-        'Dim RequestID As String = parts(0)
-        'Dim ActionID As String = parts(1)
-        'Dim NodeId As String = parts(2)
-        'Dim StateID As String = parts(3)
+        If DT.Rows.Count = 0 Then Exit Sub
 
-        'ExecuteWorkflowAction(RequestID, ActionID, NodeId, StateID)
+        Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
+        Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
+
+        Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
+            Case "CHANGE"
+                ApplyNodeStatusChange(NodeId, ToStatusId)
+            Case ""
+
+        End Select
+
+        loadData()
+
     End Sub
 End Class
 
@@ -1657,4 +1717,25 @@ Public Class WorkflowAction
     Public Property Icon As String
     Public Property CssClass As String = "menuItem"
     Public Property StatusSubtitle As String
+    Public Property ToStatusId As String
+    Public Property PreExecution As String
+    Public Property ActionType As String
+    Public Property ConfirmationText As String
+    Public Property IsActive As String
+    Public Property ImplementerTitle As String
+    Public Property ShowInDefault As String
+    Public Property ShowInPreview As String
+    Public Property ReceiveParametersEnabled As String
+    Public Property ReceiveParametersMode As String
+    Public Property NeedPayment As String
+    Public Property PaymentPlanId As String
+    Public Property ScriptText As String
+    Public Property ParameterType As String
+    Public Property FormTitle As String
+    Public Property SelectSql As String
+    Public Property CreatedDate As String
+    Public Property NeedAutotransfer As String
+    Public Property AutotransferPlanId As String
+    Public Property NeedDialogue As String
+    Public Property DialogueText As String
 End Class
