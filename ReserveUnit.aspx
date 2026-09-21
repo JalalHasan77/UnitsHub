@@ -224,6 +224,70 @@ html, body, form {
             pointer-events: none;
         }
 
+        .grid-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
+        }
+
+        .grid-link {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--brand-1);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .grid-link:hover,
+        .grid-link:focus-visible {
+            color: var(--brand-2);
+            text-decoration: underline;
+            outline: none;
+        }
+
+        .grid-wrap {
+            overflow-x: auto;
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            background: #ffffff;
+        }
+
+        .pay-grid {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .pay-grid th {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-bottom: 1.5px solid var(--border);
+            color: var(--muted);
+            font-weight: 700;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .pay-grid td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink);
+        }
+
+        .pay-grid tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pay-grid .num {
+            text-align: right;
+        }
+
+        .pay-grid .empty {
+            padding: 18px;
+            text-align: center;
+            color: var(--muted);
+        }
+
         .comments-input {
             max-width: 100%;
             min-height: 120px;
@@ -366,6 +430,44 @@ html, body, form {
                     </div>
                 </div>
 
+                <asp:Panel ID="pnlPayments" runat="server" CssClass="form-row">
+                    <asp:Label ID="lblPayments"
+                        runat="server"
+                        Text="Payments:"
+                        CssClass="form-label" />
+                    <div class="form-control">
+                        <div class="grid-toolbar">
+                            <asp:LinkButton ID="lnkLinkPayment"
+                                runat="server"
+                                CssClass="grid-link"
+                                CausesValidation="False">Link a payment</asp:LinkButton>
+                        </div>
+                        <div class="grid-wrap">
+                            <asp:GridView ID="gvPayments"
+                                runat="server"
+                                AutoGenerateColumns="False"
+                                CssClass="pay-grid"
+                                GridLines="None"
+                                CellSpacing="0"
+                                UseAccessibleHeader="True"
+                                EmptyDataText="No payments found."
+                                EmptyDataRowStyle-CssClass="empty">
+                                <Columns>
+                                    <asp:BoundField DataField="SEQ" HeaderText="Seq" />
+                                    <asp:BoundField DataField="DESCRIPTION" HeaderText="Description" />
+                                    <asp:BoundField DataField="AMOUNT" HeaderText="Amount"
+                                        DataFormatString="{0:N3}" HtmlEncode="False"
+                                        HeaderStyle-CssClass="num" ItemStyle-CssClass="num" />
+                                    <asp:BoundField DataField="DatePaid" HeaderText="Date Paid"
+                                        DataFormatString="{0:yyyy-MM-dd}" HtmlEncode="False" />
+                                    <asp:BoundField DataField="TimePaid" HeaderText="Time Paid" />
+                                    <asp:BoundField DataField="Narrative" HeaderText="Narrative" />
+                                </Columns>
+                            </asp:GridView>
+                        </div>
+                    </div>
+                </asp:Panel>
+
                 <div class="form-row">
                     <asp:Label ID="lblDate"
                         runat="server"
@@ -376,7 +478,6 @@ html, body, form {
                             <asp:TextBox ID="txtReservationDate"
                                 runat="server"
                                 CssClass="txt-input"
-                                readonly="true"
                                 autocomplete="off"
                                 placeholder="yyyy-mm-dd" />
                             <button type="button" id="btnReservationDate" class="date-picker-btn"
