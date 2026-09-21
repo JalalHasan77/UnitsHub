@@ -48,6 +48,31 @@ Public Module PF
         Return dt
     End Function
 
+    Public Sub PopulateDropDownList(ByRef ddl As DropDownList,
+                                     sql As Object,
+                                     DataConnection As String,
+                                     Optional firstItemIs As String = "",
+                                     Optional SelectedItemIs As String = "")
+
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(DataConnection, sql)
+
+        For Each DR As DataRow In DT.Rows
+            Dim I As New ListItem
+            I.Text = DR(0).ToString
+            I.Value = DR(1).ToString
+            ddl.Items.Add(I)
+        Next
+
+        If firstItemIs <> "" Then
+            Dim I As New ListItem
+            I.Text = firstItemIs
+            I.Value = "##"
+            ddl.Items.Insert(0, I)
+        End If
+    End Sub
+
+
 
     ''' <summary>
     ''' Returns every column's header text for the GridView, regardless of whether

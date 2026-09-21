@@ -17,6 +17,7 @@ Partial Class SelectOneItemFromListMultiColumns
     Private Const ViewStateEditableMaskKey As String = "SelectOneItemFromListMultiColumns_EditableColumnsMask"
     Private Const ViewStateColumnsWidthsKey As String = "SelectOneItemFromListMultiColumns_ColumnsWidths"
     Private Const ViewStateHoverableListKey As String = "SelectOneItemFromListMultiColumns_HoverableList"
+    Private Const ViewStateCheckedSqlKey As String = "SelectOneItemFromListMultiColumns_CheckedItemsSQL"
 
     Private Property SqlText As String
         Get
@@ -24,6 +25,15 @@ Partial Class SelectOneItemFromListMultiColumns
         End Get
         Set(value As String)
             ViewState(ViewStateSqlTextKey) = value
+        End Set
+    End Property
+
+    Private Property CheckedItemsSqlText As String
+        Get
+            Return Convert.ToString(ViewState(ViewStateCheckedSqlKey))
+        End Get
+        Set(value As String)
+            ViewState(ViewStateCheckedSqlKey) = value
         End Set
     End Property
 
@@ -87,6 +97,7 @@ Partial Class SelectOneItemFromListMultiColumns
 
         If ListParameters IsNot Nothing Then
             SqlText = If(ListParameters.ItemsSQL, String.Empty)
+            CheckedItemsSqlText = If(ListParameters.CheckedItemsSQL, String.Empty)
             Label1.Text = If(ListParameters.FormTitle, String.Empty)
             HideColumnsMask = ListParameters.ColumnHideAndShow
             EditableColumnsMask = ListParameters.EditableColumns
@@ -94,6 +105,7 @@ Partial Class SelectOneItemFromListMultiColumns
             HoverableListMode = ListParameters.HoverableList
         Else
             SqlText = String.Empty
+            CheckedItemsSqlText = String.Empty
             Label1.Text = String.Empty
             HideColumnsMask = String.Empty
             EditableColumnsMask = String.Empty
@@ -108,12 +120,51 @@ Partial Class SelectOneItemFromListMultiColumns
         If String.IsNullOrWhiteSpace(SqlText) Then
             dt = New DataTable()
         Else
-            dt = DB.GetDataTable(DB.InfoDB, SqlText)
+            dt = DB.GetDataTable(EBDB_CS, SqlText)
+        End If
+
+        ' Only apply the CheckedItemsSQL-derived selection on the initial (non-postback)
+        ' load. On postback, the radio state already posted by the browser is
+        ' authoritative - otherwise the original item would keep re-appearing
+        ' selected after the user picked a different one.
+        If Not Page.IsPostBack AndAlso String.IsNullOrEmpty(selectedId) Then
+            selectedId = GetCheckedIdFromSql()
         End If
 
         Session(SessionDataKey) = dt
         litItemsTable.Text = BuildItemsTableHtml(dt, selectedId)
     End Sub
+
+    ''' <summary>
+    ''' Runs CheckedItemsSQL (if any) and returns the ID column (first column) of the
+    ''' first returned row, so that row renders pre-selected. This is a single-select
+    ''' list, so only one ID can be pre-selected.
+    ''' </summary>
+    Private Function GetCheckedIdFromSql() As String
+        If String.IsNullOrWhiteSpace(CheckedItemsSqlText) Then
+            Return String.Empty
+        End If
+
+        Try
+            Dim checkedDt As DataTable = DB.GetDataTable(EBDB_CS, CheckedItemsSqlText)
+
+            If checkedDt Is Nothing OrElse checkedDt.Columns.Count = 0 Then
+                Return String.Empty
+            End If
+
+            For Each dr As DataRow In checkedDt.Rows
+                Dim idValue As String = Convert.ToString(dr(0)).Trim()
+                If Not String.IsNullOrEmpty(idValue) Then
+                    Return idValue
+                End If
+            Next
+        Catch
+            ' A bad CheckedItemsSQL shouldn't take down the whole page - just skip
+            ' pre-selecting anything.
+        End Try
+
+        Return String.Empty
+    End Function
 
     Private Function BuildItemsTableHtml(ByVal dt As DataTable, ByVal selectedId As String) As String
         Dim html As New StringBuilder()
@@ -147,7 +198,7 @@ Partial Class SelectOneItemFromListMultiColumns
                 Dim originalIdValue As String = String.Empty
 
                 If dt.Columns.Count > 0 Then
-                    originalIdValue = Convert.ToString(dr(0))
+                    originalIdValue = Convert.ToString(dr(0)).Trim()
                 End If
 
                 Dim isSelected As Boolean = String.Equals(selectedId, originalIdValue, StringComparison.OrdinalIgnoreCase)
@@ -432,7 +483,7 @@ Partial Class SelectOneItemFromListMultiColumns
 
         For rowIndex As Integer = 0 To dt.Rows.Count - 1
             Dim dr As DataRow = dt.Rows(rowIndex)
-            Dim originalIdValue As String = Convert.ToString(dr(0))
+            Dim originalIdValue As String = Convert.ToString(dr(0)).Trim()
 
             If Not String.Equals(selectedId, originalIdValue, StringComparison.OrdinalIgnoreCase) Then
                 Continue For
@@ -460,17 +511,21 @@ Partial Class SelectOneItemFromListMultiColumns
             If String.IsNullOrWhiteSpace(SqlText) Then
                 dt = New DataTable()
             Else
-                dt = DB.GetDataTable(DB.InfoDB, SqlText)
+                dt = DB.GetDataTable(EBDB_CS, SqlText)
             End If
         End If
 
         Dim selectedItems As List(Of Dictionary(Of String, Object)) = BuildSelectedItemsPayload(dt, selectedId)
 
+        ' Use the key the opener passed in (?vpKey=...) so the opener can read the
+        ' result with the same key it registered the popup with.
+        Dim returnKey As String = VendorPopupHelper.GetPopupReturnKey(Me, "SelectedItems")
+
         VendorPopupHelper.RegisterPopupSelectionAndClose(
-            page:=Me,
-            returnValue:=selectedItems,
-            startupScriptKey:="SelectedItems",
-            skipPostBack:=False)
+                                    page:=Me,
+                                    returnValue:=selectedItems,
+                                    startupScriptKey:=returnKey,
+                                    skipPostBack:=False)
     End Sub
 
     Protected Sub Button2_Click(ByVal sender As Object, ByVal e As EventArgs) Handles Button2.Click

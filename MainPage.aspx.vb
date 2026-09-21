@@ -109,8 +109,8 @@ Partial Class MainPage
 
         VendorPopupHelper.RegisterVendorPopup(Me,
                                       lnkConfirmation,
-                                      "ConfirmBox.aspx",
-                                      600, 250,
+                                      "ReserveUnit.aspx",
+                                      850, 650,
                                       PopupPlacement.Center,
                                       "",
                                       VendorPopupHelper.PopupDisplayMode.FrameOnly,
@@ -294,22 +294,7 @@ Partial Class MainPage
                                      Optional firstItemIs As String = "",
                                      Optional SelectedItemIs As String = "")
 
-        Dim DT As New Data.DataTable
-        DT = GetDataTable(DataConnection, sql)
-
-        For Each DR As DataRow In DT.Rows
-            Dim I As New ListItem
-            I.Text = DR(0).ToString
-            I.Value = DR(1).ToString
-            ddl.Items.Add(I)
-        Next
-
-        If firstItemIs <> "" Then
-            Dim I As New ListItem
-            I.Text = firstItemIs
-            I.Value = "##"
-            ddl.Items.Insert(0, I)
-        End If
+        PF.PopulateDropDownList(ddl, sql, DataConnection, firstItemIs, SelectedItemIs)
     End Sub
 
     Public Function AnalyzeTable(dt As DataTable) As List(Of ColumnStatistics)
@@ -1644,24 +1629,29 @@ Partial Class MainPage
             l.Attributes.Add("StateId", oneAction.StateId)
             l.Attributes.Add("NodeID", NodeId)
 
-            If oneAction.ProjectId = "001" And oneAction.ActionId = "00001" And oneAction.StateId = "0000" Then
-                Dim A = oneAction.ConfirmationText
-                VendorPopupHelper.RegisterVendorPopup(Me,
-                                      l,
-                                      "ConfirmBox.aspx?Message=" & encryNdecry.Encrypt(oneAction.ConfirmationText),
-                                      600, 250,
-                                      PopupPlacement.Center,
-                                      "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      returnKey:=ConfirmationPopupReturnKey)
-            End If
+            If oneAction.ConfirmationText.ToString <> "" Then
 
-            'l.CommandName = "ExecuteAction"
-            'l.CommandArgument = oneAction.CommandArgument & ActionCommandArgSeparator &
-            '                     oneAction.ActionId & ActionCommandArgSeparator &
-            '                     NodeId & ActionCommandArgSeparator &
-            '                     oneAction.StateId
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                          l,
+                                          "ConfirmBox.aspx?Message=" & encryNdecry.Encrypt(oneAction.ConfirmationText),
+                                          600, 250,
+                                          PopupPlacement.Center,
+                                          "",
+                                          VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                          returnKey:=ConfirmationPopupReturnKey)
+            ElseIf oneAction.NeedDialogue = "1" And oneAction.DialogueText <> "" Then
+                VendorPopupHelper.RegisterVendorPopup(Me,
+                                          l,
+                                          oneAction.DialogueText,
+                                          1000, 600,
+                                          PopupPlacement.Center,
+                                          "",
+                                          VendorPopupHelper.PopupDisplayMode.Standard,
+                                          returnKey:=ConfirmationPopupReturnKey)
+
+            End If
         End If
+
     End Sub
 
     ''' <summary>

@@ -1,4 +1,4 @@
-<%@ Page Language="VB" AutoEventWireup="true" CodeFile="SelectOneItemFromListMultiColumns.aspx.vb" Inherits="SelectOneItemFromListMultiColumns" %>
+<%@ Page Language="VB" AutoEventWireup="false" CodeFile="SelectOneItemFromListMultiColumns.aspx.vb" Inherits="SelectOneItemFromListMultiColumns" %>
 
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -93,14 +93,28 @@
             vertical-align: middle;
             word-break: break-word;
             background: #ffffff;
+            transition: background-color 0.12s ease;
         }
 
+        /* Alternating rows: applied by JS to every 2nd VISIBLE row (see filterItems),
+           so the striping stays even while the search box is hiding rows. */
+        .items-table tbody tr.alt-row td {
+            background: #f1f5f9;
+        }
+
+        /* Hover: must come after .alt-row so it overrides the stripe colour. */
         .items-table tbody tr:hover td {
-            background: #eef4ff;
+            background: #dbe7fb;
+            cursor: pointer;
         }
 
+        /* Selected: stronger than hover/stripes so it always stands out. */
         .items-table tbody tr.selected-row td {
-            background: #dbeafe;
+            background: #bfdbfe;
+        }
+
+        .items-table tbody tr.selected-row:hover td {
+            background: #a8cdfc;
         }
 
         .items-selector,
@@ -303,6 +317,12 @@
                 var searchText = getRowSearchText(row);
                 var isMatch = keyword === '' || searchText.indexOf(keyword) > -1;
                 row.style.display = isMatch ? '' : 'none';
+
+                if (isMatch && visibleCount % 2 === 1) {
+                    row.classList.add('alt-row');
+                } else {
+                    row.classList.remove('alt-row');
+                }
 
                 var cells = row.querySelectorAll('td[data-original-text]');
                 for (var c = 0; c < cells.length; c++) {
