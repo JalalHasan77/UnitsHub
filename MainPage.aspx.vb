@@ -1281,15 +1281,17 @@ Partial Class MainPage
         ' (btnConfirmAction) that actually performs the change. See
         ' ShowConfirmationThenApply/btnConfirmAction_Click below.
         Select Case DT.Rows(0)("ACTION_TYPE").ToString
-            Case "CHANGE"
+            Case "CHANGE", ""
 
                 If String.Equals(PreExecution, "Confirmation", StringComparison.OrdinalIgnoreCase) Then
                     Dim ConfirmationText As String = Convert.ToString(DT.Rows(0)("CONFIRMATION_TEXT"))
                     ShowConfirmationThenApply(NodeId, ToStatusId, ConfirmationText)
                     Exit Sub
+                ElseIf DT.rows(0)("NEED_DIALOGUE") = "1" Then
+
                 End If
 
-                ApplyNodeStatusChange(NodeId, ToStatusId)
+                'ApplyNodeStatusChange(NodeId, ToStatusId)
 
             Case ""
 
@@ -1646,7 +1648,7 @@ Partial Class MainPage
                                           1000, 600,
                                           PopupPlacement.Center,
                                           "",
-                                          VendorPopupHelper.PopupDisplayMode.Standard,
+                                          VendorPopupHelper.PopupDisplayMode.FrameOnly,
                                           returnKey:=ConfirmationPopupReturnKey)
 
             End If

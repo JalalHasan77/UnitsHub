@@ -331,6 +331,7 @@ html, body, form {
                         CssClass="form-label" />
                     <div class="form-control">
                         <asp:TextBox ID="txtCustomerName"
+                            readonly="true"
                             runat="server"
                             CssClass="txt-input"
                             placeholder="Enter real customer name" />
@@ -344,6 +345,7 @@ html, body, form {
                         CssClass="form-label" />
                     <div class="form-control">
                         <asp:TextBox ID="txtCustomerCPR"
+                            readonly="true"
                             runat="server"
                             CssClass="txt-input"
                             placeholder="Enter customer CPR" />

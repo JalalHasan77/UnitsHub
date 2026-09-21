@@ -9,6 +9,7 @@ Partial Class ReserveUnit
 
     Private Sub ReserveUnit_Load(sender As Object, e As EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
+            Dim NeedsPayment As String = "True"
 
             txtReservationDate.Text = Date.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
 
