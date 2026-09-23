@@ -385,7 +385,12 @@ html, body, form {
                         runat="server"
                         Text="Select Existing Customer"
                         CssClass="customer-button" />
-                    <asp:Label ID="lblCID" runat="server" Text="Label"></asp:Label>
+                    <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
+
                 </div>
 
                 <div class="form-row">

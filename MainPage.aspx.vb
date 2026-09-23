@@ -1644,7 +1644,7 @@ Partial Class MainPage
             ElseIf oneAction.NeedDialogue = "1" And oneAction.DialogueText <> "" Then
                 VendorPopupHelper.RegisterVendorPopup(Me,
                                           l,
-                                          oneAction.DialogueText & "?NeedsPayment=True",
+                                          oneAction.DialogueText & "?NeedsPayment=True&ProjectId=" & oneAction.ProjectId & "&ActionId=" & oneAction.ActionId & "&STATEID=" & oneAction.StateId & "&NodeID=" & NodeId,
                                           1000, 600,
                                           PopupPlacement.Center,
                                           "",

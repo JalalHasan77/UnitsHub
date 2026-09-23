@@ -475,21 +475,6 @@
         <table class="MainContainer"  cellpadding="0px" cellspacing="0px" >
             <tr>
                 <td>
-                       <div style="padding:10px">
-                            <table cellpadding="0" class="nestedTable">
-                                <tr>
-                                    <td style="border-width: 0;">
-                                            <asp:Label ID="lblPackageTitle" runat="server" Font-Names="Arial" Font-Size="20pt" ForeColor="Black" Text="[Package Title]" Font-Bold="True"></asp:Label>
-                                        </td>
-                                    </tr>
-                            </table>
-                        </div>
-                
-                
-                </td>
-            </tr>
-            <tr>
-                <td>
                     <div style="padding:10px">
 <table cellpadding="0" class="nestedTable">
                                 <tr>
@@ -500,7 +485,8 @@
                                         <div style="width:100%;">
                                                 <asp:DropDownList ID="DropDownList1" runat="server" CssClass="styled-dropdown" Font-Names="Arial" AutoPostBack="True" AppendDataBoundItems="True">
                                                 </asp:DropDownList>
-                                                <asp:CheckBox ID="chkShowUnlinkedOnly" runat="server" AutoPostBack="True" Font-Names="Arial" Text="Show only Unlinked" />
+                                                <asp:CheckBox ID="chkShowUnlinkedOnly" runat="server" AutoPostBack="True" Checked="False" Font-Names="Arial" Text="Show only Unlinked" />
+                                                <asp:Label ID="lblPROJID" runat="server"></asp:Label>
                                         </div>
                                      </td>
                                                 <td style="width: 100%; border-bottom-style: solid; border-bottom-width: 0px; border-bottom-color: transparent; background-color:transparent">
