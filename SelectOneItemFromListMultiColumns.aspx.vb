@@ -515,6 +515,7 @@ Partial Class SelectOneItemFromListMultiColumns
             End If
         End If
 
+
         Dim selectedItems As List(Of Dictionary(Of String, Object)) = BuildSelectedItemsPayload(dt, selectedId)
 
         ' Use the key the opener passed in (?vpKey=...) so the opener can read the

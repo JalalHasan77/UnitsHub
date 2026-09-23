@@ -28,29 +28,6 @@ Partial Class ReserveUnit
             pnlPayments.Visible = String.Equals(NeedsPayment, "True", StringComparison.OrdinalIgnoreCase)
             BindPayments()
 
-            Dim MemberListParameters As New clsListProperties
-            With MemberListParameters
-                .ItemsSQL = "Select ID, NAME, NATIONALID from UNITSHUB_CONTACTS "
-                .CheckedItemsSQL = ""
-                .FormTitle = "Select Customer"
-                .ColumnHideAndShow = "YNN"
-                .EditableColumns = "NNN"
-                .ColumnsWidth = New Double() {3, 1}
-                .HoverableList = "Y"
-            End With
-            Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
-
-            VendorPopupHelper.RegisterVendorPopup(Me,
-                                                  btnSelectExistingCustomer,
-                                                  "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
-                                                  400,
-                                                  500,
-                                                  PopupPlacement.Center,
-                                                  "Select Adj",
-                                                  VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                                  "SelectedCustomer")
-
-
             VendorPopupHelper.RegisterVendorPopup(Me,
                                       lnkLinkPayment,
                                       "LinkPayment.aspx?ProjectID=" & lblPRJID.Text,
@@ -63,19 +40,77 @@ Partial Class ReserveUnit
 
 
         End If
+
+        Dim MemberListParameters As New clsListProperties
+        With MemberListParameters
+            .ItemsSQL = "Select ID, NAME, NATIONALID from UNITSHUB_CONTACTS "
+            .CheckedItemsSQL = ""
+            .FormTitle = "Select Customer"
+            .ColumnHideAndShow = "YNN"
+            .EditableColumns = "NNN"
+            .ColumnsWidth = New Double() {3, 1}
+            .HoverableList = "Y"
+        End With
+        Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
+
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      btnSelectExistingCustomer,
+                                      "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
+                                      400,
+                                      500,
+                                      PopupPlacement.Center,
+                                      "Select Adj",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      "SelectedCustomer")
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                              btnAddNewCustomer,
+                              "ContactMaintenance.aspx?mode=New&isDialogue=yes",
+                              950,
+                              750,
+                              PopupPlacement.Center,
+                              "Select Adj",
+                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                              "SelectedCustomer")
+
+        UpdateControlsEnabledState()
+
     End Sub
-    Protected Sub btnSelectExistingCustomer_Click(sender As Object, e As EventArgs) Handles btnSelectExistingCustomer.Click
-        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
+
+    ''' <summary>
+    ''' Everything on the form is disabled - except btnAddNewCustomer and
+    ''' btnSelectExistingCustomer, which always stay enabled - until a customer has
+    ''' actually been picked (lblCID.Text is set). Call this again any time lblCID.Text
+    ''' changes, since Load runs before that change and won't see it otherwise.
+    ''' </summary>
+    Private Sub UpdateControlsEnabledState()
+        Dim HasCustomer As Boolean = Not String.IsNullOrEmpty(lblCID.Text)
+
+        txtCustomerName.Enabled = HasCustomer
+        txtCustomerCPR.Enabled = HasCustomer
+        ddlReservedBy.Enabled = HasCustomer
+        lnkLinkPayment.Enabled = HasCustomer
+        gvPayments.Enabled = HasCustomer
+        txtReservationDate.Enabled = HasCustomer
+        btnReservationDate.Disabled = Not HasCustomer   ' HtmlButton uses Disabled, not Enabled
+        txtComments.Enabled = HasCustomer
+        btnSave.Enabled = HasCustomer
+        btnCancel.Enabled = HasCustomer
+    End Sub
+    Protected Sub btnSelectExistingCustomer_Click(sender As Object, e As EventArgs) Handles btnSelectExistingCustomer.Click, btnAddNewCustomer.Click
+        Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
         TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedCustomer"),
                 List(Of Dictionary(Of String, Object)))
 
-        If selectedItems Is Nothing OrElse selectedItems.Count = 0 Then Exit Sub
+        If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub
 
-        Dim row As Dictionary(Of String, Object) = selectedItems(0)
+        Dim row As Dictionary(Of String, Object) = SelectedPayment(0)
         txtCustomerName.Text = Convert.ToString(row("NAME"))
         txtCustomerCPR.Text = Convert.ToString(row("NATIONALID"))
         lblCID.Text = Convert.ToString(row("ID"))
 
+        UpdateControlsEnabledState()
         BindPayments()
     End Sub
     Protected Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
@@ -85,10 +120,16 @@ Partial Class ReserveUnit
         ' Reserved by  : ddlReservedBy.SelectedValue
         ' Date         : txtReservationDate.Text  (yyyy-MM-dd)
         ' Comments     : txtComments.Text
+        '=====================================================================
+        '=====================================================================
+        If lblCID.Text = "" Then
+
+        End If
+
     End Sub
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
-        TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedPayment"),
+        TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedCustomer"),
                 List(Of Dictionary(Of String, Object)))
 
         If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub
@@ -96,29 +137,98 @@ Partial Class ReserveUnit
 
         Dim PaymentPlan As String = getPaymentPlan()
 
-        'needed details ==================================================
-        'Select
-        '    D.PLAN_ID,
-        '    D.DETAIL_ID,
-        '    D.DESCRIPTION,
-        '    D.PERCENT,
-        '    D.AMOUNT,
-        '    CASE WHEN L.DETAIL_ID Is Not NULL THEN 1 ELSE 0 END AS IS_SELECTED
-        'From UNITSHUB_PAYMENTPLANDETAILS D
-        'Left Join UNITSHUB_ACT_PAY_PLN_DETAILS L
-        '       On L.PLAN_ID    = '1'
-        '      And L.DETAIL_ID  = D.DETAIL_ID
-        '      And L.PROJECT_ID = '001'
-        '      And L.STATUS_ID  = '0000'
-        '      And L.ACTION_ID  = '00002'
-        'WHERE D.PLAN_ID = L.PLAN_ID 
-        'ORDER BY D.DETAIL_ID 
+        ' The next payment-plan line item this unit doesn't already have a linked
+        ' (ACTIVE) UNITSHUB_PAYMENTS row for - e.g. if SEQ 1/2 are already linked,
+        ' this is SEQ 3.
+        Dim NextDetail As DataTable = GetNextPlanDetail(PaymentPlan)
+        If NextDetail.Rows.Count = 0 Then Exit Sub   ' every line item is already linked
+        Dim DetailRow As DataRow = NextDetail.Rows(0)
 
+        Dim TransAmount As String = ParseDecimalLenient(Row("Amount")).ToString(CultureInfo.InvariantCulture)
+        Dim DetailPercent As String = ParseDecimalLenient(DetailRow("PERCENT")).ToString(CultureInfo.InvariantCulture)
+        Dim Narrative As String = (Convert.ToString(Row("Comment1")) & " " & Convert.ToString(Row("Comment2"))).Trim()
 
+        Dim InsertSQL As String = ""
+        InsertSQL = InsertSQL + vbCrLf + "INSERT INTO UNITSHUB_PAYMENTS "
+        InsertSQL = InsertSQL + vbCrLf + "    (NODEID, CUSTOMER_ID, PLAN_ID, SEQ, DESCRIPTION, PERCENT, "
+        InsertSQL = InsertSQL + vbCrLf + "     AMOUNT, DATEPAID, NARRATIVE, TRANSACTIONID, ACTIVE,DATECREATED) "
+        InsertSQL = InsertSQL + vbCrLf + "VALUES ( "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & lblPID.Text.Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & lblCID.Text.Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & PaymentPlan.Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(DetailRow("SEQ")).Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(DetailRow("DESCRIPTION")).Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    " & DetailPercent & ", "
+        InsertSQL = InsertSQL + vbCrLf + "    " & TransAmount & ", "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("Date")).Replace("'", "''") & "' , "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & Narrative.Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("TranscationNum")).Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    'Y','" & Now.Date.ToString("yyyy-MM-dd") & "'"
+        InsertSQL = InsertSQL + vbCrLf + ") "
 
+        ' TODO: swap for this app's actual write/execute helper - GetDataTable and
+        ' DB.RetreiveScalarSTRING are read-only, so neither can run an INSERT.
+        DB.ExecuteNonQuery(EBDB, InsertSQL)
 
         BindPayments()
     End Sub
+
+    ''' <summary>
+    ''' The first UNITSHUB_PAYMENTPLANDETAILS line item under PlanId that this unit
+    ''' (lblPID.Text) doesn't already have an ACTIVE UNITSHUB_PAYMENTS row for - i.e.
+    ''' the next installment due. Returns an empty DataTable once every line item has
+    ''' been linked.
+    ''' </summary>
+    Private Function GetNextPlanDetail(PlanId As String) As DataTable
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + "SELECT SEQ, DESCRIPTION, PERCENT FROM ( "
+        SQL = SQL + vbCrLf + "    SELECT D.DETAIL_ID AS SEQ, D.DESCRIPTION, D.PERCENT "
+        SQL = SQL + vbCrLf + "    FROM UNITSHUB_PAYMENTPLANDETAILS D "
+        SQL = SQL + vbCrLf + "    WHERE D.PLAN_ID = '" & PlanId.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "      AND NOT EXISTS ( "
+        SQL = SQL + vbCrLf + "            SELECT 1 FROM UNITSHUB_PAYMENTS P "
+        SQL = SQL + vbCrLf + "            WHERE P.NODEID = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "              AND P.PLAN_ID = D.PLAN_ID "
+        SQL = SQL + vbCrLf + "              AND P.SEQ = D.DETAIL_ID "
+        SQL = SQL + vbCrLf + "              AND P.ACTIVE = 'Y' "
+        SQL = SQL + vbCrLf + "          ) "
+        SQL = SQL + vbCrLf + "    ORDER BY D.DETAIL_ID "
+        SQL = SQL + vbCrLf + ") WHERE ROWNUM = 1 "
+
+        Return GetDataTable(EBDB, SQL)
+    End Function
+
+    ''' <summary>
+    ''' Best-effort numeric parse: strips anything that isn't a digit, a decimal
+    ''' point, or a leading minus sign (a trailing '%', a currency symbol, thousands
+    ''' separators, stray whitespace) before parsing. UNITSHUB_PAYMENTPLANDETAILS.
+    ''' PERCENT is stored/displayed as e.g. "5%", which plain Convert.ToDecimal
+    ''' rejects outright.
+    ''' </summary>
+    Private Function ParseDecimalLenient(value As Object) As Decimal
+        If value Is Nothing OrElse value Is DBNull.Value Then
+            Throw New FormatException("Expected a numeric value but got none (Nothing/DBNull).")
+        End If
+
+        If TypeOf value Is Decimal OrElse TypeOf value Is Double OrElse
+       TypeOf value Is Integer OrElse TypeOf value Is Long Then
+            Return Convert.ToDecimal(value, CultureInfo.InvariantCulture)
+        End If
+
+        Dim Raw As String = Convert.ToString(value).Trim()
+        Dim Cleaned As New System.Text.StringBuilder()
+        For Each Ch As Char In Raw
+            If Char.IsDigit(Ch) OrElse Ch = "."c OrElse (Ch = "-"c AndAlso Cleaned.Length = 0) Then
+                Cleaned.Append(Ch)
+            End If
+        Next
+
+        Dim Result As Decimal
+        If Not Decimal.TryParse(Cleaned.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, Result) Then
+            Throw New FormatException("Could not parse '" & Raw & "' as a number.")
+        End If
+        Return Result
+    End Function
 
     Private Function getPaymentPlan() As String
         Dim SQL As String = ""
@@ -178,4 +288,7 @@ Partial Class ReserveUnit
 
         Return GetDataTable(EBDB, SQL)
     End Function
+    Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
 End Class

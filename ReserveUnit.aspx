@@ -358,18 +358,18 @@ html, body, form {
 </head>
 
 <body>
-    <div class="top-strip">
-        <span>Reserve A Unit</span>
-        <button type="button" class="close-btn" title="Close" aria-label="Close" onclick="closeForm();">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        </button>
-    </div>
-
     <form id="form1" runat="server">
+        <div class="top-strip">
+            <span>Reserve A Unit</span>
+            <asp:ImageButton ID="imgClose"
+                runat="server"
+                CssClass="close-btn"
+                CausesValidation="false"
+                ToolTip="Close"
+                AlternateText="Close"
+                ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='18' y1='6' x2='6' y2='18'/&gt;&lt;line x1='6' y1='6' x2='18' y2='18'/&gt;&lt;/svg&gt;" />
+        </div>
+
         <div class="page-container">
             <div class="reserve-card">
 
@@ -485,7 +485,7 @@ html, body, form {
                                 CssClass="txt-input"
                                 autocomplete="off"
                                 placeholder="yyyy-mm-dd" />
-                            <button type="button" id="btnReservationDate" class="date-picker-btn"
+                            <button type="button" id="btnReservationDate" runat="server" class="date-picker-btn"
                                 title="Pick a date" aria-label="Pick a date">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

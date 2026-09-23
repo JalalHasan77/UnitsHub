@@ -171,6 +171,8 @@ Partial Class LinkPayment
             L.Attributes.Add("TransationNum", RowData("TRANS NUM"))
             L.Attributes.Add("Amount", RowData("Amount"))
             L.Attributes.Add("Date", RowData("Date"))
+            L.Attributes.Add("Comment 1", RowData("Comment 1"))
+            L.Attributes.Add("Comment 2", RowData("Comment 2"))
 
 
         End If
@@ -205,13 +207,20 @@ Partial Class LinkPayment
         '    RowValues(Col.ColumnName) = RowData(Col.ColumnName)
         'Next
         'L.Attributes.Add("TransationNum"
-        Dim TransactionNum As String = CType(sender, LinkButton).Attributes("TransationNum")
-        Dim Amount As String = CType(sender, LinkButton).Attributes("Amount")
-
+        Dim L As LinkButton = CType(sender, LinkButton)
+        Dim TransactionNum As String = L.Attributes("TransationNum")
+        Dim Amount As String = L.Attributes("Amount")
+        Dim _Date As String = L.Attributes("Date")
+        Dim Comment_1 As String = L.Attributes("Comment 1")
+        Dim Comment_2 As String = L.Attributes("Comment 2")
 
         'Dim RowValues As New Dictionary(Of String, Object)
         RowValues.Add("TranscationNum", TransactionNum)
         RowValues.Add("Amount", Amount)
+        RowValues.Add("Date", _Date)
+        RowValues.Add("Comment1", Comment_1)
+        RowValues.Add("Comment2", Comment_2)
+
 
         Dim SelectedItems As New List(Of Dictionary(Of String, Object))
         SelectedItems.Add(RowValues)

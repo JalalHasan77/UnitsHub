@@ -67,13 +67,13 @@ Partial Class ContactMaintenance
     End Sub
 
     Protected Sub btnLoad_Click(sender As Object, e As EventArgs) Handles btnLoad.Click
-        Try
-            LoadContact("000527")
+        'Try
+        LoadContact("000527")
 
-        Catch ex As Exception
-            lblMessage.Text = "An error occurred while loading: " & ex.Message
-            lblMessage.Visible = True
-        End Try
+        'Catch ex As Exception
+        '    lblMessage.Text = "An error occurred while loading: " & ex.Message
+        '    lblMessage.Visible = True
+        'End Try
     End Sub
 
     ''' <summary>
@@ -176,6 +176,12 @@ Partial Class ContactMaintenance
         lblMessage.Visible = False
     End Sub
 
+    Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+
+    End Sub
+
     Protected Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
         Try
             If Not Page.IsValid Then
@@ -186,6 +192,30 @@ Partial Class ContactMaintenance
 
             lblMessage.Text = "Contact details saved successfully."
             lblMessage.Visible = True
+
+            If lblIsDialogue.Text <> "yes" Then Exit Sub
+
+
+            'Dim RowValues As New Dictionary(Of String, Object)
+            Dim SelectedCustomer As New Dictionary(Of String, Object)
+            SelectedCustomer.Add("NAME", txtFullName.Text)
+            SelectedCustomer.Add("NATIONALID", txtNationalID.Text)
+            SelectedCustomer.Add("ID", lblID.Text)
+
+
+
+            Dim SelectedItems As New List(Of Dictionary(Of String, Object))
+            SelectedItems.Add(SelectedCustomer)
+
+            ' Use the key the opener passed in (?vpKey=...) so the opener can read the
+            ' result back with the same key it registered the popup with.
+            Dim ReturnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
+
+            VendorPopupHelper.RegisterPopupSelectionAndClose(
+                                    page:=Me,
+                                    returnValue:=SelectedItems,
+                                    startupScriptKey:=ReturnKey,
+                                    skipPostBack:=False)
 
         Catch ex As Exception
             lblMessage.Text = "An error occurred while saving: " & ex.Message
@@ -212,42 +242,82 @@ Partial Class ContactMaintenance
     ''' SqlText(...) for them instead of SqlDate(...).
     ''' </remarks>
     Private Sub SaveContact()
-        ' 1. Generate the new zero-padded contact ID.
-        Dim nextIdDT As New DataTable
-        nextIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ID)), 0) + 1, 6, '0') AS NEXT_ID FROM UNITSHUB_CONTACTS")
-        Dim contactId As String = nextIdDT.Rows(0)("NEXT_ID").ToString()
+        If String.Equals(lblMode.Text, "New", StringComparison.OrdinalIgnoreCase) Then
 
-        ' 2. Insert the contact row.
-        Dim insertSql As String =
-            "INSERT INTO UNITSHUB_CONTACTS (ID, NAME, ARABICNAME, GENDER, DOB, AGE, NATIONALID, NATIONALITY, " &
-            "MOBILE, BUSINESSPHONE, HOMEPHONE, FAX, POBOX, EMAIL, PASSPORTNO, PASSPORTISSUE, PASSPORTEXPIRY, " &
-            "COUNTRY, CITY, BLOCK, ROAD, BUILDING, FLAT) VALUES (" &
-            "'" & contactId & "', " &
-            SqlText(txtFullName.Text) & ", " &
-            SqlText(txtArabicName.Text) & ", " &
-            SqlText(ddlGender.SelectedValue) & ", " &
-            SqlDate(txtDOB.Text) & ", " &
-            SqlNumber(txtAge.Text) & ", " &
-            SqlText(txtNationalID.Text) & ", " &
-            SqlText(ddlNationality.SelectedValue) & ", " &
-            SqlText(txtMobile1.Text) & ", " &
-            SqlText(txtMobile2.Text) & ", " &
-            SqlText(txtHomePhone.Text) & ", " &
-            SqlText(txtFax.Text) & ", " &
-            SqlText(txtPOBox.Text) & ", " &
-            SqlText(txtEmail.Text) & ", " &
-            SqlText(txtPassportNo.Text) & ", " &
-            SqlDate(txtIssueDate.Text) & ", " &
-            SqlDate(txtExpiryDate.Text) & ", " &
-            SqlText(ddlCountry.SelectedValue) & ", " &
-            SqlText(txtCity.Text) & ", " &
-            SqlText(txtBlock.Text) & ", " &
-            SqlText(txtRoad.Text) & ", " &
-            SqlText(txtBuilding.Text) & ", " &
-            SqlText(txtFlat.Text) &
-            ")"
+            ' 1. Generate the new zero-padded contact ID.
+            Dim nextIdDT As New DataTable
+            nextIdDT = GetDataTable(EBDB, "SELECT LPAD(NVL(MAX(TO_NUMBER(ID)), 0) + 1, 6, '0') AS NEXT_ID FROM UNITSHUB_CONTACTS")
+            Dim contactId As String = nextIdDT.Rows(0)("NEXT_ID").ToString()
 
-        ExecuteNonQuery(EBDB, insertSql)
+            ' 2. Insert the contact row.
+            Dim insertSql As String =
+                "INSERT INTO UNITSHUB_CONTACTS (ID, NAME, ARABICNAME, GENDER, DOB, AGE, NATIONALID, NATIONALITY, " &
+                "MOBILE, BUSINESSPHONE, HOMEPHONE, FAX, POBOX, EMAIL, PASSPORTNO, PASSPORTISSUE, PASSPORTEXPIRY, " &
+                "COUNTRY, CITY, BLOCK, ROAD, BUILDING, FLAT) VALUES (" &
+                "'" & contactId & "', " &
+                SqlText(txtFullName.Text) & ", " &
+                SqlText(txtArabicName.Text) & ", " &
+                SqlText(ddlGender.SelectedValue) & ", " &
+                SqlDate(txtDOB.Text) & ", " &
+                SqlNumber(txtAge.Text) & ", " &
+                SqlText(txtNationalID.Text) & ", " &
+                SqlText(ddlNationality.SelectedValue) & ", " &
+                SqlText(txtMobile1.Text) & ", " &
+                SqlText(txtMobile2.Text) & ", " &
+                SqlText(txtHomePhone.Text) & ", " &
+                SqlText(txtFax.Text) & ", " &
+                SqlText(txtPOBox.Text) & ", " &
+                SqlText(txtEmail.Text) & ", " &
+                SqlText(txtPassportNo.Text) & ", " &
+                SqlDate(txtIssueDate.Text) & ", " &
+                SqlDate(txtExpiryDate.Text) & ", " &
+                SqlText(ddlCountry.SelectedValue) & ", " &
+                SqlText(txtCity.Text) & ", " &
+                SqlText(txtBlock.Text) & ", " &
+                SqlText(txtRoad.Text) & ", " &
+                SqlText(txtBuilding.Text) & ", " &
+                SqlText(txtFlat.Text) &
+                ")"
+
+            ExecuteNonQuery(EBDB, insertSql)
+
+            ' 3. Switch this form over to editing the row that was just created, so a
+            ' second Save (without reloading the page) updates it instead of inserting
+            ' a duplicate.
+            lblID.Text = contactId
+            lblMode.Text = "Edit"
+
+        Else
+            ' Edit mode: update the existing row identified by lblID.Text instead of
+            ' generating a new ID / inserting a new row.
+            Dim updateSql As String =
+                "UPDATE UNITSHUB_CONTACTS SET " &
+                "NAME = " & SqlText(txtFullName.Text) & ", " &
+                "ARABICNAME = " & SqlText(txtArabicName.Text) & ", " &
+                "GENDER = " & SqlText(ddlGender.SelectedValue) & ", " &
+                "DOB = " & SqlDate(txtDOB.Text) & ", " &
+                "AGE = " & SqlNumber(txtAge.Text) & ", " &
+                "NATIONALID = " & SqlText(txtNationalID.Text) & ", " &
+                "NATIONALITY = " & SqlText(ddlNationality.SelectedValue) & ", " &
+                "MOBILE = " & SqlText(txtMobile1.Text) & ", " &
+                "BUSINESSPHONE = " & SqlText(txtMobile2.Text) & ", " &
+                "HOMEPHONE = " & SqlText(txtHomePhone.Text) & ", " &
+                "FAX = " & SqlText(txtFax.Text) & ", " &
+                "POBOX = " & SqlText(txtPOBox.Text) & ", " &
+                "EMAIL = " & SqlText(txtEmail.Text) & ", " &
+                "PASSPORTNO = " & SqlText(txtPassportNo.Text) & ", " &
+                "PASSPORTISSUE = " & SqlDate(txtIssueDate.Text) & ", " &
+                "PASSPORTEXPIRY = " & SqlDate(txtExpiryDate.Text) & ", " &
+                "COUNTRY = " & SqlText(ddlCountry.SelectedValue) & ", " &
+                "CITY = " & SqlText(txtCity.Text) & ", " &
+                "BLOCK = " & SqlText(txtBlock.Text) & ", " &
+                "ROAD = " & SqlText(txtRoad.Text) & ", " &
+                "BUILDING = " & SqlText(txtBuilding.Text) & ", " &
+                "FLAT = " & SqlText(txtFlat.Text) & " " &
+                "WHERE ID = '" & lblID.Text.Replace("'", "''") & "'"
+
+            ExecuteNonQuery(EBDB, updateSql)
+        End If
     End Sub
 
     ''' <summary>Wraps a string value as a quoted, apostrophe-escaped SQL literal, or NULL when empty.</summary>
@@ -297,6 +367,23 @@ Partial Class ContactMaintenance
             End If
         Else
             txtAge.Text = ""
+        End If
+    End Sub
+
+    Private Sub ContactMaintenance_Load(sender As Object, e As EventArgs) Handles Me.Load
+        If Not Page.IsPostBack Then
+
+            If Not String.IsNullOrEmpty(Request("ID")) Then
+                lblID.Text = Request("ID")
+            End If
+
+            If Not String.IsNullOrEmpty(Request("mode")) Then
+                lblMode.Text = Request("mode")
+            End If
+
+            If Not String.IsNullOrEmpty(Request("isDialogue")) Then
+                lblIsDialogue.Text = Request("isDialogue")
+            End If
         End If
     End Sub
 End Class

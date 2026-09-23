@@ -322,6 +322,9 @@
         }
 
         .top-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             width: 100%;
             margin: 0;
             border: none;
@@ -331,6 +334,23 @@
             font-size: 18px;
             font-weight: 700;
             padding: 14px 20px;
+        }
+
+        .close-btn {
+            width: 28px;
+            height: 28px;
+            padding: 4px;
+            border: none;
+            border-radius: 7px;
+            background: transparent;
+            cursor: pointer;
+            transition: background .15s ease;
+        }
+
+        .close-btn:hover,
+        .close-btn:focus-visible {
+            background: rgba(255, 255, 255, 0.22);
+            outline: none;
         }
 
         
@@ -447,8 +467,20 @@
     </script>
 </head>
 <body>
-    <div class="top-strip">Design Action</div>
     <form id="form1" runat="server">
+        <div class="top-strip">
+            <span>Design Action</span>
+            <asp:Label ID="lblID" runat="server" Text=""></asp:Label>
+            <asp:Label ID="lblMode" runat="server" Text=""></asp:Label>
+                        <asp:Label ID="lblIsDialogue" runat="server" Text=""></asp:Label>
+            <asp:ImageButton ID="imgClose"
+                runat="server"
+                CssClass="close-btn"
+                CausesValidation="false"
+                ToolTip="Close"
+                AlternateText="Close"
+                ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='18' y1='6' x2='6' y2='18'/&gt;&lt;line x1='6' y1='6' x2='18' y2='18'/&gt;&lt;/svg&gt;" />
+        </div>
         
         <table class="MainContainer"  cellpadding="0px" cellspacing="0px" >
             <tr>

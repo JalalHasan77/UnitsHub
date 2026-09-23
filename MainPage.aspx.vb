@@ -1689,7 +1689,7 @@ Partial Class MainPage
 
         Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
             Case "CHANGE"
-                ApplyNodeStatusChange(NodeId, ToStatusId)
+                'ApplyNodeStatusChange(NodeId, ToStatusId)
             Case ""
 
         End Select
