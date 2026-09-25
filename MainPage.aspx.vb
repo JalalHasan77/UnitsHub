@@ -1644,7 +1644,7 @@ Partial Class MainPage
                 VendorPopupHelper.RegisterVendorPopup(Me,
                                           l,
                                           oneAction.DialogueText & "?NeedsPayment=" & oneAction.NeedPayment & "&ProjectId=" & oneAction.ProjectId & "&ActionId=" & oneAction.ActionId & "&STATEID=" & oneAction.StateId & "&NodeID=" & NodeId,
-                                          1000, 600,
+                                          1000, 800,
                                           PopupPlacement.Center,
                                           "",
                                           VendorPopupHelper.PopupDisplayMode.FrameOnly,
