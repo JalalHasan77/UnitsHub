@@ -1669,7 +1669,8 @@ Partial Class MainPage
         Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
         'If returnValue Is Nothing Then Exit Sub
 
-        Dim Row As List(Of Dictionary(Of String, Object)) = CType(returnValue, List(Of Dictionary(Of String, Object)))
+        ' TryCast: Cancel/Close return False instead of a list, and CType would throw on that
+        Dim Row As List(Of Dictionary(Of String, Object)) = TryCast(returnValue, List(Of Dictionary(Of String, Object)))
 
         Dim L As LinkButton
         L = CType(sender, LinkButton)
@@ -1707,10 +1708,24 @@ Partial Class MainPage
                 End Try
                 UpsertCustomerProperty(NodeId, ContactId, ToStatusId, Comments)
 
-                ' Every payment process writes a new history row. If the status did not
-                ' change, FROM_STATUS and TO_STATUS are both the current status.
-                Dim HistoryToStatus As String = If(ChangeStatus, ToStatusId, StateId)
-                InsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, HistoryToStatus, PaymentPlan, ActionId)
+                ' InsertHistory comes back from ReserveUnit: "True" only when a customer or a
+                ' payment was assigned in the form. If the status did not change,
+                ' FROM_STATUS and TO_STATUS are both the current status.
+                Dim InsertHistory As Boolean = False
+                If Row IsNot Nothing AndAlso Row.Count > 0 AndAlso Row(0).ContainsKey("InsertHistory") Then
+                    InsertHistory = (Convert.ToString(Row(0)("InsertHistory")) = "True")
+                End If
+
+                If InsertHistory Then
+                    ' Summary list sent back by ReserveUnit, saved as one text in SUMMARY
+                    Dim Summary As String = ""
+                    If Row IsNot Nothing AndAlso Row.Count > 0 AndAlso Row(0).ContainsKey("Summary") Then
+                        Summary = SummaryToText(Row(0)("Summary"))
+                    End If
+
+                    Dim HistoryToStatus As String = If(ChangeStatus, ToStatusId, StateId)
+                    InsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, HistoryToStatus, PaymentPlan, ActionId, Summary)
+                End If
                 'If DT.Rows(0)("NEED_PAYMENT").ToString = "1" Then
 
                 'End If
@@ -1803,6 +1818,26 @@ Partial Class MainPage
     End Function
 
     ''' <summary>
+    ''' Turns the Summary value returned by ReserveUnit into one line of text,
+    ''' items separated by "; ". Accepts a List(Of String), any other list/array
+    ''' (in case the popup helper serializes it), or a plain string.
+    ''' </summary>
+    Private Function SummaryToText(Value As Object) As String
+        If Value Is Nothing OrElse Value Is DBNull.Value Then Return ""
+        If TypeOf Value Is String Then Return CStr(Value)
+
+        Dim Items As IEnumerable = TryCast(Value, IEnumerable)
+        If Items Is Nothing Then Return Convert.ToString(Value)
+
+        Dim Parts As New List(Of String)
+        For Each Item As Object In Items
+            Dim Text As String = Convert.ToString(Item)
+            If Not String.IsNullOrWhiteSpace(Text) Then Parts.Add(Text.Trim())
+        Next
+        Return String.Join("; ", Parts)
+    End Function
+
+    ''' <summary>
     ''' Inserts a NEW UNITSHUB_UNITSHISTORY row every time it is called (full history
     ''' trail - existing rows are never updated).
     '''   FROM_STATUS      = node status before the action (the StateId the action was clicked from)
@@ -1815,10 +1850,13 @@ Partial Class MainPage
     '''   IMPLEMENTEDBY    = current user ID
     '''   WORKSTATION      = workstation (currently fixed to "S069" - see TODO)
     '''   DATENTIME        = current date/time as a Unix timestamp (seconds, UTC)
+    '''   SUMMARY          = what was assigned in ReserveUnit, e.g.
+    '''                      "Customer 123 is assigned; Payment No. 0000012"
     ''' </summary>
     Private Sub InsertUnitsHistory(ProjectId As String, NodeId As String, ContactId As String,
                                    FromStatus As String, ToStatus As String,
-                                   PaymentPlan As String, ActionId As String)
+                                   PaymentPlan As String, ActionId As String,
+                                   Optional Summary As String = "")
 
 
         If String.IsNullOrWhiteSpace(NodeId) Then Exit Sub
@@ -1846,7 +1884,7 @@ Partial Class MainPage
         Dim SQL As String =
             "INSERT INTO UNITSHUB_UNITSHISTORY " &
             "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, PAYMENT_PLAN, ACTION_ID, " &
-            "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION, DATENTIME) VALUES (" &
+            "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION, DATENTIME, SUMMARY) VALUES (" &
             "'" & safeProjectId & "', " &
             "'" & safeNodeId & "', " &
             "'" & safeContactId & "', " &
@@ -1860,7 +1898,8 @@ Partial Class MainPage
             "'', " &
             "'" & safeUserId & "', " &
             "'" & safeWorkstation & "', " &
-            DateNTime & ")"
+            DateNTime & ", " &
+            "'" & If(Summary, "").Replace("'", "''") & "')"
 
         DB.ExecuteNonQuery(EBDB_CS, SQL)
     End Sub

@@ -29,6 +29,12 @@ Partial Class ReserveUnit
 
             ' Load the unit's customer (CONTACT_ID) from UNITSHUB_CUSTOMERPROPERTIES only
             LoadCustomerFromProperties()
+
+            ' Remember the customer the form opened with, so Save can tell whether a
+            ' different customer was assigned during this visit.
+            ViewState("OriginalCID") = lblCID.Text
+            ViewState("PaymentAssigned") = False
+            ViewState("LinkedPaymentNums") = New List(Of String)
             BindPayments()
         End If
 
@@ -138,10 +144,31 @@ Partial Class ReserveUnit
         Dim ChangeStatus As Boolean = Not String.IsNullOrWhiteSpace(lblCID.Text) AndAlso AreAllRequiredPaymentsLinked()
         SelectedCustomer.Add("ChangeStatus", If(ChangeStatus, "True", "False"))
 
+        ' InsertHistory = True only when something was assigned during this visit:
+        '   - a customer different from the one the form opened with, or
+        '   - at least one payment linked with lnkLinkPayment.
+        ' MainPage.LinkButton3_Command writes the UNITSHUB_UNITSHISTORY row only when True.
+        Dim CustomerAssigned As Boolean = Not String.IsNullOrWhiteSpace(lblCID.Text) AndAlso
+                                          lblCID.Text <> Convert.ToString(ViewState("OriginalCID"))
+        Dim PaymentAssigned As Boolean = (ViewState("PaymentAssigned") IsNot Nothing AndAlso CBool(ViewState("PaymentAssigned")))
+        SelectedCustomer.Add("InsertHistory", If(CustomerAssigned OrElse PaymentAssigned, "True", "False"))
+
+        ' Summary of what was assigned during this visit; MainPage saves it into
+        ' UNITSHUB_UNITSHISTORY.SUMMARY
+        Dim Summary As New List(Of String)
+        If CustomerAssigned Then
+            Summary.Add("Customer " & lblCID.Text & " is assigned")
+        End If
+        Dim LinkedNums As List(Of String) = TryCast(ViewState("LinkedPaymentNums"), List(Of String))
+        If LinkedNums IsNot Nothing Then
+            For Each PaymentNum As String In LinkedNums
+                Summary.Add("Payment No. " & PaymentNum & " is assigned.")
+            Next
+        End If
+        SelectedCustomer.Add("Summary", Summary)
+
         Dim SelectedItems As New List(Of Dictionary(Of String, Object))
         SelectedItems.Add(SelectedCustomer)
-
-
 
         Dim ReturnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
 
@@ -198,6 +225,26 @@ Partial Class ReserveUnit
         Return MissingCount = 0
     End Function
 
+    ''' <summary>
+    ''' PAYMENT_ID of the ACTIVE UNITSHUB_PAYMENTS row just linked for this unit,
+    ''' customer, plan and SEQ (the highest one, in case of older duplicates).
+    ''' </summary>
+    Private Function GetLinkedPaymentId(PlanId As String, Seq As String) As String
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT PAYMENT_ID FROM ( "
+        SQL = SQL + vbCrLf + "     SELECT PAYMENT_ID "
+        SQL = SQL + vbCrLf + "     FROM   UNITSHUB_PAYMENTS "
+        SQL = SQL + vbCrLf + "     WHERE  ACTIVE     = 'Y' "
+        SQL = SQL + vbCrLf + "       AND  NODE_ID    = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "       AND  CONTACT_ID = '" & lblCID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "       AND  PLAN_ID    = '" & If(PlanId, "").Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "       AND  SEQ        = '" & If(Seq, "").Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "     ORDER BY PAYMENT_ID DESC "
+        SQL = SQL + vbCrLf + " ) WHERE ROWNUM = 1 "
+
+        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
+    End Function
+
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
         TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedPayment"),
@@ -246,6 +293,18 @@ Partial Class ReserveUnit
         ' TODO: swap for this app's actual write/execute helper - GetDataTable and
         ' DB.RetreiveScalarSTRING are read-only, so neither can run an INSERT.
         DB.ExecuteNonQuery(EBDB, InsertSQL)
+
+        ' A payment was linked during this visit - MainPage should write a history row
+        ViewState("PaymentAssigned") = True
+
+        ' Remember the PAYMENT_ID the INSERT just generated, for the Summary on Save
+        Dim NewPaymentId As String = GetLinkedPaymentId(PaymentPlan, Convert.ToString(DetailRow("SEQ")))
+        If Not String.IsNullOrEmpty(NewPaymentId) Then
+            Dim Nums As List(Of String) = TryCast(ViewState("LinkedPaymentNums"), List(Of String))
+            If Nums Is Nothing Then Nums = New List(Of String)
+            Nums.Add(NewPaymentId)
+            ViewState("LinkedPaymentNums") = Nums
+        End If
 
         BindPayments()
     End Sub
