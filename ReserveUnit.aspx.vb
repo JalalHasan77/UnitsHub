@@ -26,11 +26,10 @@ Partial Class ReserveUnit
 
             ' NEED_PAYMENT: 1 = payment needed (show the panel), 0 / missing = no payment (hide it)
             pnlPayments.Visible = IsPaymentNeeded(NeedsPayment)
+
+            ' Load the unit's customer (CONTACT_ID) from UNITSHUB_CUSTOMERPROPERTIES only
+            LoadCustomerFromProperties()
             BindPayments()
-
-
-
-
         End If
 
         VendorPopupHelper.RegisterVendorPopup(Me,
@@ -134,6 +133,11 @@ Partial Class ReserveUnit
         SelectedCustomer.Add("CONTACT_ID", lblCID.Text)
         SelectedCustomer.Add("COMMENTS", txtComments.Text)
 
+        ' ChangeStatus = True only when a customer is selected AND every required
+        ' payment-plan line is linked; otherwise False.
+        Dim ChangeStatus As Boolean = Not String.IsNullOrWhiteSpace(lblCID.Text) AndAlso AreAllRequiredPaymentsLinked()
+        SelectedCustomer.Add("ChangeStatus", If(ChangeStatus, "True", "False"))
+
         Dim SelectedItems As New List(Of Dictionary(Of String, Object))
         SelectedItems.Add(SelectedCustomer)
 
@@ -148,6 +152,52 @@ Partial Class ReserveUnit
                                     skipPostBack:=False)
 
     End Sub
+    ''' <summary>
+    ''' True when every required payment line for this action's payment plan is linked:
+    ''' each UNITSHUB_ACT_PAY_PLN_DETAILS row for this PROJECT_ID / STATUS_ID /
+    ''' ACTION_ID / PLAN_ID has an ACTIVE UNITSHUB_PAYMENTS row for this NODE_ID and
+    ''' CONTACT_ID with the same PLAN_ID and SEQ = DETAIL_ID.
+    '''   - No customer selected                  -> False
+    '''   - Action doesn't need payment           -> True
+    '''   - Payment needed but unit has no plan   -> False
+    '''   - Plan has no required lines configured -> True (nothing to link)
+    ''' </summary>
+    Private Function AreAllRequiredPaymentsLinked() As Boolean
+        If String.IsNullOrWhiteSpace(lblCID.Text) Then Return False
+        If Not pnlPayments.Visible Then Return True
+
+        Dim PlanId As String = getPaymentPlan()
+        If String.IsNullOrWhiteSpace(PlanId) Then Return False
+
+        Dim RequiredFilter As String = ""
+        RequiredFilter = RequiredFilter + vbCrLf + " FROM   UNITSHUB_ACT_PAY_PLN_DETAILS L "
+        RequiredFilter = RequiredFilter + vbCrLf + " WHERE  L.PROJECT_ID = '" & lblPRJID.Text.Replace("'", "''") & "' "
+        RequiredFilter = RequiredFilter + vbCrLf + "   AND  L.STATUS_ID  = '" & lblSTATEID.Text.Replace("'", "''") & "' "
+        RequiredFilter = RequiredFilter + vbCrLf + "   AND  L.ACTION_ID  = '" & lblActionID.Text.Replace("'", "''") & "' "
+        RequiredFilter = RequiredFilter + vbCrLf + "   AND  L.PLAN_ID    = '" & PlanId.Replace("'", "''") & "' "
+
+        Dim RequiredCount As Integer = 0
+        Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, "SELECT COUNT(*) " & RequiredFilter), RequiredCount)
+        If RequiredCount = 0 Then Return True
+
+        ' Required lines that have no linked payment yet
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT COUNT(*) " & RequiredFilter
+        SQL = SQL + vbCrLf + "   AND  NOT EXISTS ( "
+        SQL = SQL + vbCrLf + "         SELECT 1 FROM UNITSHUB_PAYMENTS P "
+        SQL = SQL + vbCrLf + "         WHERE  P.ACTIVE     = 'Y' "
+        SQL = SQL + vbCrLf + "           AND  P.NODE_ID    = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "           AND  P.CONTACT_ID = '" & lblCID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "           AND  P.PLAN_ID    = L.PLAN_ID "
+        SQL = SQL + vbCrLf + "           AND  P.SEQ        = L.DETAIL_ID "
+        SQL = SQL + vbCrLf + "       ) "
+
+        Dim MissingCount As Integer = -1
+        If Not Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, SQL), MissingCount) Then Return False
+
+        Return MissingCount = 0
+    End Function
+
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
         TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedPayment"),
@@ -172,8 +222,8 @@ Partial Class ReserveUnit
         Dim InsertSQL As String = ""
         InsertSQL = InsertSQL + vbCrLf + "INSERT INTO UNITSHUB_PAYMENTS "
         InsertSQL = InsertSQL + vbCrLf + "    (NODE_ID, CONTACT_ID, PLAN_ID, SEQ, DESCRIPTION, PERCENT, "
-        InsertSQL = InsertSQL + vbCrLf + "     AMOUNT, DATEPAID, NARRATIVE, TRANSACTIONID, ACTIVE,DATECREATED) "
-        InsertSQL = InsertSQL + vbCrLf + "VALUES ( "
+        InsertSQL = InsertSQL + vbCrLf + "     AMOUNT, DATEPAID, NARRATIVE, TRANSACTIONID, ACTIVE, DATECREATED, PAYMENT_ID) "
+        InsertSQL = InsertSQL + vbCrLf + "SELECT "
         InsertSQL = InsertSQL + vbCrLf + "    '" & lblPID.Text.Replace("'", "''") & "', "
         InsertSQL = InsertSQL + vbCrLf + "    '" & lblCID.Text.Replace("'", "''") & "', "
         InsertSQL = InsertSQL + vbCrLf + "    '" & PaymentPlan.Replace("'", "''") & "', "
@@ -184,8 +234,14 @@ Partial Class ReserveUnit
         InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("Date")).Replace("'", "''") & "' , "
         InsertSQL = InsertSQL + vbCrLf + "    '" & Narrative.Replace("'", "''") & "', "
         InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("TranscationNum")).Replace("'", "''") & "', "
-        InsertSQL = InsertSQL + vbCrLf + "    'Y','" & Now.Date.ToString("yyyy-MM-dd") & "'"
-        InsertSQL = InsertSQL + vbCrLf + ") "
+        InsertSQL = InsertSQL + vbCrLf + "    'Y','" & Now.Date.ToString("yyyy-MM-dd") & "', "
+        ' PAYMENT_ID: next number after the highest existing one, as 7 digits (0000001, 0000002, ...).
+        ' Worked out inside the same INSERT to keep the window for duplicates small; two saves at the
+        ' exact same moment could still get the same number, so keep a UNIQUE constraint on PAYMENT_ID.
+        ' Non-numeric PAYMENT_IDs (if any) are ignored.
+        InsertSQL = InsertSQL + vbCrLf + "    LPAD(TO_CHAR(NVL(MAX(TO_NUMBER(PAYMENT_ID)), 0) + 1), 7, '0') "
+        InsertSQL = InsertSQL + vbCrLf + "FROM UNITSHUB_PAYMENTS "
+        InsertSQL = InsertSQL + vbCrLf + "WHERE REGEXP_LIKE(PAYMENT_ID, '^[0-9]+$') "
 
         ' TODO: swap for this app's actual write/execute helper - GetDataTable and
         ' DB.RetreiveScalarSTRING are read-only, so neither can run an INSERT.
@@ -323,6 +379,40 @@ Partial Class ReserveUnit
 
         Return GetDataTable(EBDB, SQL)
     End Function
+    ''' <summary>
+    ''' Looks for this unit (lblPID.Text) in UNITSHUB_CUSTOMERPROPERTIES. If a row is
+    ''' found, its CONTACT_ID becomes lblCID.Text and the customer's name and CPR are
+    ''' loaded from UNITSHUB_CONTACTS. If the unit has more than one customer row, the
+    ''' most recently created one (highest CREATED_AT) is used.
+    ''' Returns True when a customer was loaded.
+    ''' </summary>
+    Private Function LoadCustomerFromProperties() As Boolean
+        If String.IsNullOrWhiteSpace(lblPID.Text) Then Return False
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT CONTACT_ID FROM ( "
+        SQL = SQL + vbCrLf + "     SELECT CONTACT_ID "
+        SQL = SQL + vbCrLf + "     FROM   UNITSHUB_CUSTOMERPROPERTIES "
+        SQL = SQL + vbCrLf + "     WHERE  NODE_ID = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "       AND  CONTACT_ID IS NOT NULL "
+        SQL = SQL + vbCrLf + "     ORDER BY CREATED_AT DESC "
+        SQL = SQL + vbCrLf + " ) WHERE ROWNUM = 1 "
+
+        Dim ContactId As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
+        If String.IsNullOrEmpty(ContactId) Then Return False
+
+        lblCID.Text = ContactId
+
+        Dim ContactDT As DataTable = GetDataTable(EBDB,
+            "SELECT NAME, NATIONALID FROM UNITSHUB_CONTACTS WHERE ID = '" & ContactId.Replace("'", "''") & "'")
+        If ContactDT IsNot Nothing AndAlso ContactDT.Rows.Count > 0 Then
+            txtCustomerName.Text = Convert.ToString(ContactDT.Rows(0)("NAME"))
+            txtCustomerCPR.Text = Convert.ToString(ContactDT.Rows(0)("NATIONALID"))
+        End If
+
+        Return True
+    End Function
+
     Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub

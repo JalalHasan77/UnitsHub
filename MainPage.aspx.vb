@@ -1689,9 +1689,16 @@ Partial Class MainPage
         Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
         Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
 
+
         Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
             Case "CHANGE"
-                ' ApplyNodeStatusChange(NodeId, ToStatusId)
+                ' ChangeStatus comes back from ReserveUnit: "True" only when every required payment is linked
+                Dim ChangeStatus As Boolean = False
+                If Row IsNot Nothing AndAlso Row.Count > 0 AndAlso Row(0).ContainsKey("ChangeStatus") Then
+                    ChangeStatus = (Convert.ToString(Row(0)("ChangeStatus")) = "True")
+                End If
+
+                If ChangeStatus Then ApplyNodeStatusChange(NodeId, ToStatusId)
                 Try
                     ContactId = Row(0)("CONTACT_ID").ToString 'GetReturnValueField(returnValue, "CONTACT_ID")
                     Comments = Row(0)("COMMENTS").ToString 'GetReturnValueField(returnValue, "COMMENTS")
@@ -1699,7 +1706,11 @@ Partial Class MainPage
 
                 End Try
                 UpsertCustomerProperty(NodeId, ContactId, ToStatusId, Comments)
-                UpsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, ToStatusId, PaymentPlan, ActionId)
+
+                ' Every payment process writes a new history row. If the status did not
+                ' change, FROM_STATUS and TO_STATUS are both the current status.
+                Dim HistoryToStatus As String = If(ChangeStatus, ToStatusId, StateId)
+                InsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, HistoryToStatus, PaymentPlan, ActionId)
                 'If DT.Rows(0)("NEED_PAYMENT").ToString = "1" Then
 
                 'End If
@@ -1792,19 +1803,20 @@ Partial Class MainPage
     End Function
 
     ''' <summary>
-    ''' Inserts or updates a UNITSHUB_UNITSHISTORY row for this action.
-    ''' Match key used for "update": PROJECT_ID + NODE_ID + CONTACT_ID + ACTION_ID.
-    '''   FROM_STATUS      = node status before the change (the StateId the action was clicked from)
-    '''   TO_STATUS        = node status after the change (ToStatusId)
-    '''   PAYMENT_PLAN     = UNITSHUB_ACTIONS.PAYMENT_PLAN_ID
-    '''   PAYMENTS         = comma-separated TRANSACTIONID values from UNITSHUB_PAYMENT for NODE_ID + CONTACT_ID
-    '''   PAYMENTSROWS     = comma-separated PAYMENT_ID values from UNITSHUB_PAYMENT for NODE_ID + CONTACT_ID
+    ''' Inserts a NEW UNITSHUB_UNITSHISTORY row every time it is called (full history
+    ''' trail - existing rows are never updated).
+    '''   FROM_STATUS      = node status before the action (the StateId the action was clicked from)
+    '''   TO_STATUS        = node status after the action (same as FROM_STATUS when the status didn't change)
+    '''   PAYMENT_PLAN     = the unit's payment plan
+    '''   PAYMENTS         = comma-separated TRANSACTIONID values from UNITSHUB_PAYMENTS for NODE_ID + CONTACT_ID
+    '''   PAYMENTSROWS     = comma-separated PAYMENT_ID values from UNITSHUB_PAYMENTS for NODE_ID + CONTACT_ID
     '''   AUTOTRANSFER     = empty for now
     '''   AUTOTRANSFERROWS = empty for now
     '''   IMPLEMENTEDBY    = current user ID
-    '''   WORKSTATION      = client workstation (host name if resolvable, otherwise IP address)
+    '''   WORKSTATION      = workstation (currently fixed to "S069" - see TODO)
+    '''   DATENTIME        = current date/time as a Unix timestamp (seconds, UTC)
     ''' </summary>
-    Private Sub UpsertUnitsHistory(ProjectId As String, NodeId As String, ContactId As String,
+    Private Sub InsertUnitsHistory(ProjectId As String, NodeId As String, ContactId As String,
                                    FromStatus As String, ToStatus As String,
                                    PaymentPlan As String, ActionId As String)
 
@@ -1829,45 +1841,26 @@ Partial Class MainPage
         Dim safePayments As String = payments.Replace("'", "''")
         Dim safePaymentRows As String = paymentRows.Replace("'", "''")
 
-        Dim whereClause As String = " WHERE PROJECT_ID = '" & safeProjectId & "'" &
-                                    " AND NODE_ID = '" & safeNodeId & "'" &
-                                    " AND CONTACT_ID = '" & safeContactId & "'" &
-                                    " AND ACTION_ID = '" & safeActionId & "'"
+        Dim DateNTime As String = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
 
-        Dim existingCount As Integer = 0
-        Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, "SELECT COUNT(*) FROM UNITSHUB_UNITSHISTORY" & whereClause), existingCount)
-
-        Dim SQL As String
-        If existingCount > 0 Then
-            SQL = "UPDATE UNITSHUB_UNITSHISTORY SET " &
-                  "FROM_STATUS = '" & safeFromStatus & "', " &
-                  "TO_STATUS = '" & safeToStatus & "', " &
-                  "PAYMENT_PLAN = '" & safePaymentPlan & "', " &
-                  "PAYMENTS = '" & safePayments & "', " &
-                  "PAYMENTSROWS = '" & safePaymentRows & "', " &
-                  "AUTOTRANSFER = '', " &
-                  "AUTOTRANSFERROWS = '', " &
-                  "IMPLEMENTEDBY = '" & safeUserId & "', " &
-                  "WORKSTATION = '" & safeWorkstation & "'" &
-                  whereClause
-        Else
-            SQL = "INSERT INTO UNITSHUB_UNITSHISTORY " &
-                  "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, PAYMENT_PLAN, ACTION_ID, " &
-                  "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION) VALUES (" &
-                  "'" & safeProjectId & "', " &
-                  "'" & safeNodeId & "', " &
-                  "'" & safeContactId & "', " &
-                  "'" & safeFromStatus & "', " &
-                  "'" & safeToStatus & "', " &
-                  "'" & safePaymentPlan & "', " &
-                  "'" & safeActionId & "', " &
-                  "'" & safePayments & "', " &
-                  "'" & safePaymentRows & "', " &
-                  "'', " &
-                  "'', " &
-                  "'" & safeUserId & "', " &
-                  "'" & safeWorkstation & "')"
-        End If
+        Dim SQL As String =
+            "INSERT INTO UNITSHUB_UNITSHISTORY " &
+            "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, PAYMENT_PLAN, ACTION_ID, " &
+            "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION, DATENTIME) VALUES (" &
+            "'" & safeProjectId & "', " &
+            "'" & safeNodeId & "', " &
+            "'" & safeContactId & "', " &
+            "'" & safeFromStatus & "', " &
+            "'" & safeToStatus & "', " &
+            "'" & safePaymentPlan & "', " &
+            "'" & safeActionId & "', " &
+            "'" & safePayments & "', " &
+            "'" & safePaymentRows & "', " &
+            "'', " &
+            "'', " &
+            "'" & safeUserId & "', " &
+            "'" & safeWorkstation & "', " &
+            DateNTime & ")"
 
         DB.ExecuteNonQuery(EBDB_CS, SQL)
     End Sub
