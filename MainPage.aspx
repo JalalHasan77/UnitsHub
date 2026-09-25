@@ -807,7 +807,7 @@
                                             <div class="gridview-scroll-top-inner" id="gvScrollTopInner">&nbsp;</div>
                                         </div>
                                         <div class="gridview-scroll-wrapper" id="gvScrollBottom">
-                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS,NodeId">
+                                        <asp:GridView ID="GridView1" runat="server" Width="100%" CellPadding="4" Font-Names="Arial" ForeColor="#333333" DataKeyNames="Reference,STATUS,NodeId,PaymentPlan">
     <AlternatingRowStyle BackColor="White" ForeColor="#284775" HorizontalAlign="Center" />
     <Columns>
         <asp:TemplateField HeaderText="Actions" HeaderStyle-CssClass="actionsHeaderHidden">

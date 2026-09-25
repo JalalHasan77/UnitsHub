@@ -435,7 +435,7 @@ html, body, form {
                     </div>
                 </div>
 
-                <asp:Panel ID="pnlPayments" runat="server" CssClass="form-row">
+                <asp:Panel ID="pnlPayments" runat="server" CssClass="form-row" Visible="False">
                     <asp:Label ID="lblPayments"
                         runat="server"
                         Text="Payments:"
@@ -523,11 +523,10 @@ html, body, form {
                         CssClass="customer-button save-button" />
 
                     <asp:Button ID="btnCancel"
-                        runat="server"
-                        Text="Cancel"
-                        CssClass="customer-button cancel-button"
-                        CausesValidation="false"
-                        OnClientClick="closeForm(); return false;" />
+                            runat="server"
+                            Text="Cancel"
+                            CausesValidation="false"
+                            CssClass="customer-button cancel-button" />
                 </div>
 
             </div>

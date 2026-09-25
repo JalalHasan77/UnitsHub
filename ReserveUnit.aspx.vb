@@ -24,11 +24,16 @@ Partial Class ReserveUnit
 
             txtReservationDate.Text = Date.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
 
-            ' The payments grid only exists (is not rendered) when the action needs payment
-            pnlPayments.Visible = String.Equals(NeedsPayment, "True", StringComparison.OrdinalIgnoreCase)
+            ' NEED_PAYMENT: 1 = payment needed (show the panel), 0 / missing = no payment (hide it)
+            pnlPayments.Visible = IsPaymentNeeded(NeedsPayment)
             BindPayments()
 
-            VendorPopupHelper.RegisterVendorPopup(Me,
+
+
+
+        End If
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
                                       lnkLinkPayment,
                                       "LinkPayment.aspx?ProjectID=" & lblPRJID.Text,
                                       1100,
@@ -38,8 +43,6 @@ Partial Class ReserveUnit
                                       VendorPopupHelper.PopupDisplayMode.Standard,
                                       "SelectedPayment")
 
-
-        End If
 
         Dim MemberListParameters As New clsListProperties
         With MemberListParameters
@@ -122,14 +125,32 @@ Partial Class ReserveUnit
         ' Comments     : txtComments.Text
         '=====================================================================
         '=====================================================================
-        If lblCID.Text = "" Then
+        ' Use the key the opener passed in (?vpKey=...) so the opener can read the
+        ' result back with the same key it registered the popup with.
+        'Dim RowValues As New Dictionary(Of String, Object)
+        Dim SelectedCustomer As New Dictionary(Of String, Object)
+        'SelectedCustomer.Add("NAME", "Roqaya and Elmeera")
+        'SelectedCustomer.Add("NATIONALID", "770110266")
+        SelectedCustomer.Add("CONTACT_ID", lblCID.Text)
+        SelectedCustomer.Add("COMMENTS", txtComments.Text)
 
-        End If
+        Dim SelectedItems As New List(Of Dictionary(Of String, Object))
+        SelectedItems.Add(SelectedCustomer)
+
+
+
+        Dim ReturnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
+
+        VendorPopupHelper.RegisterPopupSelectionAndClose(
+                                    page:=Me,
+                                    returnValue:=SelectedItems,
+                                    startupScriptKey:=ReturnKey,
+                                    skipPostBack:=False)
 
     End Sub
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
-        TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedCustomer"),
+        TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedPayment"),
                 List(Of Dictionary(Of String, Object)))
 
         If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub
@@ -150,7 +171,7 @@ Partial Class ReserveUnit
 
         Dim InsertSQL As String = ""
         InsertSQL = InsertSQL + vbCrLf + "INSERT INTO UNITSHUB_PAYMENTS "
-        InsertSQL = InsertSQL + vbCrLf + "    (NODEID, CUSTOMER_ID, PLAN_ID, SEQ, DESCRIPTION, PERCENT, "
+        InsertSQL = InsertSQL + vbCrLf + "    (NODE_ID, CONTACT_ID, PLAN_ID, SEQ, DESCRIPTION, PERCENT, "
         InsertSQL = InsertSQL + vbCrLf + "     AMOUNT, DATEPAID, NARRATIVE, TRANSACTIONID, ACTIVE,DATECREATED) "
         InsertSQL = InsertSQL + vbCrLf + "VALUES ( "
         InsertSQL = InsertSQL + vbCrLf + "    '" & lblPID.Text.Replace("'", "''") & "', "
@@ -187,7 +208,7 @@ Partial Class ReserveUnit
         SQL = SQL + vbCrLf + "    WHERE D.PLAN_ID = '" & PlanId.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "      AND NOT EXISTS ( "
         SQL = SQL + vbCrLf + "            SELECT 1 FROM UNITSHUB_PAYMENTS P "
-        SQL = SQL + vbCrLf + "            WHERE P.NODEID = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "            WHERE P.NODE_ID = '" & lblPID.Text.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "              AND P.PLAN_ID = D.PLAN_ID "
         SQL = SQL + vbCrLf + "              AND P.SEQ = D.DETAIL_ID "
         SQL = SQL + vbCrLf + "              AND P.ACTIVE = 'Y' "
@@ -230,6 +251,19 @@ Partial Class ReserveUnit
         Return Result
     End Function
 
+    ''' <summary>Interprets the NEED_PAYMENT flag passed in the query string.
+    ''' "1" (or "True"/"Y") means payment is needed; "0", empty or anything else means
+    ''' no payment, so the panel stays hidden.</summary>
+    Private Function IsPaymentNeeded(Value As String) As Boolean
+        If String.IsNullOrWhiteSpace(Value) Then Return False
+        Select Case Value.Trim().ToUpperInvariant()
+            Case "1", "TRUE", "Y", "YES"
+                Return True
+            Case Else
+                Return False
+        End Select
+    End Function
+
     Private Function getPaymentPlan() As String
         Dim SQL As String = ""
         SQL = SQL + vbCrLf + " SELECT NAV.VALUE_TEXT AS PAYMENTPLAN "
@@ -258,7 +292,7 @@ Partial Class ReserveUnit
     End Sub
 
     ''' <summary>
-    ''' UNITSHUB_PAYMENTS rows for this NODEID whose PLAN_ID/SEQ/DESCRIPTION match a
+    ''' UNITSHUB_PAYMENTS rows for this NODE_ID whose PLAN_ID/SEQ/DESCRIPTION match a
     ''' line in this action's payment plan (PLAN_ID from getPaymentPlan()) - the EXISTS
     ''' query combining UNITSHUB_PAYMENTPLANDETAILS / UNITSHUB_ACT_PAY_PLN_DETAILS.
     ''' </summary>
@@ -269,7 +303,8 @@ Partial Class ReserveUnit
         SQL = SQL + vbCrLf + " SELECT P.* "
         SQL = SQL + vbCrLf + " FROM   UNITSHUB_PAYMENTS P "
         SQL = SQL + vbCrLf + " WHERE  P.ACTIVE = 'Y' "
-        SQL = SQL + vbCrLf + "   AND  P.NODEID = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "   AND  P.NODE_ID = '" & lblPID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "   AND  P.CONTACT_ID = '" & lblCID.Text.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "   AND  EXISTS ( "
         SQL = SQL + vbCrLf + "         SELECT 1 "
         SQL = SQL + vbCrLf + "         FROM   UNITSHUB_PAYMENTPLANDETAILS D "
@@ -289,6 +324,9 @@ Partial Class ReserveUnit
         Return GetDataTable(EBDB, SQL)
     End Function
     Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
+    Protected Sub btnCancel_Click(sender As Object, e As EventArgs) Handles btnCancel.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
 End Class

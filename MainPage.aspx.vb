@@ -1287,7 +1287,7 @@ Partial Class MainPage
                     Dim ConfirmationText As String = Convert.ToString(DT.Rows(0)("CONFIRMATION_TEXT"))
                     ShowConfirmationThenApply(NodeId, ToStatusId, ConfirmationText)
                     Exit Sub
-                ElseIf DT.rows(0)("NEED_DIALOGUE") = "1" Then
+                ElseIf DT.Rows(0)("NEED_DIALOGUE") = "1" Then
 
                 End If
 
@@ -1364,21 +1364,18 @@ Partial Class MainPage
     ''' action triggered this.
     ''' </summary>
     Private Sub ApplyNodeStatusChange(NodeId As String, ToStatusId As String)
+
         Dim safeNodeId As String = If(NodeId, "").Replace("'", "''")
         Dim safeToStatusId As String = If(ToStatusId, "").Replace("'", "''")
         Dim safeDisplayOrder As String = If(lblDisplayOrder.Text, "").Replace("'", "''")
 
-        Dim SQL As String = "UPDATE UNITSHUB_NODE_ATTRIBUTE_VALUE " &
-                             "SET VALUE_TEXT = '" & safeToStatusId & "' " &
-                             "WHERE NODE_ID = '" & safeNodeId & "' " &
-                             "  AND DISPLAY_ORDER = '" & CInt(safeDisplayOrder).ToString("000") & "'"
+        Dim SQL As String = " UPDATE UNITSHUB_NODE_ATTRIBUTE_VALUE " &
+                            " SET VALUE_TEXT = '" & safeToStatusId & "' " &
+                            " WHERE NODE_ID = '" & safeNodeId & "' " &
+                            " AND DISPLAY_ORDER = '" & CInt(safeDisplayOrder).ToString("000") & "'"
 
         DB.ExecuteNonQuery(EBDB_CS, SQL)
     End Sub
-
-
-
-
 
 
     Private Function GetActionAndStateForAction(StateID As String, ActionID As String) As String
@@ -1622,6 +1619,7 @@ Partial Class MainPage
             Dim innerGrid As GridView = DirectCast(sender, GridView)
             Dim outerRow As GridViewRow = DirectCast(innerGrid.NamingContainer, GridViewRow)
             Dim NodeId As String = Convert.ToString(GridView1.DataKeys(outerRow.RowIndex)("NodeId"))
+            Dim PaymentPlan As String = Convert.ToString(GridView1.DataKeys(outerRow.RowIndex)("PaymentPlan"))
 
 
             Dim oneAction As WorkflowAction = DirectCast(e.Row.DataItem, WorkflowAction)
@@ -1630,6 +1628,7 @@ Partial Class MainPage
             l.Attributes.Add("ActionId", oneAction.ActionId)
             l.Attributes.Add("StateId", oneAction.StateId)
             l.Attributes.Add("NodeID", NodeId)
+            l.Attributes.Add("PaymentPlan", PaymentPlan)
 
             If oneAction.ConfirmationText.ToString <> "" Then
 
@@ -1644,7 +1643,7 @@ Partial Class MainPage
             ElseIf oneAction.NeedDialogue = "1" And oneAction.DialogueText <> "" Then
                 VendorPopupHelper.RegisterVendorPopup(Me,
                                           l,
-                                          oneAction.DialogueText & "?NeedsPayment=True&ProjectId=" & oneAction.ProjectId & "&ActionId=" & oneAction.ActionId & "&STATEID=" & oneAction.StateId & "&NodeID=" & NodeId,
+                                          oneAction.DialogueText & "?NeedsPayment=" & oneAction.NeedPayment & "&ProjectId=" & oneAction.ProjectId & "&ActionId=" & oneAction.ActionId & "&STATEID=" & oneAction.StateId & "&NodeID=" & NodeId,
                                           1000, 600,
                                           PopupPlacement.Center,
                                           "",
@@ -1667,9 +1666,10 @@ Partial Class MainPage
     ''' </summary>
     Protected Sub LinkButton3_Command(sender As Object, e As EventArgs)
 
-        'Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
+        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
         'If returnValue Is Nothing Then Exit Sub
 
+        Dim Row As List(Of Dictionary(Of String, Object)) = CType(returnValue, List(Of Dictionary(Of String, Object)))
 
         Dim L As LinkButton
         L = CType(sender, LinkButton)
@@ -1678,25 +1678,256 @@ Partial Class MainPage
         Dim ActionId As String = L.Attributes("ActionId")
         Dim StateId As String = L.Attributes("StateId")
         Dim NodeId As String = L.Attributes("NodeId")
+        Dim PaymentPlan As String = L.Attributes("PaymentPlan")
 
         Dim DT As New DataTable
         DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & ProjectId & "' and  STATUS_ID = '" & StateId & "' and ACTION_ID = '" & ActionId & "'")
 
         If DT.Rows.Count = 0 Then Exit Sub
-
+        Dim ContactId As String = ""
+        Dim Comments As String = ""
         Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
         Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
 
         Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
             Case "CHANGE"
-                'ApplyNodeStatusChange(NodeId, ToStatusId)
+                ' ApplyNodeStatusChange(NodeId, ToStatusId)
+                Try
+                    ContactId = Row(0)("CONTACT_ID").ToString 'GetReturnValueField(returnValue, "CONTACT_ID")
+                    Comments = Row(0)("COMMENTS").ToString 'GetReturnValueField(returnValue, "COMMENTS")
+                Catch ex As Exception
+
+                End Try
+                UpsertCustomerProperty(NodeId, ContactId, ToStatusId, Comments)
+                UpsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, ToStatusId, PaymentPlan, ActionId)
+                'If DT.Rows(0)("NEED_PAYMENT").ToString = "1" Then
+
+                'End If
             Case ""
+
 
         End Select
 
         loadData()
 
     End Sub
+
+    ''' <summary>
+    ''' Inserts or updates the UNITSHUB_CUSTOMERPROPERTIES row for (NODE_ID, CONTACT_ID).
+    ''' If a row with that NODE_ID + CONTACT_ID already exists it is updated with the
+    ''' new values; otherwise a new row is inserted.
+    '''   STATUS       = ToStatusId
+    '''   START_DATE   = today's date (yyyy-MM-dd)
+    '''   END_DATE     = empty
+    '''   UNIT_ACCOUNT = empty
+    '''   CREATED_AT   = current date/time as a Unix timestamp (seconds, UTC)
+    ''' </summary>
+    Private Sub UpsertCustomerProperty(NodeId As String, ContactId As String, ToStatusId As String, Comments As String)
+
+        If String.IsNullOrWhiteSpace(NodeId) OrElse String.IsNullOrWhiteSpace(ContactId) Then Exit Sub
+
+        Dim safeNodeId As String = NodeId.Trim().Replace("'", "''")
+        Dim safeContactId As String = ContactId.Trim().Replace("'", "''")
+        Dim safeStatus As String = If(ToStatusId, "").Replace("'", "''")
+        Dim safeComments As String = If(Comments, "").Replace("'", "''")
+
+        Dim startDate As String = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        Dim createdAt As String = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
+
+        Dim whereClause As String = " WHERE NODE_ID = '" & safeNodeId & "' AND CONTACT_ID = '" & safeContactId & "'"
+
+        Dim existingCount As Integer = 0
+        Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, "SELECT COUNT(*) FROM UNITSHUB_CUSTOMERPROPERTIES" & whereClause), existingCount)
+
+        Dim SQL As String
+        If existingCount > 0 Then
+            SQL = "UPDATE UNITSHUB_CUSTOMERPROPERTIES SET " &
+                  "STATUS = '" & safeStatus & "', " &
+                  "START_DATE = '" & startDate & "', " &
+                  "END_DATE = '', " &
+                  "UNIT_ACCOUNT = '', " &
+                  "CREATED_AT = '" & createdAt & "', " &
+                  "COMMENTS = '" & safeComments & "'" &
+                  whereClause
+        Else
+            SQL = "INSERT INTO UNITSHUB_CUSTOMERPROPERTIES " &
+                  "(NODE_ID, CONTACT_ID, STATUS, START_DATE, END_DATE, UNIT_ACCOUNT, CREATED_AT, COMMENTS) VALUES (" &
+                  "'" & safeNodeId & "', " &
+                  "'" & safeContactId & "', " &
+                  "'" & safeStatus & "', " &
+                  "'" & startDate & "', " &
+                  "'', " &
+                  "'', " &
+                  "'" & createdAt & "', " &
+                  "'" & safeComments & "')"
+        End If
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+    ''' <summary>
+    ''' Reads one field (e.g. "CONTACT_ID", "COMMENTS") out of the popup's returnValue.
+    ''' Supports both DataTable layouts:
+    '''   1) a column named after the field (value taken from the first row), or
+    '''   2) Name/Value rows, where Name = the field name.
+    ''' Returns "" if the field isn't found.
+    ''' </summary>
+    Private Function GetReturnValueField(returnValue As Object, FieldName As String) As String
+        Dim dt As DataTable = TryCast(returnValue, DataTable)
+        If dt Is Nothing OrElse dt.Rows.Count = 0 Then Return ""
+
+        If dt.Columns.Contains(FieldName) Then
+            Return Convert.ToString(dt.Rows(0)(FieldName))
+        End If
+
+        If dt.Columns.Contains("Name") AndAlso dt.Columns.Contains("Value") Then
+            For Each row As DataRow In dt.Rows
+                If String.Equals(Convert.ToString(row("Name")).Trim(), FieldName, StringComparison.OrdinalIgnoreCase) Then
+                    Return Convert.ToString(row("Value"))
+                End If
+            Next
+        End If
+
+        Return ""
+    End Function
+
+    ''' <summary>
+    ''' Inserts or updates a UNITSHUB_UNITSHISTORY row for this action.
+    ''' Match key used for "update": PROJECT_ID + NODE_ID + CONTACT_ID + ACTION_ID.
+    '''   FROM_STATUS      = node status before the change (the StateId the action was clicked from)
+    '''   TO_STATUS        = node status after the change (ToStatusId)
+    '''   PAYMENT_PLAN     = UNITSHUB_ACTIONS.PAYMENT_PLAN_ID
+    '''   PAYMENTS         = comma-separated TRANSACTIONID values from UNITSHUB_PAYMENT for NODE_ID + CONTACT_ID
+    '''   PAYMENTSROWS     = comma-separated PAYMENT_ID values from UNITSHUB_PAYMENT for NODE_ID + CONTACT_ID
+    '''   AUTOTRANSFER     = empty for now
+    '''   AUTOTRANSFERROWS = empty for now
+    '''   IMPLEMENTEDBY    = current user ID
+    '''   WORKSTATION      = client workstation (host name if resolvable, otherwise IP address)
+    ''' </summary>
+    Private Sub UpsertUnitsHistory(ProjectId As String, NodeId As String, ContactId As String,
+                                   FromStatus As String, ToStatus As String,
+                                   PaymentPlan As String, ActionId As String)
+
+
+        If String.IsNullOrWhiteSpace(NodeId) Then Exit Sub
+
+        Dim safeProjectId As String = If(ProjectId, "").Trim().Replace("'", "''")
+        Dim safeNodeId As String = NodeId.Trim().Replace("'", "''")
+        Dim safeContactId As String = If(ContactId, "").Trim().Replace("'", "''")
+        Dim safeFromStatus As String = If(FromStatus, "").Replace("'", "''")
+        Dim safeToStatus As String = If(ToStatus, "").Replace("'", "''")
+        Dim safePaymentPlan As String = If(PaymentPlan, "").Replace("'", "''")
+        Dim safeActionId As String = If(ActionId, "").Trim().Replace("'", "''")
+        Dim safeUserId As String = If(GetCurrentUserID(), "").Replace("'", "''")
+        'TODO change Workstation to real station
+        Dim safeWorkstation As String = "S069"
+
+        ' Payments linked to this node + contact
+        Dim payments As String = ""
+        Dim paymentRows As String = ""
+        GetNodeContactPayments(safeNodeId, safeContactId, payments, paymentRows)
+        Dim safePayments As String = payments.Replace("'", "''")
+        Dim safePaymentRows As String = paymentRows.Replace("'", "''")
+
+        Dim whereClause As String = " WHERE PROJECT_ID = '" & safeProjectId & "'" &
+                                    " AND NODE_ID = '" & safeNodeId & "'" &
+                                    " AND CONTACT_ID = '" & safeContactId & "'" &
+                                    " AND ACTION_ID = '" & safeActionId & "'"
+
+        Dim existingCount As Integer = 0
+        Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, "SELECT COUNT(*) FROM UNITSHUB_UNITSHISTORY" & whereClause), existingCount)
+
+        Dim SQL As String
+        If existingCount > 0 Then
+            SQL = "UPDATE UNITSHUB_UNITSHISTORY SET " &
+                  "FROM_STATUS = '" & safeFromStatus & "', " &
+                  "TO_STATUS = '" & safeToStatus & "', " &
+                  "PAYMENT_PLAN = '" & safePaymentPlan & "', " &
+                  "PAYMENTS = '" & safePayments & "', " &
+                  "PAYMENTSROWS = '" & safePaymentRows & "', " &
+                  "AUTOTRANSFER = '', " &
+                  "AUTOTRANSFERROWS = '', " &
+                  "IMPLEMENTEDBY = '" & safeUserId & "', " &
+                  "WORKSTATION = '" & safeWorkstation & "'" &
+                  whereClause
+        Else
+            SQL = "INSERT INTO UNITSHUB_UNITSHISTORY " &
+                  "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, PAYMENT_PLAN, ACTION_ID, " &
+                  "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION) VALUES (" &
+                  "'" & safeProjectId & "', " &
+                  "'" & safeNodeId & "', " &
+                  "'" & safeContactId & "', " &
+                  "'" & safeFromStatus & "', " &
+                  "'" & safeToStatus & "', " &
+                  "'" & safePaymentPlan & "', " &
+                  "'" & safeActionId & "', " &
+                  "'" & safePayments & "', " &
+                  "'" & safePaymentRows & "', " &
+                  "'', " &
+                  "'', " &
+                  "'" & safeUserId & "', " &
+                  "'" & safeWorkstation & "')"
+        End If
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+    ''' <summary>
+    ''' Reads UNITSHUB_PAYMENT for the given NODE_ID + CONTACT_ID and returns the
+    ''' TRANSACTIONID values (payments) and PAYMENT_ID values (paymentRows) as
+    ''' comma-separated lists, in the same order. Both come back "" if there are none.
+    ''' Expects already-escaped (quote-doubled) NodeId/ContactId.
+    ''' </summary>
+    Private Sub GetNodeContactPayments(safeNodeId As String, safeContactId As String,
+                                       ByRef payments As String, ByRef paymentRows As String)
+        payments = ""
+        paymentRows = ""
+        If String.IsNullOrEmpty(safeContactId) Then Exit Sub
+
+        Dim DT As DataTable = GetDataTable(EBDB,
+            "SELECT PAYMENT_ID, TRANSACTIONID FROM UNITSHUB_PAYMENTs " &
+            " WHERE NODE_ID = '" & safeNodeId & "' AND CONTACT_ID = '" & safeContactId & "'" &
+            " ORDER BY PAYMENT_ID")
+        If DT Is Nothing OrElse DT.Rows.Count = 0 Then Exit Sub
+
+        Dim txIds As New List(Of String)
+        Dim payIds As New List(Of String)
+        For Each row As DataRow In DT.Rows
+            txIds.Add(Convert.ToString(row("TRANSACTIONID")))
+            payIds.Add(Convert.ToString(row("PAYMENT_ID")))
+        Next
+
+        payments = String.Join(",", txIds)
+        paymentRows = String.Join(",", payIds)
+    End Sub
+
+    ''' <summary>
+    ''' Best available identification of the user's workstation in a web app.
+    ''' The browser never sends its machine name, so this uses the client IP
+    ''' (honouring X-Forwarded-For if the site sits behind a proxy/load balancer)
+    ''' and tries a reverse-DNS lookup to turn it into a host name. On an internal
+    ''' network with working reverse DNS that gives the PC name; otherwise the IP.
+    ''' </summary>
+    Private Function GetClientWorkstation() As String
+        Dim ip As String = Convert.ToString(Request.ServerVariables("HTTP_X_FORWARDED_FOR"))
+        If Not String.IsNullOrWhiteSpace(ip) Then
+            ip = ip.Split(","c)(0).Trim()
+        Else
+            ip = Convert.ToString(Request.UserHostAddress)
+        End If
+        If String.IsNullOrWhiteSpace(ip) Then Return ""
+
+        Try
+            Dim hostName As String = System.Net.Dns.GetHostEntry(ip).HostName
+            If Not String.IsNullOrWhiteSpace(hostName) AndAlso hostName <> ip Then
+                Return hostName
+            End If
+        Catch
+            ' Reverse DNS not available - fall back to the IP address.
+        End Try
+
+        Return ip
+    End Function
 End Class
 
 Public Class WorkflowAction

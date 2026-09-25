@@ -389,7 +389,7 @@ Partial Class ActionAddEdit
     ''' </summary>
     Private Sub LoadStatuses()
         Dim DT As New Data.DataTable
-        Dim SQL As String = "Select STATE_ID, CASE WHEN SUBTITLE IS NOT NULL OR TRIM(SUBTITLE) <> '' THEN STATUS || ': ' || SUBTITLE ELSE STATUS END AS STATUS from UNITSHUB_PROJECTSTATUS"
+        Dim SQL As String = "Select STATE_ID, CASE WHEN SUBTITLE IS NOT NULL OR TRIM(SUBTITLE) <> '' THEN STATUS || ': ' || SUBTITLE ELSE STATUS END AS STATUS from UNITSHUB_PROJECTSTATUS where PROJECT_ID = '" & lblProjectID.Text & "'"
         DT = GetDataTable(EBDB, SQL)
 
         ddlToStatus.Items.Clear()
