@@ -417,6 +417,18 @@
 
         .plan-chip-remove:hover { opacity: 1; color: #dc2626; }
 
+        /* ---------- AutoTransfer tab: Plan + Group dropdowns side by side ---------- */
+        .ddl-pair {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .ddl-pair .ddl-input {
+            flex: 1 1 240px;
+            max-width: 420px;
+        }
+
         /* ---------- AutoTransfer tab: one card per UNITSHUB_ATP_GROUPS row ---------- */
         .atp-group-block {
             border: 1.5px solid #94a3b8;
@@ -629,11 +641,13 @@
         function toggleAutoTransferVisibility() {
             var chk = document.getElementById('<%= chkNeedAutoTransfer.ClientID %>');
             var ddl = document.getElementById('<%= ddlAutoTransferPlan.ClientID %>');
+            var ddlGroup = document.getElementById('<%= ddlAutoTransferGroup.ClientID %>');
             var groupsRow = document.getElementById('<%= rowAutoTransferGroups.ClientID %>');
 
             if (!chk || !ddl || !groupsRow) { return; }
 
             ddl.disabled = !chk.checked;
+            if (ddlGroup && !chk.checked) { ddlGroup.disabled = true; }
 
             if (!chk.checked) {
                 groupsRow.style.display = 'none';
@@ -939,8 +953,14 @@
                                                                 <div class="form-row" id="rowAutoTransferPlan">
                                                                     <div class="form-label">AutoTransfer Plan</div>
                                                                     <div class="form-control-cell">
-                                                                        <asp:DropDownList ID="ddlAutoTransferPlan" runat="server" CssClass="ddl-input"
-                                                                            AutoPostBack="true" OnSelectedIndexChanged="ddlAutoTransferPlan_SelectedIndexChanged" />
+                                                                        <div class="ddl-pair">
+                                                                            <asp:DropDownList ID="ddlAutoTransferPlan" runat="server" CssClass="ddl-input"
+                                                                                AutoPostBack="true" OnSelectedIndexChanged="ddlAutoTransferPlan_SelectedIndexChanged" />
+                                                                            <asp:DropDownList ID="ddlAutoTransferGroup" runat="server" CssClass="ddl-input"
+                                                                                AutoPostBack="true" OnSelectedIndexChanged="ddlAutoTransferGroup_SelectedIndexChanged">
+                                                                                <asp:ListItem Text="Select Group" Value="" />
+                                                                            </asp:DropDownList>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
 

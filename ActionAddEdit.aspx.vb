@@ -277,6 +277,7 @@ Partial Class ActionAddEdit
     ''' </summary>
     Private Sub UpdateAutoTransferVisibility()
         ddlAutoTransferPlan.Enabled = chkNeedAutoTransfer.Checked
+        ddlAutoTransferGroup.Enabled = chkNeedAutoTransfer.Checked AndAlso Not String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue)
 
         Dim groupsVisible As Boolean = chkNeedAutoTransfer.Checked AndAlso Not String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue)
         rowAutoTransferGroups.Style("display") = If(groupsVisible, "", "none")
@@ -308,6 +309,7 @@ Partial Class ActionAddEdit
     Protected Sub chkNeedAutoTransfer_CheckedChanged(ByVal sender As Object, ByVal e As EventArgs)
         If Not chkNeedAutoTransfer.Checked Then
             ddlAutoTransferPlan.ClearSelection()
+            ResetAutoTransferGroupList()
             rptAutoTransferGroups.DataSource = Nothing
             rptAutoTransferGroups.DataBind()
             lblNoAutoTransferGroups.Visible = False
@@ -317,10 +319,9 @@ Partial Class ActionAddEdit
     End Sub
 
     ''' <summary>
-    ''' Fires when a plan is picked from ddlAutoTransferPlan. Loads that plan's groups (from
-    ''' UNITSHUB_ATP_GROUPS) into rptAutoTransferGroups; each group's own detail lines (from
-    ''' UNITSHUB_ATP_DETAILS) are then bound into that group's nested GridView by
-    ''' rptAutoTransferGroups_ItemDataBound as each group row is bound.
+    ''' Fires when a plan is picked from ddlAutoTransferPlan. Fills ddlAutoTransferGroup with
+    ''' that plan's groups (starting at "Select Group") and clears the grid until a group
+    ''' is picked.
     ''' </summary>
     Protected Sub ddlAutoTransferPlan_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
         LoadAutoTransferGroups()
@@ -328,8 +329,24 @@ Partial Class ActionAddEdit
     End Sub
 
     ''' <summary>
-    ''' Loads UNITSHUB_ATP_GROUPS for the currently selected AutoTransfer plan into
-    ''' rptAutoTransferGroups (one "card" per group, per the Reservation Fees mock-up).
+    ''' Fires when a group is picked from ddlAutoTransferGroup: shows that group's card
+    ''' with its UNITSHUB_ATP_DETAILS lines (or nothing for "Select Group").
+    ''' </summary>
+    Protected Sub ddlAutoTransferGroup_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        BindSelectedAutoTransferGroup()
+        UpdateAutoTransferVisibility()
+    End Sub
+
+    ''' <summary>Empties ddlAutoTransferGroup back to just "Select Group".</summary>
+    Private Sub ResetAutoTransferGroupList()
+        ddlAutoTransferGroup.Items.Clear()
+        ddlAutoTransferGroup.Items.Add(New ListItem("Select Group", ""))
+    End Sub
+
+    ''' <summary>
+    ''' Fills ddlAutoTransferGroup with the UNITSHUB_ATP_GROUPS of the selected AutoTransfer
+    ''' plan ("Select Group" first), then shows the selected group's card - none right after
+    ''' a plan change, since the list starts at "Select Group".
     ''' </summary>
     ''' <remarks>
     ''' UNITSHUB_ATP_GROUPS: PLAN_ID, GROUP_ID, GROUP_TITLE, SORT_ORDER.
@@ -338,6 +355,8 @@ Partial Class ActionAddEdit
     ''' </remarks>
     Private Sub LoadAutoTransferGroups()
         Dim planId As String = ddlAutoTransferPlan.SelectedValue
+
+        ResetAutoTransferGroupList()
 
         If String.IsNullOrEmpty(planId) Then
             rptAutoTransferGroups.DataSource = Nothing
@@ -349,10 +368,36 @@ Partial Class ActionAddEdit
         Dim DT As New Data.DataTable
         DT = GetDataTable(EBDB, "Select GROUP_ID, GROUP_TITLE from UNITSHUB_ATP_GROUPS where PLAN_ID = '" & planId.Replace("'", "''") & "' Order By SORT_ORDER, GROUP_ID")
 
+        If DT IsNot Nothing Then
+            For Each groupRow As Data.DataRow In DT.Rows
+                ddlAutoTransferGroup.Items.Add(New ListItem(groupRow("GROUP_TITLE").ToString(), groupRow("GROUP_ID").ToString()))
+            Next
+        End If
+
+        lblNoAutoTransferGroups.Visible = (DT Is Nothing OrElse DT.Rows.Count = 0)
+
+        BindSelectedAutoTransferGroup()
+    End Sub
+
+    ''' <summary>
+    ''' Binds rptAutoTransferGroups with just the group selected in ddlAutoTransferGroup;
+    ''' its lines are loaded into the card's GridView by rptAutoTransferGroups_ItemDataBound.
+    ''' Nothing is shown while "Select Group" is selected.
+    ''' </summary>
+    Private Sub BindSelectedAutoTransferGroup()
+        Dim groupId As String = ddlAutoTransferGroup.SelectedValue
+
+        If String.IsNullOrEmpty(groupId) OrElse String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue) Then
+            rptAutoTransferGroups.DataSource = Nothing
+            rptAutoTransferGroups.DataBind()
+            Return
+        End If
+
+        Dim DT As New Data.DataTable
+        DT = GetDataTable(EBDB, "Select GROUP_ID, GROUP_TITLE from UNITSHUB_ATP_GROUPS where PLAN_ID = '" & ddlAutoTransferPlan.SelectedValue.Replace("'", "''") & "' and GROUP_ID = '" & groupId.Replace("'", "''") & "'")
+
         rptAutoTransferGroups.DataSource = DT
         rptAutoTransferGroups.DataBind()
-
-        lblNoAutoTransferGroups.Visible = (DT.Rows.Count = 0)
     End Sub
 
     ''' <summary>
@@ -650,6 +695,7 @@ Partial Class ActionAddEdit
             LoadAutoTransferGroups()
         Else
             ddlAutoTransferPlan.ClearSelection()
+            ResetAutoTransferGroupList()
             rptAutoTransferGroups.DataSource = Nothing
             rptAutoTransferGroups.DataBind()
             lblNoAutoTransferGroups.Visible = False
