@@ -328,7 +328,18 @@ Public Module DB
         oda.Fill(dt)
         GetDataTable = dt
     End Function
-
+    ''' <summary>
+    ''' Runs lcSql and returns only the first row, or Nothing if there are no rows.
+    ''' Same style as GetDataTable, but the adapter stops reading after one row.
+    ''' </summary>
+    Public Function GetDataRow(ByVal lcConnection As String, lcSql As String) As Data.DataRow
+        lcSql = lcSql.Replace(";", "")
+        Dim dt As Data.DataTable = New Data.DataTable
+        Dim oda As Data.OleDb.OleDbDataAdapter = New Data.OleDb.OleDbDataAdapter(lcSql, lcConnection)
+        oda.Fill(0, 1, dt)      ' start at row 0, read at most 1 row
+        If dt.Rows.Count = 0 Then Return Nothing
+        GetDataRow = dt.Rows(0)
+    End Function
 
     Property InfoDB As String
         Get

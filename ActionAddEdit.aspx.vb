@@ -30,6 +30,7 @@ Partial Class ActionAddEdit
         Public Property SelectSQL As String
         Public Property NeedAutoTransfer As Boolean
         Public Property AutoTransferPlanId As String
+        Public Property AutoTransferGroupId As String
         Public Property NeedDialogue As Boolean
         Public Property DialogueText As String
     End Class
@@ -693,6 +694,12 @@ Partial Class ActionAddEdit
         If chkNeedAutoTransfer.Checked Then
             SafeSetSelectedValue(ddlAutoTransferPlan, SafeString(row("AUTOTRANSFER_PLAN_ID")))
             LoadAutoTransferGroups()
+
+            ' Re-select the saved group (AUTOTRANSFER_GROUP) and show its card
+            If row.Table.Columns.Contains("AUTOTRANSFER_GROUP") Then
+                SafeSetSelectedValue(ddlAutoTransferGroup, SafeString(row("AUTOTRANSFER_GROUP")))
+                BindSelectedAutoTransferGroup()
+            End If
         Else
             ddlAutoTransferPlan.ClearSelection()
             ResetAutoTransferGroupList()
@@ -765,6 +772,8 @@ Partial Class ActionAddEdit
 
         model.NeedAutoTransfer = chkNeedAutoTransfer.Checked
         model.AutoTransferPlanId = If(model.NeedAutoTransfer AndAlso Not String.IsNullOrEmpty(ddlAutoTransferPlan.SelectedValue), ddlAutoTransferPlan.SelectedValue, Nothing)
+        ' Group only counts when a plan is saved too ("Select Group" = no group)
+        model.AutoTransferGroupId = If(Not String.IsNullOrEmpty(model.AutoTransferPlanId) AndAlso Not String.IsNullOrEmpty(ddlAutoTransferGroup.SelectedValue), ddlAutoTransferGroup.SelectedValue, Nothing)
 
         model.Script = txtScript.Text
         model.PreExecution = rblPreExecution.SelectedValue
@@ -816,7 +825,7 @@ Partial Class ActionAddEdit
         Dim insertActionSql As String =
             "INSERT INTO UNITSHUB_ACTIONS (PROJECT_ID, STATUS_ID, ACTION_ID, IS_ACTIVE, ACTION_TITLE, ACTION_TYPE, " &
             "IMPLEMENTER_TITLE, SHOW_IN_DEFAULT, SHOW_IN_PREVIEW, RECEIVE_PARAMETERS_ENABLED, RECEIVE_PARAMETERS_MODE, " &
-            "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, NEED_DIALOGUE, DIALOGUE_TEXT, " &
+            "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, AUTOTRANSFER_GROUP, NEED_DIALOGUE, DIALOGUE_TEXT, " &
             "TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
             "PARAMETER_TYPE, FORM_TITLE, SELECT_SQL) VALUES (" &
             "'" & lblProjectID.Text.Replace("'", "''") & "', " &
@@ -834,6 +843,7 @@ Partial Class ActionAddEdit
             "NULL, " &
             (If(model.NeedAutoTransfer, "1", "0")) & ", " &
             (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.AutoTransferGroupId), "NULL", "'" & model.AutoTransferGroupId.Replace("'", "''") & "'")) & ", " &
             (If(model.NeedDialogue, "1", "0")) & ", " &
             (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
@@ -877,6 +887,7 @@ Partial Class ActionAddEdit
             "PAYMENT_PLAN_ID = NULL, " &
             "NEED_AUTOTRANSFER = " & (If(model.NeedAutoTransfer, "1", "0")) & ", " &
             "AUTOTRANSFER_PLAN_ID = " & (If(String.IsNullOrEmpty(model.AutoTransferPlanId), "NULL", "'" & model.AutoTransferPlanId.Replace("'", "''") & "'")) & ", " &
+            "AUTOTRANSFER_GROUP = " & (If(String.IsNullOrEmpty(model.AutoTransferGroupId), "NULL", "'" & model.AutoTransferGroupId.Replace("'", "''") & "'")) & ", " &
             "NEED_DIALOGUE = " & (If(model.NeedDialogue, "1", "0")) & ", " &
             "DIALOGUE_TEXT = " & (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             "TO_STATUS_ID = " & (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
