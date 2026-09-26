@@ -69,7 +69,7 @@ Partial Class AutoTransferPlanForm
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
-            CurrentPlanId = Request.QueryString("PlanID")
+            CurrentPlanId = "00001" 'Request.QueryString("PlanID")
 
             If Not String.IsNullOrEmpty(CurrentPlanId) Then
                 lblFormTitle.Text = "Edit Auto-Transfer Plan"

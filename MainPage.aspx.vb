@@ -1687,8 +1687,10 @@ Partial Class MainPage
         If DT.Rows.Count = 0 Then Exit Sub
         Dim ContactId As String = ""
         Dim Comments As String = ""
+        Dim ACCOUNT As String = ""
         Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
         Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
+
 
 
         Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
@@ -1703,10 +1705,11 @@ Partial Class MainPage
                 Try
                     ContactId = Row(0)("CONTACT_ID").ToString 'GetReturnValueField(returnValue, "CONTACT_ID")
                     Comments = Row(0)("COMMENTS").ToString 'GetReturnValueField(returnValue, "COMMENTS")
+                    ACCOUNT = Row(0)("ACCOUNT").ToString
                 Catch ex As Exception
 
                 End Try
-                UpsertCustomerProperty(NodeId, ContactId, ToStatusId, Comments)
+                UpsertCustomerProperty(NodeId, ContactId, ToStatusId, Comments, ACCOUNT)
 
                 ' InsertHistory comes back from ReserveUnit: "True" only when a customer or a
                 ' payment was assigned in the form. If the status did not change,
@@ -1748,7 +1751,7 @@ Partial Class MainPage
     '''   UNIT_ACCOUNT = empty
     '''   CREATED_AT   = current date/time as a Unix timestamp (seconds, UTC)
     ''' </summary>
-    Private Sub UpsertCustomerProperty(NodeId As String, ContactId As String, ToStatusId As String, Comments As String)
+    Private Sub UpsertCustomerProperty(NodeId As String, ContactId As String, ToStatusId As String, Comments As String, ByVal ACCOUNT As String)
 
         If String.IsNullOrWhiteSpace(NodeId) OrElse String.IsNullOrWhiteSpace(ContactId) Then Exit Sub
 
@@ -1771,7 +1774,7 @@ Partial Class MainPage
                   "STATUS = '" & safeStatus & "', " &
                   "START_DATE = '" & startDate & "', " &
                   "END_DATE = '', " &
-                  "UNIT_ACCOUNT = '', " &
+                  "UNIT_ACCOUNT = '" & ACCOUNT & "', " &
                   "CREATED_AT = '" & createdAt & "', " &
                   "COMMENTS = '" & safeComments & "'" &
                   whereClause
@@ -1783,7 +1786,7 @@ Partial Class MainPage
                   "'" & safeStatus & "', " &
                   "'" & startDate & "', " &
                   "'', " &
-                  "'', " &
+                  "'" & ACCOUNT & "', " &
                   "'" & createdAt & "', " &
                   "'" & safeComments & "')"
         End If

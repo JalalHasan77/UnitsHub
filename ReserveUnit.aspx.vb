@@ -38,15 +38,8 @@ Partial Class ReserveUnit
             BindPayments()
         End If
 
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      lnkLinkPayment,
-                                      "LinkPayment.aspx?ProjectID=" & lblPRJID.Text,
-                                      1100,
-                                      900,
-                                      PopupPlacement.Center,
-                                      "Select Adj",
-                                      VendorPopupHelper.PopupDisplayMode.Standard,
-                                      "SelectedPayment")
+        ' The LinkPayment popup is registered in UpdateControlsEnabledState, and only
+        ' once a customer is selected - see RegisterLinkPaymentPopup.
 
 
         Dim MemberListParameters As New clsListProperties
@@ -97,15 +90,79 @@ Partial Class ReserveUnit
 
         txtCustomerName.Enabled = HasCustomer
         txtCustomerCPR.Enabled = HasCustomer
+        lnkLinkAccount.Enabled = HasCustomer
+        txtAccount.Enabled = HasCustomer
         ddlReservedBy.Enabled = HasCustomer
         lnkLinkPayment.Enabled = HasCustomer
+        If HasCustomer Then
+            ' Undo our own block from an earlier request (OnClientClick is kept in
+            ' ViewState) before the popup helper attaches its click handling
+            If lnkLinkPayment.OnClientClick = "return false;" Then lnkLinkPayment.OnClientClick = ""
+            RegisterLinkPaymentPopup()
+        Else
+            ' Enabled = False alone doesn't stop it: ASP.NET still renders the link's
+            ' onclick, and that's what opens the popup. Drop it and block the click.
+            lnkLinkPayment.Attributes.Remove("onclick")
+            lnkLinkPayment.OnClientClick = "return false;"
+        End If
         gvPayments.Enabled = HasCustomer
         txtReservationDate.Enabled = HasCustomer
         btnReservationDate.Disabled = Not HasCustomer   ' HtmlButton uses Disabled, not Enabled
         txtComments.Enabled = HasCustomer
         btnSave.Enabled = HasCustomer
         btnCancel.Enabled = HasCustomer
+
+        Dim AccountListParameters As New clsListProperties
+        With AccountListParameters
+            .ItemsSQL = "Select T3.BRCH_CODE ||'-'|| T3.CACC_NUM  as ID, '' as PropertyRef,T3.CUST_ID from bbsd_physical_persons@ICBS T1 " &
+                " Left Join bbsd_cust_members@ICBS T2 on T1.PHPR_ID=T2.CUSM_ID " &
+                " Left Join BBSD_CUST_ACCOUNTS@ICBS T3 on T2.CUST_ID=T3.CUST_ID WHERE PHPR_NATIONAL_NBR='770502083'" &
+                                 "  and T3.actp_type || T3.BRCH_CODE in (Select AccountType || Branch  from UNITSHUB_AccountBranchProjects)"
+            .CheckedItemsSQL = ""
+            .FormTitle = "Select Customer"
+            .ColumnHideAndShow = "NNN"
+            .EditableColumns = "NNN"
+            .ColumnsWidth = New Double() {3, 1}
+            .HoverableList = "Y"
+        End With
+        Dim SelectAccountParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(AccountListParameters)
+
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      lnkLinkAccount,
+                                      "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectAccountParameters),
+                                      400,
+                                      500,
+                                      PopupPlacement.Center,
+                                      "Select Adj",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      "SelectedAccount")
+
+
+
     End Sub
+    Private LinkPaymentPopupRegistered As Boolean = False
+
+    ''' <summary>
+    ''' Hooks the LinkPayment dialogue to lnkLinkPayment. Called from
+    ''' UpdateControlsEnabledState only when a customer is selected, so the link
+    ''' can't open the dialogue while lblCID is empty. Registers at most once per request.
+    ''' </summary>
+    Private Sub RegisterLinkPaymentPopup()
+        If LinkPaymentPopupRegistered Then Exit Sub
+        LinkPaymentPopupRegistered = True
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      lnkLinkPayment,
+                                      "LinkPayment.aspx?ProjectID=" & lblPRJID.Text,
+                                      1100,
+                                      900,
+                                      PopupPlacement.Center,
+                                      "Select Adj",
+                                      VendorPopupHelper.PopupDisplayMode.Standard,
+                                      "SelectedPayment")
+    End Sub
+
     Protected Sub btnSelectExistingCustomer_Click(sender As Object, e As EventArgs) Handles btnSelectExistingCustomer.Click, btnAddNewCustomer.Click
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
         TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedCustomer"),
@@ -138,6 +195,7 @@ Partial Class ReserveUnit
         'SelectedCustomer.Add("NATIONALID", "770110266")
         SelectedCustomer.Add("CONTACT_ID", lblCID.Text)
         SelectedCustomer.Add("COMMENTS", txtComments.Text)
+        SelectedCustomer.Add("ACCOUNT", txtAccount.Text)
 
         ' ChangeStatus = True only when a customer is selected AND every required
         ' payment-plan line is linked; otherwise False.
@@ -246,25 +304,55 @@ Partial Class ReserveUnit
     End Function
 
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
+        lblPaymentMessage.Text = ""
+
         Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
         TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedPayment"),
                 List(Of Dictionary(Of String, Object)))
 
-        If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub
+        If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub   ' dialogue closed without a selection
         Dim Row As Dictionary(Of String, Object) = SelectedPayment(0)
 
-        Dim PaymentPlan As String = getPaymentPlan()
+        Dim PaymentPlan As String = Convert.ToString(getPaymentPlan()).Trim()
+        If String.IsNullOrEmpty(PaymentPlan) Then
+            ShowPaymentMessage("This unit has no payment plan, so the payment can't be linked.")
+            Exit Sub
+        End If
 
         ' The next payment-plan line item this unit doesn't already have a linked
         ' (ACTIVE) UNITSHUB_PAYMENTS row for - e.g. if SEQ 1/2 are already linked,
         ' this is SEQ 3.
         Dim NextDetail As DataTable = GetNextPlanDetail(PaymentPlan)
-        If NextDetail.Rows.Count = 0 Then Exit Sub   ' every line item is already linked
+        If NextDetail Is Nothing OrElse NextDetail.Rows.Count = 0 Then
+            ShowPaymentMessage("All payments of plan " & PaymentPlan & " are already linked.")
+            Exit Sub
+        End If
         Dim DetailRow As DataRow = NextDetail.Rows(0)
 
-        Dim TransAmount As String = ParseDecimalLenient(Row("Amount")).ToString(CultureInfo.InvariantCulture)
-        Dim DetailPercent As String = ParseDecimalLenient(DetailRow("PERCENT")).ToString(CultureInfo.InvariantCulture)
-        Dim Narrative As String = (Convert.ToString(Row("Comment1")) & " " & Convert.ToString(Row("Comment2"))).Trim()
+        ' Values from the LinkPayment dialogue (key lookup ignores case, and accepts
+        ' the TranscationNum spelling as well as TransactionNum)
+        Dim AmountValue As Object = GetDialogueValue(Row, "Amount")
+        Dim DateValue As Object = GetDialogueValue(Row, "Date")
+        Dim TransactionNum As String = Convert.ToString(GetDialogueValue(Row, "TranscationNum", "TransactionNum", "TransactionID"))
+        Dim Narrative As String = (Convert.ToString(GetDialogueValue(Row, "Comment1")) & " " &
+                                   Convert.ToString(GetDialogueValue(Row, "Comment2"))).Trim()
+
+        Dim TransAmount As String
+        Dim DetailPercent As String
+        Try
+            TransAmount = ParseDecimalLenient(AmountValue).ToString(CultureInfo.InvariantCulture)
+            DetailPercent = If(DetailRow("PERCENT") Is DBNull.Value, "0",
+                               ParseDecimalLenient(DetailRow("PERCENT")).ToString(CultureInfo.InvariantCulture))
+        Catch ex As FormatException
+            ShowPaymentMessage("The payment amount could not be read: " & ex.Message)
+            Exit Sub
+        End Try
+
+        Dim DatePaid As DateTime
+        If Not TryParsePaymentDate(DateValue, DatePaid) Then
+            ShowPaymentMessage("The payment date '" & Convert.ToString(DateValue) & "' could not be read.")
+            Exit Sub
+        End If
 
         Dim InsertSQL As String = ""
         InsertSQL = InsertSQL + vbCrLf + "INSERT INTO UNITSHUB_PAYMENTS "
@@ -278,10 +366,12 @@ Partial Class ReserveUnit
         InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(DetailRow("DESCRIPTION")).Replace("'", "''") & "', "
         InsertSQL = InsertSQL + vbCrLf + "    " & DetailPercent & ", "
         InsertSQL = InsertSQL + vbCrLf + "    " & TransAmount & ", "
-        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("Date")).Replace("'", "''") & "' , "
+        ' Dates as real Oracle dates with an explicit format - a plain 'yyyy-MM-dd' string
+        ' only converts if the session's NLS_DATE_FORMAT happens to match.
+        InsertSQL = InsertSQL + vbCrLf + "    TO_DATE('" & DatePaid.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) & "', 'YYYY-MM-DD'), "
         InsertSQL = InsertSQL + vbCrLf + "    '" & Narrative.Replace("'", "''") & "', "
-        InsertSQL = InsertSQL + vbCrLf + "    '" & Convert.ToString(Row("TranscationNum")).Replace("'", "''") & "', "
-        InsertSQL = InsertSQL + vbCrLf + "    'Y','" & Now.Date.ToString("yyyy-MM-dd") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    '" & TransactionNum.Replace("'", "''") & "', "
+        InsertSQL = InsertSQL + vbCrLf + "    'Y', TRUNC(SYSDATE), "
         ' PAYMENT_ID: next number after the highest existing one, as 7 digits (0000001, 0000002, ...).
         ' Worked out inside the same INSERT to keep the window for duplicates small; two saves at the
         ' exact same moment could still get the same number, so keep a UNIQUE constraint on PAYMENT_ID.
@@ -290,24 +380,74 @@ Partial Class ReserveUnit
         InsertSQL = InsertSQL + vbCrLf + "FROM UNITSHUB_PAYMENTS "
         InsertSQL = InsertSQL + vbCrLf + "WHERE REGEXP_LIKE(PAYMENT_ID, '^[0-9]+$') "
 
-        ' TODO: swap for this app's actual write/execute helper - GetDataTable and
-        ' DB.RetreiveScalarSTRING are read-only, so neither can run an INSERT.
-        DB.ExecuteNonQuery(EBDB, InsertSQL)
+        ' Writes go through EBDB_CS, like every other INSERT/UPDATE in the project
+        ' (MainPage uses DB.ExecuteNonQuery(EBDB_CS, ...)); EBDB is used for reads.
+        Try
+            DB.ExecuteNonQuery(EBDB_CS, InsertSQL)
+        Catch ex As Exception
+            ShowPaymentMessage("The payment could not be saved: " & ex.Message)
+            Exit Sub
+        End Try
+
+        ' Confirm the row is really there (in case the helper swallows errors)
+        Dim NewPaymentId As String = GetLinkedPaymentId(PaymentPlan, Convert.ToString(DetailRow("SEQ")))
+        If String.IsNullOrEmpty(NewPaymentId) Then
+            ShowPaymentMessage("The payment was not saved - no row was added to UNITSHUB_PAYMENTS.")
+            Exit Sub
+        End If
 
         ' A payment was linked during this visit - MainPage should write a history row
         ViewState("PaymentAssigned") = True
 
         ' Remember the PAYMENT_ID the INSERT just generated, for the Summary on Save
-        Dim NewPaymentId As String = GetLinkedPaymentId(PaymentPlan, Convert.ToString(DetailRow("SEQ")))
-        If Not String.IsNullOrEmpty(NewPaymentId) Then
-            Dim Nums As List(Of String) = TryCast(ViewState("LinkedPaymentNums"), List(Of String))
-            If Nums Is Nothing Then Nums = New List(Of String)
-            Nums.Add(NewPaymentId)
-            ViewState("LinkedPaymentNums") = Nums
-        End If
+        Dim Nums As List(Of String) = TryCast(ViewState("LinkedPaymentNums"), List(Of String))
+        If Nums Is Nothing Then Nums = New List(Of String)
+        Nums.Add(NewPaymentId)
+        ViewState("LinkedPaymentNums") = Nums
 
         BindPayments()
     End Sub
+
+    ''' <summary>Shows a message above the payments grid.</summary>
+    Private Sub ShowPaymentMessage(Message As String)
+        lblPaymentMessage.Text = Server.HtmlEncode(Message)
+    End Sub
+
+    ''' <summary>
+    ''' Value of the first of the given keys found in the dialogue row (case-insensitive).
+    ''' Returns Nothing if none of them exist.
+    ''' </summary>
+    Private Function GetDialogueValue(Row As Dictionary(Of String, Object), ParamArray Keys() As String) As Object
+        For Each Key As String In Keys
+            For Each Pair As KeyValuePair(Of String, Object) In Row
+                If String.Equals(Pair.Key, Key, StringComparison.OrdinalIgnoreCase) Then Return Pair.Value
+            Next
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Reads the payment date from the dialogue: a DateTime, or text in one of the
+    ''' common formats (day first, as used in Bahrain).
+    ''' </summary>
+    Private Function TryParsePaymentDate(Value As Object, ByRef Result As DateTime) As Boolean
+        If Value Is Nothing OrElse Value Is DBNull.Value Then Return False
+        If TypeOf Value Is DateTime Then
+            Result = CType(Value, DateTime)
+            Return True
+        End If
+
+        Dim Text As String = Convert.ToString(Value).Trim()
+        If Text.Length = 0 Then Return False
+
+        Dim Formats() As String = {
+            "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm:ss",
+            "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yyyy HH:mm:ss", "d/M/yyyy h:mm:ss tt",
+            "dd-MM-yyyy", "dd-MMM-yyyy", "dd-MMM-yy", "dd.MM.yyyy", "yyyyMMdd"}
+
+        If DateTime.TryParseExact(Text, Formats, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, Result) Then Return True
+        Return DateTime.TryParse(Text, CultureInfo.GetCultureInfo("en-GB"), DateTimeStyles.AllowWhiteSpaces, Result)
+    End Function
 
     ''' <summary>
     ''' The first UNITSHUB_PAYMENTPLANDETAILS line item under PlanId that this unit
@@ -477,5 +617,20 @@ Partial Class ReserveUnit
     End Sub
     Protected Sub btnCancel_Click(sender As Object, e As EventArgs) Handles btnCancel.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
+
+    Private Sub lnkLinkAccount_Click(sender As Object, e As EventArgs) Handles lnkLinkAccount.Click
+        Dim SelectedAccount As List(Of Dictionary(Of String, Object)) =
+TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedAccount"),
+        List(Of Dictionary(Of String, Object)))
+
+        If SelectedAccount Is Nothing OrElse SelectedAccount.Count = 0 Then Exit Sub
+
+        Dim row As Dictionary(Of String, Object) = SelectedAccount(0)
+
+        txtAccount.Text = Convert.ToString(row("ID"))
+
+        UpdateControlsEnabledState()
+        BindPayments()
     End Sub
 End Class

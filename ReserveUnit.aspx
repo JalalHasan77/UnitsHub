@@ -129,6 +129,23 @@ html, body, form {
             margin-bottom: 18px;
         }
 
+        /* Name + CPR side by side on one line */
+        .inline-fields {
+            display: flex;
+            gap: 12px;
+            max-width: 520px;
+        }
+
+        .inline-fields .name-input {
+            flex: 2;
+            min-width: 0;
+        }
+
+        .inline-fields .cpr-input {
+            flex: 1;
+            min-width: 0;
+        }
+
         .form-label {
             width: 150px;
             flex-shrink: 0;
@@ -230,6 +247,29 @@ html, body, form {
             margin-bottom: 8px;
         }
 
+        /* Disabled links (Enabled = False renders class "aspNetDisabled"): grey, and
+           not clickable at all, so no script attached to them can run */
+        .grid-link.aspNetDisabled,
+        .grid-link[disabled] {
+            color: var(--muted);
+            opacity: .55;
+            cursor: not-allowed;
+            pointer-events: none;
+            text-decoration: none;
+        }
+
+        .payment-message {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #b91c1c;
+        }
+
+        .payment-message:empty {
+            display: none;
+        }
+
         .grid-link {
             font-size: 13px;
             font-weight: 600;
@@ -328,6 +368,10 @@ html, body, form {
         @media (max-width: 600px) {
             .reserve-card { padding: 22px 18px; }
 
+            .inline-fields {
+                flex-direction: column;
+            }
+
             .form-row {
                 flex-direction: column;
                 gap: 6px;
@@ -396,28 +440,37 @@ html, body, form {
                 <div class="form-row">
                     <asp:Label ID="lblCustomerName"
                         runat="server"
-                        Text="Customer Name:"
+                        Text="Customer / CPR:"
                         CssClass="form-label" />
                     <div class="form-control">
-                        <asp:TextBox ID="txtCustomerName"
-                            readonly="true"
-                            runat="server"
-                            CssClass="txt-input"
-                            placeholder="Enter real customer name" />
+                        <div class="inline-fields">
+                            <asp:TextBox ID="txtCustomerName"
+                                readonly="true"
+                                runat="server"
+                                CssClass="txt-input name-input"
+                                placeholder="Customer name" />
+                            <asp:TextBox ID="txtCustomerCPR"
+                                readonly="true"
+                                runat="server"
+                                CssClass="txt-input cpr-input"
+                                placeholder="CPR" />
+                        </div>
                     </div>
                 </div>
 
                 <div class="form-row">
-                    <asp:Label ID="lblCustomerCPR"
-                        runat="server"
-                        Text="Customer CPR:"
-                        CssClass="form-label" />
+                    <div class="form-label">
+                        <asp:LinkButton ID="lnkLinkAccount"
+                            runat="server"
+                            CssClass="grid-link"
+                            CausesValidation="False">Link Account</asp:LinkButton>
+                    </div>
                     <div class="form-control">
-                        <asp:TextBox ID="txtCustomerCPR"
-                            readonly="true"
+                        <asp:TextBox ID="txtAccount"
+                            ReadOnly="True"
                             runat="server"
                             CssClass="txt-input"
-                            placeholder="Enter customer CPR" />
+                            placeholder="No account linked" />
                     </div>
                 </div>
 
@@ -447,6 +500,11 @@ html, body, form {
                                 CssClass="grid-link"
                                 CausesValidation="False">Link a payment</asp:LinkButton>
                         </div>
+                        <asp:Label ID="lblPaymentMessage"
+                            runat="server"
+                            CssClass="payment-message"
+                            EnableViewState="False"
+                            Text="" />
                         <div class="grid-wrap">
                             <asp:GridView ID="gvPayments"
                                 runat="server"
