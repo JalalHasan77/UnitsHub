@@ -14,11 +14,35 @@ Partial Class AutoTransfer
             lblSTATEID.Text = Request("STATEID")
             lblActionID.Text = Request("ActionId")
 
+            LoadActionAutoTransfer()   ' lblATPlanID, lblATGroupID
+
             LoadCustomer()      ' CUSTOMER box
             LoadUnitInfo()      ' Unit Reference, Price
             LoadAccountInfo()   ' Pre Sales Account (+ its type in the title), Balance
             LoadAmounts()       ' Paid Amount, Remaining
+            BindTransactions()  ' Transactions grid (UNITSHUB_ATP_DETAILS)
         End If
+    End Sub
+
+    ''' <summary>
+    ''' AutoTransfer plan and group saved on this action (UNITSHUB_ACTIONS
+    ''' AUTOTRANSFER_PLAN_ID / AUTOTRANSFER_GROUP), kept in lblATPlanID / lblATGroupID.
+    ''' </summary>
+    Private Sub LoadActionAutoTransfer()
+        If String.IsNullOrWhiteSpace(lblActionID.Text) Then Exit Sub
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT AUTOTRANSFER_PLAN_ID, AUTOTRANSFER_GROUP "
+        SQL = SQL + vbCrLf + " FROM   UNITSHUB_ACTIONS "
+        SQL = SQL + vbCrLf + " WHERE  PROJECT_ID = '" & lblPRJID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "   AND  STATUS_ID  = '" & lblSTATEID.Text.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "   AND  ACTION_ID  = '" & lblActionID.Text.Replace("'", "''") & "' "
+
+        Dim DT As DataTable = GetDataTable(EBDB, SQL)
+        If DT Is Nothing OrElse DT.Rows.Count = 0 Then Exit Sub
+
+        lblATPlanID.Text = Convert.ToString(DT.Rows(0)("AUTOTRANSFER_PLAN_ID")).Trim()
+        lblATGroupID.Text = Convert.ToString(DT.Rows(0)("AUTOTRANSFER_GROUP")).Trim()
     End Sub
 
     ' ------------------------------------------------------------------
@@ -177,6 +201,77 @@ Partial Class AutoTransfer
     End Sub
 
     ' ------------------------------------------------------------------
+    ' Transactions grid
+    ' ------------------------------------------------------------------
+
+    ''' <summary>
+    ''' Builds the Transactions grid from the UNITSHUB_ATP_DETAILS lines of the action's
+    ''' AutoTransfer group (lblATGroupID):
+    '''   Account     = ACCOUNT_NUMBER; if it contains "xxx" (any case), the Pre Sales
+    '''                 Account (UNIT_ACCOUNT) is used instead
+    '''   Type        = TYPE (or TYPE_OF_ESCROW if there is no TYPE column)
+    '''   Transaction = "C" if the line has a Credit amount, "D" if it has a Debit amount
+    '''   Amount      = that Credit or Debit amount
+    '''   Reference   = the Unit Reference shown in UNIT DETAILS (lblUnitRef)
+    '''   Description = "Reservation of Unit " + Unit Reference
+    ''' Runs after LoadUnitInfo / LoadAccountInfo, which fill those two values.
+    ''' Lines with neither a Debit nor a Credit amount are skipped.
+    ''' </summary>
+    Private Sub BindTransactions()
+        Dim Result As New DataTable
+        Result.Columns.Add("Account", GetType(String))
+        Result.Columns.Add("Type", GetType(String))
+        Result.Columns.Add("Transaction", GetType(String))
+        Result.Columns.Add("Amount", GetType(Decimal))
+        Result.Columns.Add("Reference", GetType(String))
+        Result.Columns.Add("Description", GetType(String))
+
+        If Not String.IsNullOrWhiteSpace(lblATGroupID.Text) Then
+            Dim Details As DataTable = GetDataTable(EBDB,
+                "SELECT * FROM UNITSHUB_ATP_DETAILS WHERE GROUP_ID = '" & lblATGroupID.Text.Replace("'", "''") & "' ORDER BY SORT_ORDER, DETAIL_ID")
+
+            Dim UnitRef As String = lblUnitRef.Text.Trim()
+            Dim PreSalesAccount As String = lblPreSalesAccount.Text.Trim()
+
+            If Details IsNot Nothing Then
+                For Each Detail As DataRow In Details.Rows
+                    Dim Credit As Decimal = ParseAmount(GetColumnValue(Detail, "CREDIT"))
+                    Dim Debit As Decimal = ParseAmount(GetColumnValue(Detail, "DEBIT"))
+
+                    Dim Transaction As String
+                    Dim Amount As Decimal
+                    If Credit <> 0D Then
+                        Transaction = "C"
+                        Amount = Credit
+                    ElseIf Debit <> 0D Then
+                        Transaction = "D"
+                        Amount = Debit
+                    Else
+                        Continue For
+                    End If
+
+                    ' Placeholder accounts (containing "xxx") become the unit's Pre Sales Account
+                    Dim Account As String = GetColumnValue(Detail, "ACCOUNT_NUMBER")
+                    If Account.IndexOf("xxx", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                        Account = PreSalesAccount
+                    End If
+
+                    Result.Rows.Add(
+                        Account,
+                        GetColumnValue(Detail, "TYPE", "TYPE_OF_ESCROW"),
+                        Transaction,
+                        Amount,
+                        UnitRef,
+                        "Reservation of Unit " & UnitRef)
+                Next
+            End If
+        End If
+
+        gvTransactions.DataSource = Result
+        gvTransactions.DataBind()
+    End Sub
+
+    ' ------------------------------------------------------------------
     ' Helpers
     ' ------------------------------------------------------------------
 
@@ -251,6 +346,99 @@ Partial Class AutoTransfer
     Private Function FormatAmount(Value As Decimal) As String
         Return Value.ToString("N3", CultureInfo.InvariantCulture)
     End Function
+    Function Validate_Entries() As Boolean
+        Return True
+    End Function
+    ''' <summary>
+    ''' Post the transactions in gvTransactions.
+    ''' TODO: posting logic not defined yet. Display Invoice / Re-Generate Invoice
+    ''' are disabled in the markup until then.
+    ''' </summary>
+    Protected Sub btnPost_Click(sender As Object, e As EventArgs) Handles btnPost.Click
+        ' TODO: post the AutoTransfer transactions
+
+        'If Get_Dannat_Status() = "Handed Over" Then
+        '    udf.ShowMessage(Page, "Already Handed Over", True)
+        '    reflectPropertyStatusOnButtons()
+        '    Exit Sub
+        'End If
+
+        'If Validate_Entries() Then
+        '    'cmd_Post.Visible = False
+        '    'cmd_Cancel.Visible = False
+        '    'Dim Host As New clsCore
+        '    'Host.InitializeHost("ICBS")
+        '    Dim lnEntries As Integer = gvTransactions.Rows.Count
+        '    Dim PdfTitle As String = ""
+        '    Dim FolderName As String = ""
+        '    Dim lnTraNo As Integer = 0
+        '    Dim lnEntry As Integer = 0
+        '    For Each r As GridViewRow In gvTransactions.Rows
+        '        If r.RowType = DataControlRowType.DataRow Then
+        '            Dim Acc As String = GetCellText(r, 0)
+        '            Dim typ As String = GetCellText(r, 1)
+        '            Dim tra As String = GetCellText(r, 2)                       ' "D" or "C"
+        '            Dim amt As Double = CDbl(ParseAmount(GetCellText(r, 3)))    ' shown as "1,234.500"
+        '            Dim ref As String = GetCellText(r, 4)
+        '            Dim Nar As String = GetCellText(r, 5)
+
+        '            lnEntry = lnEntry + 1
+        '            Dim lcError As String = ""
+        '            If Not Host.Pass_Batch_Entry("PSS", lnEntries, lnEntry, Acc, tra, amt, ref, Nar, lcError, lnTraNo) Then
+        '                udf.ShowMessage(Page, lcError, True)
+        '                If lnEntry = 1 Then
+        '                    Exit Sub
+        '                End If
+        '            End If
+        '        End If
+        '    Next
+
+        '=========================================================================================
+        '=========================================================================================
+
+        'lnTraNo = 1234566
+        'If lnTraNo = 0 Then
+        '    udf.ShowMessage(Page, "Nothing Posted", True)
+        'Else
+        '    Try
+        '        GenerateInvoice(InvoiceNum:=lnTraNo,
+        '                        DisplayInvoice:=True,
+        '                        PdfTitle:=PdfTitle,
+        '                        FolderName:=FolderName)
+
+        '        udf.SetOnClientClick(cmd_displayInvoice, "PDF_Viewer.aspx?FolderName=" & FolderName & "&FileName=" + PdfTitle, 500,, , True)
+        '        Try
+        '            UpdateInvoiceNoField(InvoiceNo:=lnTraNo)
+        '            UpdatePDFTitleField(PdfTitle:=PdfTitle)
+        '            UpdatePropertyStatus()
+        '        Catch ex1 As Exception
+        '            udf.ShowMessage(Page, "( posted ) but you need To change the status (manually) ", True)
+        '        End Try
+        '        reflectPropertyStatusOnButtons(lnTraNo:=lnTraNo)
+        '        pnl_Entries.Visible = False
+        '    Catch ex As Exception
+        '        IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory & "\Logs.txt", ex.Message)
+        '        udf.ShowMessage(Page, "An Error happened While generating invoice", True)
+        '    End Try
+        'End If
+
+
+
+        'End If
+
+    End Sub
+
+
+    ''' <summary>
+    ''' Text of a BoundField cell as plain text: BoundField HTML-encodes values
+    ''' (e.g. "&amp;") and renders empty cells as "&nbsp;", so decode and trim.
+    ''' </summary>
+    Private Function GetCellText(Row As GridViewRow, ColumnIndex As Integer) As String
+        If ColumnIndex < 0 OrElse ColumnIndex >= Row.Cells.Count Then Return ""
+        Dim Text As String = Server.HtmlDecode(Row.Cells(ColumnIndex).Text)
+        Return Text.Replace(ChrW(160), " ").Trim()
+    End Function
+
 
     Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)

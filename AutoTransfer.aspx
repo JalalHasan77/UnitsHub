@@ -376,6 +376,52 @@ html, body, form {
             font-size: 15px;
         }
 
+        /* ---------- Transactions: action buttons under the title ---------- */
+        .tx-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .tx-btn {
+            padding: 8px 18px;
+            border: 1.5px solid var(--brand-1);
+            border-radius: 8px;
+            background: #ffffff;
+            color: var(--brand-1);
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .tx-btn:hover {
+            border-color: var(--brand-2);
+            color: var(--brand-2);
+        }
+
+        .tx-btn-primary {
+            background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
+            border-color: transparent;
+            color: #ffffff;
+        }
+
+        .tx-btn-primary:hover {
+            color: #ffffff;
+            filter: brightness(1.08);
+        }
+
+        /* Disabled buttons: greyed out and not clickable */
+        .tx-btn[disabled],
+        .tx-btn.aspNetDisabled {
+            background: #eef0f3;
+            border-color: #d4d7dd;
+            color: #9aa1ab;
+            cursor: not-allowed;
+            filter: none;
+        }
+
         /* ---------- Customer box ---------- */
         .customer-box {
             margin: 0 0 20px 0;
@@ -566,6 +612,8 @@ html, body, form {
                     <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>
@@ -603,6 +651,35 @@ html, body, form {
                         </ul>
                     </div>
                 </fieldset>
+
+                <div class="grid-section">
+                    <span class="grid-section-title">Transactions</span>
+                    <div class="tx-actions">
+                        <asp:Button ID="btnPost" runat="server" Text="Post" CssClass="tx-btn tx-btn-primary" />
+                        <asp:Button ID="btnDisplayInvoice" runat="server" Text="Display Invoice" CssClass="tx-btn" Enabled="False" />
+                        <asp:Button ID="btnRegenerateInvoice" runat="server" Text="Re-Generate Invoice" CssClass="tx-btn" Enabled="False" />
+                    </div>
+                    <div class="grid-wrap">
+                        <asp:GridView ID="gvTransactions"
+                            runat="server"
+                            AutoGenerateColumns="False"
+                            CssClass="pay-grid"
+                            GridLines="None"
+                            ShowHeaderWhenEmpty="True"
+                            EmptyDataText="No AutoTransfer lines for this action.">
+                            <EmptyDataRowStyle CssClass="empty" />
+                            <Columns>
+                                <asp:BoundField DataField="Account" HeaderText="Account" />
+                                <asp:BoundField DataField="Type" HeaderText="Type" />
+                                <asp:BoundField DataField="Transaction" HeaderText="Transaction" />
+                                <asp:BoundField DataField="Amount" HeaderText="Amount" DataFormatString="{0:N3}"
+                                    HeaderStyle-CssClass="num" ItemStyle-CssClass="num" />
+                                <asp:BoundField DataField="Reference" HeaderText="Reference" />
+                                <asp:BoundField DataField="Description" HeaderText="Description" />
+                            </Columns>
+                        </asp:GridView>
+                    </div>
+                </div>
             </div>
         </div>
 
