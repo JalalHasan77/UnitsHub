@@ -1,798 +1,770 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="DesignAction.aspx.vb" Inherits="DesignAction" %>
+﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="AutoTransfer.aspx.vb" Inherits="AutoTransfer" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
 
-<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head runat="server">
-    <title>Action Control</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <title>AutoTransfer</title>
     <style type="text/css">
+        *, ::after, ::before { box-sizing: border-box; }
 
         :root {
             --brand-1: #4f46e5;
             --brand-2: #3b82f6;
-            --brand-soft: #eef2ff;
             --ink: #1e293b;
             --muted: #64748b;
             --border: #e2e8f0;
             --bg: #eef1f8;
-            --success: #16a34a;
-            --danger: #ef4444;
-            --radius: 14px;
         }
 
-        * { box-sizing: border-box; }
+html, body, form {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+}
 
         body {
-            font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif;
-            background: var(--bg);
             margin: 0;
             padding: 0;
+            background: var(--bg);
             color: var(--ink);
+            font-family: Arial, 'Segoe UI', sans-serif;
+                min-height: 100vh;
         }
 
-        .action-panel {
-            width: 100%;
-            min-height: 100vh;
-            background-color: #ffffff;
-        }
-
-        /* ---------- Header ---------- */
-        .action-header {
-            background: linear-gradient(120deg, var(--brand-1), var(--brand-2) 75%);
-            color: #ffffff;
-            padding: 30px 34px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .action-header::after {
-            content: "";
-            position: absolute;
-            right: -60px;
-            top: -60px;
-            width: 220px;
-            height: 220px;
-            background: rgba(255,255,255,0.08);
-            border-radius: 50%;
-        }
-
-        .header-row {
+        .top-strip {
             display: flex;
             align-items: center;
-            gap: 16px;
-            position: relative;
-            z-index: 1;
+            justify-content: space-between;
+            width: 100%;
+            min-height: 58px;
+            background: linear-gradient(120deg, var(--brand-1), var(--brand-2) 75%);
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 700;
+            padding: 0 24px;
         }
 
-        .header-icon {
-            width: 46px;
-            height: 46px;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.16);
+        .close-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: #ffffff;
+            cursor: pointer;
+            transition: background .15s ease;
         }
 
-        .header-icon svg { width: 24px; height: 24px; stroke: #ffffff; }
+        .close-btn:hover,
+        .close-btn:focus-visible {
+            background: rgba(255, 255, 255, 0.22);
+            outline: none;
+        }
 
-        .action-title { font-size: 24px; font-weight: 700; letter-spacing: 0.2px; }
-        .action-subtitle { font-size: 13.5px; opacity: 0.85; margin-top: 2px; }
+        .close-btn svg {
+            width: 20px;
+            height: 20px;
+        }
 
-        /* ---------- Body ---------- */
-        .action-body { padding: 30px 34px 34px; }
 
-        .section {
-            padding: 22px 0;
+
+.page-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+.reserve-card {
+    width: 100%;
+    min-height: calc(100vh - 58px);
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 28px 32px 30px;
+}
+        .page-title {
+            margin: 0 0 28px 0;
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .customer-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 28px;
+            padding-bottom: 22px;
             border-bottom: 1px solid var(--border);
         }
-        .section:last-of-type { border-bottom: none; padding-bottom: 6px; }
-        .section:first-of-type { padding-top: 4px; }
 
-        .section-kicker {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12.5px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
+        .customer-button {
+            padding: 10px 20px;
+            border-radius: 9px;
+            border: 1px solid var(--brand-1);
+            background: #ffffff;
             color: var(--brand-1);
-            margin-bottom: 16px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all .15s ease;
         }
 
-        .section-kicker svg { width: 15px; height: 15px; stroke: var(--brand-1); }
+        .customer-button:hover {
+            background: #eef2ff;
+            border-color: var(--brand-2);
+            color: var(--brand-2);
+        }
 
         .form-row {
             display: flex;
-            flex-wrap: wrap;
             align-items: flex-start;
-            gap: 6px 18px;
+            gap: 18px;
             margin-bottom: 18px;
         }
-        .form-row:last-child { margin-bottom: 0; }
 
         .form-label {
-            width: 170px;
+            width: 150px;
             flex-shrink: 0;
-            font-size: 13.5px;
+            padding-top: 10px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--ink);
-            padding-top: 9px;
         }
 
-        .form-control-cell { flex: 1; min-width: 220px; }
-        .field-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+        .form-control {
+            flex: 1;
+            min-width: 0;
+        }
 
-        /* ---------- Inputs ---------- */
-        .txt-input, .ddl-input {
+        .txt-input,
+        .ddl-input,
+        .comments-input {
             width: 100%;
-            max-width: 420px;
+            max-width: 520px;
             padding: 10px 13px;
             border: 1.5px solid var(--border);
-            border-radius: 10px;
+            border-radius: 9px;
+            background: #f8fafc;
+            color: var(--ink);
             font-size: 14px;
             font-family: inherit;
-            color: var(--ink);
-            background-color: #f8fafc;
-            transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
         }
 
-        .txt-input::placeholder { color: #a0aec0; }
-
-        .txt-input:focus, .ddl-input:focus {
+        .txt-input:focus,
+        .ddl-input:focus,
+        .comments-input:focus {
             outline: none;
             border-color: var(--brand-2);
-            background-color: #ffffff;
+            background: #ffffff;
             box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
         }
 
         .ddl-input {
-            appearance: none;
-            -webkit-appearance: none;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2'><path d='M4 6l4 4 4-4'/></svg>");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            padding-right: 34px;
+            max-width: 300px;
             cursor: pointer;
         }
 
-        /* ---------- Segmented / chip controls ---------- */
-        .seg-list, .chip-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .seg-list input[type="radio"],
-        .chip-list input[type="checkbox"] {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .seg-list label, .chip-list label {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 16px;
-            border-radius: 999px;
-            border: 1.5px solid var(--border);
-            background-color: #f8fafc;
-            font-size: 13.5px;
-            font-weight: 500;
-            color: var(--ink);
-            cursor: pointer;
-            transition: all .15s ease;
-        }
-
-        .seg-list label:hover, .chip-list label:hover {
-            border-color: var(--brand-2);
-            background-color: var(--brand-soft);
-        }
-
-        .seg-list input:checked + label {
-            background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
-            border-color: transparent;
-            color: #ffffff;
-            box-shadow: 0 6px 14px -6px rgba(79, 70, 229, 0.6);
-        }
-
-        .chip-list input:checked + label {
-            background-color: #ecfdf5;
-            border-color: var(--success);
-            color: #15803d;
-        }
-
-        .chip-list label::before {
-            content: "";
-            width: 15px;
-            height: 15px;
-            border-radius: 4px;
-            border: 1.5px solid #cbd5e1;
-            background-color: #ffffff;
-            flex-shrink: 0;
-        }
-
-        .chip-list input:checked + label::before {
-            background-color: var(--success);
-            border-color: var(--success);
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='white' stroke-width='3'><path d='M2 6l3 3 5-6'/></svg>");
-            background-repeat: no-repeat;
-            background-position: center;
-        }
-
-        /* Status pills get semantic colors */
-        #rblActionStatus_0:checked + label {
-            background: linear-gradient(120deg, #16a34a, #22c55e);
-            box-shadow: 0 6px 14px -6px rgba(22, 163, 74, 0.55);
-        }
-        #rblActionStatus_1:checked + label {
-            background: linear-gradient(120deg, #64748b, #94a3b8);
-            box-shadow: 0 6px 14px -6px rgba(100, 116, 139, 0.5);
-        }
-        .seg-list label::before {
-            content: "";
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #cbd5e1;
-            flex-shrink: 0;
-        }
-        .seg-list input:checked + label::before { background-color: #ffffff; }
-
-        /* ---------- Receive parameters card ---------- */
-        .params-card {
-            background: linear-gradient(180deg, #f5f8ff, #eef2ff);
-            border: 1px solid #dfe6fb;
-            border-radius: 14px;
-            padding: 16px 18px;
-        }
-
-        .params-card-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 14px;
-        }
-
-        .toggle-inline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
-        .toggle-inline input { width: 17px; height: 17px; accent-color: var(--brand-1); cursor: pointer; }
-
-        .plan-details-grid {
+        .date-picker {
+            position: relative;
+            display: inline-block;
             width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-size: 13.5px;
-            border: 1.5px solid #94a3b8;
-            border-radius: 10px;
-            overflow: hidden;
+            max-width: 200px;
         }
 
-        .plan-details-grid th {
-            background-color: var(--brand-soft);
-            color: var(--brand-1);
-            text-align: left;
-            font-weight: 700;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .plan-details-grid td {
-            padding: 9px 12px;
-            border-bottom: 1px solid var(--border);
-            color: var(--ink);
-        }
-
-        .plan-details-grid tr:last-child td { border-bottom: none; }
-        .plan-details-grid tr:hover td { background-color: #f8fafc; }
-        .plan-details-grid input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-1); cursor: pointer; }
-        .plan-details-empty { font-size: 13px; color: var(--muted); padding: 10px 2px; }
-
-        .plan-block {
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 16px;
-            margin-bottom: 14px;
-            background-color: #f8fafc;
-        }
-
-        .plan-block:last-child { margin-bottom: 0; }
-
-        .plan-block-title {
-            font-size: 13.5px;
-            font-weight: 700;
-            color: var(--ink);
-            margin-bottom: 10px;
-        }
-
-        .plan-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background-color: var(--brand-soft);
-            color: var(--brand-1);
-            border-radius: 999px;
-            padding: 6px 10px 6px 14px;
-            margin: 0 8px 8px 0;
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-        .plan-chip a { color: inherit; text-decoration: none; }
-
-        .plan-chip-remove {
-            color: var(--brand-1);
-            opacity: 0.6;
-            font-size: 11px;
+        .date-picker .txt-input {
+            padding-right: 42px;
             cursor: pointer;
         }
 
-        .plan-chip-remove:hover { opacity: 1; color: #dc2626; }
-
-        .select-users-btn {
-            display: inline-flex;
+        .date-picker-btn {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            transform: translateY(-50%);
+            display: flex;
             align-items: center;
-            gap: 6px;
-            margin-top: 14px;
-            padding: 8px 15px;
-            border-radius: 9px;
-            background-color: #ffffff;
-            border: 1.5px solid var(--border);
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            border: none;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--brand-1);
+            cursor: pointer;
+            transition: background .15s ease;
+        }
+
+        .date-picker-btn:hover,
+        .date-picker-btn:focus-visible {
+            background: #eef2ff;
+            outline: none;
+        }
+
+        .date-picker-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Native date input: kept in the layout (so the calendar anchors to the textbox) but invisible */
+        .date-picker-native {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .grid-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
+        }
+
+        .grid-link {
             font-size: 13px;
             font-weight: 600;
             color: var(--brand-1);
             text-decoration: none;
-            transition: all .15s ease;
-        }
-        .select-users-btn:hover { border-color: var(--brand-2); background-color: var(--brand-soft); }
-
-        /* ---------- Script editor look ---------- */
-        .code-editor {
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #1e293b;
-            max-width: 100%;
+            cursor: pointer;
         }
 
-        .code-editor-bar {
-            background-color: #1e293b;
-            padding: 9px 14px;
-            display: flex;
-            align-items: center;
-            gap: 7px;
+        .grid-link:hover,
+        .grid-link:focus-visible {
+            color: var(--brand-2);
+            text-decoration: underline;
+            outline: none;
         }
 
-        .code-dot { width: 10px; height: 10px; border-radius: 50%; }
-        .code-dot.red { background-color: #ef4444; }
-        .code-dot.yellow { background-color: #f59e0b; }
-        .code-dot.green { background-color: #22c55e; }
-        .code-editor-label { margin-left: 8px; font-size: 12px; color: #94a3b8; font-family: Consolas, monospace; }
+        .grid-wrap {
+            overflow-x: auto;
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            background: #ffffff;
+        }
 
-        .script-box {
+        .pay-grid {
             width: 100%;
-            height: 150px;
-            border: none;
-            padding: 14px;
-            font-family: Consolas, 'Courier New', monospace;
+            border-collapse: collapse;
             font-size: 13px;
-            line-height: 1.6;
-            resize: vertical;
-            background-color: #0f172a;
-            color: #e2e8f0;
-            display: block;
         }
-        .script-box:focus { outline: none; }
-        .script-box::placeholder { color: #64748b; }
 
-        /* ---------- Buttons ---------- */
-        .btn-row {
+        .pay-grid th {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-bottom: 1.5px solid var(--border);
+            color: var(--muted);
+            font-weight: 700;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .pay-grid td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--ink);
+        }
+
+        .pay-grid tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pay-grid .num {
+            text-align: right;
+        }
+
+        .pay-grid .empty {
+            padding: 18px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .comments-input {
+            max-width: 100%;
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-actions {
             display: flex;
-            justify-content: flex-end;
-            gap: 10px;
+            gap: 12px;
+            margin: 28px 0 0 168px;
+            padding-top: 22px;
+            border-top: 1px solid var(--border);
+        }
+
+        .customer-button.save-button {
+            border-color: transparent;
+            background: linear-gradient(120deg, var(--brand-1), var(--brand-2) 75%);
+            color: #ffffff;
+            min-width: 100px;
+        }
+
+        .customer-button.save-button:hover {
+            background: linear-gradient(120deg, var(--brand-1), var(--brand-2) 75%);
+            color: #ffffff;
+            filter: brightness(1.08);
+        }
+
+        .customer-button.cancel-button {
+            min-width: 100px;
+        }
+
+        .required-note {
+            margin: -6px 0 18px 168px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        /* Title / value rows (Customer Name, CPR, Project, Unit Reference) */
+        .info-row {
+            display: flex;
+            align-items: baseline;
+            gap: 32px;
+            margin-bottom: 20px;
+        }
+
+        .info-row .form-label {
+            width: 190px;
+            padding-top: 0;
+            font-size: 17px;
+        }
+
+        .info-value {
+            display: block;
+            font-size: 17px;
+            color: var(--ink);
+            min-height: 22px;
+        }
+
+        /* Accounts: title on its own line, grid full width underneath */
+        .grid-section {
             margin-top: 28px;
         }
 
-        .btn-save, .btn-cancel {
-            padding: 11px 26px;
-            border-radius: 10px;
+        .grid-section-title {
+            display: block;
+            margin-bottom: 12px;
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .grid-section .grid-wrap {
+            width: 100%;
+        }
+
+        .grid-section .pay-grid {
+            font-size: 15px;
+        }
+
+        .grid-section .pay-grid th,
+        .grid-section .pay-grid td {
+            padding: 12px 14px;
+        }
+
+        .grid-section .grid-link {
+            font-size: 15px;
+        }
+
+        /* ---------- Message bar above "Transactions": green = success, red = problem ---------- */
+        .msg-bar {
+            display: block;
+            margin: 0 0 16px 0;
+            padding: 12px 16px;
+            border: 1px solid;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .msg-bar.msg-success {
+            background: #ecfdf3;
+            border-color: #86efac;
+            color: #15803d;
+        }
+
+        .msg-bar.msg-error {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #b91c1c;
+        }
+
+        /* ---------- Transactions: action buttons under the title ---------- */
+        .tx-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .tx-btn {
+            padding: 8px 18px;
+            border: 1.5px solid var(--brand-1);
+            border-radius: 8px;
+            background: #ffffff;
+            color: var(--brand-1);
             font-size: 14px;
             font-weight: 600;
             font-family: inherit;
-            border: none;
             cursor: pointer;
-            transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease;
         }
 
-        .btn-save {
+        .tx-btn:hover {
+            border-color: var(--brand-2);
+            color: var(--brand-2);
+        }
+
+        .tx-btn-primary {
             background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
+            border-color: transparent;
             color: #ffffff;
-            box-shadow: 0 10px 20px -8px rgba(79, 70, 229, 0.55);
         }
-        .btn-save:hover { transform: translateY(-1px); box-shadow: 0 14px 24px -8px rgba(79, 70, 229, 0.6); }
 
-        .btn-cancel {
-            background-color: #f1f5f9;
-            color: var(--muted);
-            border: 1.5px solid var(--border);
+        .tx-btn-primary:hover {
+            color: #ffffff;
+            filter: brightness(1.08);
         }
-        .btn-cancel:hover { background-color: #e2e8f0; color: var(--ink); }
 
-        .msg-success {
-            display: block;
-            margin-top: 16px;
-            padding: 10px 14px;
-            border-radius: 10px;
-            background-color: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            color: #15803d;
-            font-size: 13.5px;
+        /* Disabled buttons: greyed out and not clickable */
+        .tx-btn[disabled],
+        .tx-btn.aspNetDisabled {
+            background: #eef0f3;
+            border-color: #d4d7dd;
+            color: #9aa1ab;
+            cursor: not-allowed;
+            filter: none;
+        }
+
+        /* ---------- Customer box ---------- */
+        .customer-box {
+            margin: 0 0 20px 0;
+            padding: 8px 16px 14px 16px;
+            border: 1px solid #a0a0a0;
+            border-radius: 2px;
+        }
+
+        .customer-box legend {
+            padding: 0 4px;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        /* Two columns per box. Each column is its own grid: the title column is as
+           wide as the longest title in THAT column, so its colons line up right after
+           that longest title, and all values in the column start at the same point. */
+        .kv-columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            column-gap: 40px;
+            margin-top: 14px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .kv-col {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            column-gap: 10px;
+            row-gap: 2px;
+            align-items: center;
+            align-content: start;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .kv-col li {
+            display: contents;
+        }
+
+        .kv-col li strong {
+            display: flex;
+            justify-content: space-between;
+            gap: 4px;
+            font-weight: 700;
+        }
+
+        /* bullet in front of each title */
+        .kv-col li strong > span:first-child::before {
+            content: "\2022";
+            margin-right: 8px;
+            font-weight: 400;
+        }
+
+        @media (max-width: 700px) {
+            .kv-columns { grid-template-columns: 1fr; row-gap: 2px; }
+        }
+
+        /* ---------- Unit / amounts: two columns of label + box ---------- */
+        .at-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            column-gap: 12px;
+            row-gap: 12px;
+        }
+
+        .at-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .at-label {
+            flex: 0 0 105px;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        .at-input {
+            flex: 1;
+            min-width: 0;
+            padding: 8px 10px;
+            border: 1px solid #d4d0d8;
+            border-radius: 3px;
+            background: #f5f3f7;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--ink);
+        }
+
+        .at-input.at-disabled {
+            background: #d3d3d3;
+            border-color: #c4c4c4;
+        }
+
+        .at-input.at-editable {
+            background: #ffffff;
+        }
+
+        .at-input.at-editable:focus {
+            outline: none;
+            border-color: var(--brand-2);
+        }
+
+        @media (max-width: 700px) {
+            .at-grid { grid-template-columns: 1fr; }
+        }
+
+        .hidden-fields {
+            display: none;
+        }
+
+        .pay-grid tr.selected-row td {
+            background: #eef2ff;
             font-weight: 600;
         }
 
-        @media (max-width: 560px) {
-            .form-label { width: 100%; padding-top: 0; }
-            .form-row { flex-direction: column; }
+        .selected-note {
+            margin: 10px 0 0 0;
+            font-size: 13px;
+            color: var(--brand-1);
+            font-weight: 600;
+        }
+
+        @media (max-width: 600px) {
+            .reserve-card { padding: 22px 18px; }
+
+            .form-row {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .form-label {
+                width: 100%;
+                padding-top: 0;
+            }
+
+            .required-note {
+                margin-left: 0;
+            }
+
+            .info-row {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .info-row .form-label {
+                width: 100%;
+            }
+
+            .form-actions {
+                margin-left: 0;
+            }
+
+            .customer-actions {
+                flex-direction: column;
+            }
+
+            .customer-button {
+                width: 100%;
+            }
         }
     </style>
 </head>
+
 <body>
     <form id="form1" runat="server">
-        <div class="action-panel">
+        <div class="top-strip">
+            <span>AutoTransfer</span>
+            <asp:ImageButton ID="imgClose"
+                runat="server"
+                CssClass="close-btn"
+                CausesValidation="false"
+                ToolTip="Close"
+                AlternateText="Close"
+                ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='18' y1='6' x2='6' y2='18'/&gt;&lt;line x1='6' y1='6' x2='18' y2='18'/&gt;&lt;/svg&gt;" />
+        </div>
 
-            <div class="action-header">
-                <div class="header-row">
-                    <div class="header-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-                    </div>
-                    <div>
-                        <div class="action-title">Action Control<asp:Label ID="lblProjectID" runat="server" CssClass="field-hint" >001</asp:Label>
-                            <asp:Label ID="lblSTATUSID" runat="server" CssClass="field-hint" >0000</asp:Label>
-                            <asp:Label ID="lblActionID" runat="server" Text="Label"></asp:Label>
-                            <asp:Label ID="lblMode" runat="server" Text="Label"></asp:Label>
-                        </div>
-                        <div class="action-subtitle">Configure how this action behaves, who can trigger it, and what it runs</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="action-body">
-
-                <%-- ===================== General ===================== --%>
-                <div class="section">
-                    <div class="section-kicker">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
-                        General
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-label">Action Status</div>
-                        <div class="form-control-cell">
-                            <asp:RadioButtonList ID="rblActionStatus" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="seg-list">
-                                <asp:ListItem Text="Active" Value="Active" Selected="True" />
-                                <asp:ListItem Text="InActive" Value="InActive" />
-                            </asp:RadioButtonList>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-label">Action Title</div>
-                        <div class="form-control-cell">
-                            <asp:TextBox ID="txtActionTitle" runat="server" CssClass="txt-input" placeholder="e.g. Delete Record" />
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-label">Action Type</div>
-                        <div class="form-control-cell">
-                            <asp:DropDownList ID="ddlActionType" runat="server" CssClass="ddl-input" onchange="toggleNeedPaymentVisibility();">
-                                <asp:ListItem>Select Action</asp:ListItem>
-                                <asp:ListItem Value="CHANGE">Change Status</asp:ListItem>
-                                <asp:ListItem Value="DLET">Delete</asp:ListItem>
-                                <asp:ListItem Value="ACTV">Activate</asp:ListItem>
-                                <asp:ListItem Value="DACTV">De-Activate</asp:ListItem>
-                                <asp:ListItem>Edit</asp:ListItem>
-                            </asp:DropDownList>
-                        </div>
-                        <div class="form-control-cell" id="cellToStatus" runat="server">
-                            <asp:DropDownList ID="ddlToStatus" runat="server" CssClass="ddl-input" />
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowNeedPayment" runat="server">
-                        <div class="form-label"></div>
-                        <div class="form-control-cell">
-                            <label class="toggle-inline">
-                                <asp:CheckBox ID="chkNeedPayment" runat="server" onchange="togglePaymentPlanVisibility();" />
-                                Need Payment
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowPaymentPlan" runat="server">
-                        <div class="form-label">Add Payment Plan</div>
-                        <div class="form-control-cell">
-                            <asp:DropDownList ID="ddlPaymentPlan" runat="server" CssClass="ddl-input" AutoPostBack="true" OnSelectedIndexChanged="ddlPaymentPlan_SelectedIndexChanged" />
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowAddedPlans" runat="server" style="flex-basis:100%;">
-                        <div class="form-control-cell" style="flex-basis:100%;">
-                            <asp:Repeater ID="rptAddedPlans" runat="server" OnItemCommand="rptAddedPlans_ItemCommand">
-                                <ItemTemplate>
-                                    <span class="plan-chip">
-                                        <asp:LinkButton ID="lnkViewPlan" runat="server" CommandName="View" CommandArgument='<%# Eval("PLAN_ID") %>' CausesValidation="false" Text='<%# Eval("NAME") %>' />
-                                        <asp:LinkButton ID="lnkRemovePlan" runat="server" CommandName="Remove" CommandArgument='<%# Eval("PLAN_ID") %>' CssClass="plan-chip-remove" CausesValidation="false" ToolTip="Remove this plan">&#10005;</asp:LinkButton>
-                                    </span>
-                                </ItemTemplate>
-                            </asp:Repeater>
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowPlanDetails" runat="server" style="flex-basis:100%;">
-                        <div class="form-control-cell" style="flex-basis:100%;">
-                            <div class="plan-block">
-                                <div class="plan-block-title">
-                                    <asp:Label ID="lblCurrentPlanName" runat="server" />
-                                </div>
-                                <asp:GridView ID="gvPlanDetails" runat="server" AutoGenerateColumns="True"
-                                    CssClass="plan-details-grid" GridLines="None"
-                                    DataKeyNames="DETAIL_ID"
-                                    EmptyDataText="No plan details found for this payment plan.">
-                                    <Columns>
-                                        <asp:TemplateField HeaderText="Select">
-                                            <ItemTemplate>
-                                                <asp:CheckBox ID="chkSelectDetail" runat="server" />
-                                            </ItemTemplate>
-                                        </asp:TemplateField>
-                                    </Columns>
-                                </asp:GridView>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-label">Implementer Title</div>
-                        <div class="form-control-cell">
-                            <asp:TextBox ID="txtImplementerTitle" runat="server" CssClass="txt-input" placeholder="Maker, Checker, etc" />
-                        </div>
-                    </div>
+        <div class="page-container">
+            <div class="reserve-card">
+                <h1 class="page-title">AutoTransfer</h1>
+                <!-- IDs passed in / looked up; kept on the page (hidden) so they survive postbacks -->
+                <div class="hidden-fields">
+                    <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>
                 </div>
 
-                <%-- ===================== Visibility & Parameters ===================== --%>
-                <div class="section">
-                    <div class="section-kicker">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                        Visibility &amp; Parameters
+                <fieldset class="customer-box">
+                    <legend>CUSTOMER</legend>
+                    <div class="kv-columns">
+                        <ul class="kv-col">
+                            <li><strong><span>CPR</span><span>:</span></strong> <asp:Label ID="lblCPR" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>NAME</span><span>:</span></strong> <asp:Label ID="lblCustomerName" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Mobile</span><span>:</span></strong> <asp:Label ID="lblMobile" runat="server" Text=""></asp:Label></li>
+                        </ul>
+                        <ul class="kv-col">
+                            <li><strong><span>Land Line</span><span>:</span></strong> <asp:Label ID="lblLandLine" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Customer Number</span><span>:</span></strong> <asp:Label ID="lblCustomerNumber" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Person Number</span><span>:</span></strong> <asp:Label ID="lblPersonNumber" runat="server" Text=""></asp:Label></li>
+                        </ul>
                     </div>
+                </fieldset>
 
-                    <div class="form-row">
-                        <div class="form-label">Show in</div>
-                        <div class="form-control-cell">
-                            <asp:CheckBoxList ID="cblShowIn" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="chip-list">
-                                <asp:ListItem Text="Show In Default" Value="Default" Selected="True" />
-                                <asp:ListItem Text="Show In Preview" Value="Preview" />
-                            </asp:CheckBoxList>
-                        </div>
+                <fieldset class="customer-box">
+                    <legend>UNIT DETAILS</legend>
+                    <div class="kv-columns">
+                        <ul class="kv-col">
+                            <li><strong><span>Unit Reference</span><span>:</span></strong> <asp:Label ID="lblUnitRef" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Pre Sales Account<asp:Label ID="lblAccountType" runat="server" Text=""></asp:Label></span><span>:</span></strong> <asp:Label ID="lblPreSalesAccount" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Paid Amount</span><span>:</span></strong> <asp:Label ID="lblPaidAmount" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Cost of Sales</span><span>:</span></strong> <asp:Label ID="lblCostOfSales" runat="server" Text="0.000"></asp:Label></li>
+                        </ul>
+                        <ul class="kv-col">
+                            <li><strong><span>Price</span><span>:</span></strong> <asp:Label ID="lblPrice" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Balance</span><span>:</span></strong> <asp:Label ID="lblBalance" runat="server" Text=""></asp:Label></li>
+                            <li><strong><span>Remaining</span><span>:</span></strong> <asp:Label ID="lblRemaining" runat="server" Text=""></asp:Label></li>
+                        </ul>
                     </div>
+                </fieldset>
 
-                    <div class="form-row">
-                        <div class="form-label">Receive Parameters</div>
-                        <div class="form-control-cell">
-                            <div class="params-card">
-                                <div class="params-card-top">
-                                    <label class="toggle-inline">
-                                        <asp:CheckBox ID="chkReceiveParameters" runat="server" />
-                                        Enable parameter passing
-                                    </label>
-                                </div>
-                                <asp:RadioButtonList ID="rblReceiveParameters" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="seg-list">
-                                    <asp:ListItem Text="No" Value="No" Selected="True" />
-                                    <asp:ListItem Text="For Enable" Value="ForEnable" />
-                                    <asp:ListItem Text="For Disable" Value="ForDisable" />
-                                    <asp:ListItem Text="To Hide" Value="ToHide" />
-                                </asp:RadioButtonList>
-
-                                <asp:LinkButton ID="lnkSelectUsers" runat="server" Text="  Select Users" CssClass="select-users-btn" />
-                            </div>
-                        </div>
+                <div class="grid-section">
+                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-bar" EnableViewState="False" Visible="False" />
+                    <span class="grid-section-title">Transactions</span>
+                    <div class="tx-actions">
+                        <asp:Button ID="btnPost" runat="server" Text="Post" CssClass="tx-btn tx-btn-primary" />
+                        <asp:Button ID="btnDisplayInvoice" runat="server" Text="Display Invoice" CssClass="tx-btn" Enabled="False" />
+                        <asp:Button ID="btnRegenerateInvoice" runat="server" Text="Re-Generate Invoice" CssClass="tx-btn" Enabled="False" />
                     </div>
-                </div>
-
-                <%-- ===================== Script ===================== --%>
-                <div class="section">
-                    <div class="section-kicker">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4 2 12l6 8"/><path d="M16 4l6 8-6 8"/></svg>
-                        Script
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-control-cell" style="flex-basis:100%;">
-                            <div class="code-editor">
-                                <div class="code-editor-bar">
-                                    <span class="code-dot red"></span>
-                                    <span class="code-dot yellow"></span>
-                                    <span class="code-dot green"></span>
-                                    <span class="code-editor-label">action-script.vb</span>
-                                </div>
-                                <asp:TextBox ID="txtScript" runat="server" TextMode="MultiLine" CssClass="script-box" placeholder="' Write the script that runs for this action..." />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <%-- ===================== Execution ===================== --%>
-                <div class="section">
-                    <div class="section-kicker">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        Pre-Execution
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-control-cell" style="flex-basis:100%;">
-                            <asp:RadioButtonList ID="rblPreExecution" runat="server" RepeatDirection="Horizontal" RepeatLayout="Flow" CssClass="seg-list">
-                                <asp:ListItem Text="None" Value="None" Selected="True" />
-                                <asp:ListItem Text="Confirmation" Value="Confirmation" />
-                                <asp:ListItem Text="Parameter" Value="Parameter" />
-                            </asp:RadioButtonList>
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowConfirmationText" runat="server">
-                        <div class="form-label">Confirmation Text</div>
-                        <div class="form-control-cell">
-                            <asp:TextBox ID="txtConfirmationText" runat="server" CssClass="txt-input" placeholder="e.g. Are you sure you want to proceed?" />
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowParameterType" runat="server">
-                        <div class="form-label">Parameter Type</div>
-                        <div class="form-control-cell">
-                            <asp:DropDownList ID="ddlParameterType" runat="server" CssClass="ddl-input" onchange="toggleParameterTypeVisibility();">
-                                <asp:ListItem Text="Justification" Value="JUSTIFICATION" />
-                                <asp:ListItem Text="Restriction (Window)" Value="RESTRICTION_WINDOW" />
-                                <asp:ListItem Text="Restriction (No Window)" Value="RESTRICTION_NO_WINDOW" />
-                                <asp:ListItem Text="Restriction and Justification" Value="RESTRICTION_JUSTIFICATION" />
-                                <asp:ListItem Text="Modify" Value="MODIFY" />
-                            </asp:DropDownList>
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowFormTitle" runat="server">
-                        <div class="form-label">Form Title</div>
-                        <div class="form-control-cell">
-                            <asp:TextBox ID="txtFormTitle" runat="server" CssClass="txt-input" placeholder="e.g. Restriction Request" />
-                        </div>
-                    </div>
-
-                    <div class="form-row" id="rowSelectSQL" runat="server">
-                        <div class="form-label">Select SQL</div>
-                        <div class="form-control-cell" style="flex-basis:100%;">
-                            <asp:TextBox ID="txtSelectSQL" runat="server" TextMode="MultiLine" CssClass="script-box" placeholder="Select ... from ... where ..." />
-                        </div>
+                    <div class="grid-wrap">
+                        <asp:GridView ID="gvTransactions"
+                            runat="server"
+                            AutoGenerateColumns="False"
+                            CssClass="pay-grid"
+                            GridLines="None"
+                            ShowHeaderWhenEmpty="True"
+                            EmptyDataText="No AutoTransfer lines for this action.">
+                            <EmptyDataRowStyle CssClass="empty" />
+                            <Columns>
+                                <asp:BoundField DataField="Account" HeaderText="Account" />
+                                <asp:BoundField DataField="Type" HeaderText="Type" />
+                                <asp:BoundField DataField="Transaction" HeaderText="Transaction" />
+                                <asp:BoundField DataField="Amount" HeaderText="Amount" DataFormatString="{0:N3}"
+                                    HeaderStyle-CssClass="num" ItemStyle-CssClass="num" />
+                                <asp:BoundField DataField="Reference" HeaderText="Reference" />
+                                <asp:BoundField DataField="Description" HeaderText="Description" />
+                            </Columns>
+                        </asp:GridView>
                     </div>
                 </div>
-
-                <div class="btn-row">
-                    <asp:Button ID="btnLoad" runat="server" Text="Load" CssClass="btn-cancel" CausesValidation="false" OnClick="btnLoad_Click" />
-                    <asp:Button ID="btnCancel" runat="server" Text="Cancel" CssClass="btn-cancel" CausesValidation="false" OnClick="btnCancel_Click" />
-                    <asp:Button ID="btnSave" runat="server" Text="Save Action" CssClass="btn-save" OnClick="btnSave_Click" />
-                </div>
-
-                <asp:Label ID="lblMessage" runat="server" CssClass="msg-success" />
-
             </div>
         </div>
 
         <script type="text/javascript">
-            function toggleNeedPaymentVisibility() {
-                var ddl = document.getElementById('<%= ddlActionType.ClientID %>');
-                var row = document.getElementById('<%= rowNeedPayment.ClientID %>');
-                var toStatusCell = document.getElementById('<%= cellToStatus.ClientID %>');
+            (function () {
+                // Keep server code blocks out of this page: they stop server code from adding controls to the form.
+                // Each .date-picker wrapper is self-contained, so its parts are found relative to it.
 
-                if (!ddl || !row || !toStatusCell) { return; }
-
-                var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
-                var isChangeStatus = (selectedValue === 'CHANGE');
-
-                row.style.display = isChangeStatus ? '' : 'none';
-                toStatusCell.style.display = isChangeStatus ? '' : 'none';
-
-                togglePaymentPlanVisibility();
-            }
-
-            function togglePaymentPlanVisibility() {
-                var chk = document.getElementById('<%= chkNeedPayment.ClientID %>');
-                var needPaymentRow = document.getElementById('<%= rowNeedPayment.ClientID %>');
-                var planRow = document.getElementById('<%= rowPaymentPlan.ClientID %>');
-                var addedPlansRow = document.getElementById('<%= rowAddedPlans.ClientID %>');
-                var planDetailsRow = document.getElementById('<%= rowPlanDetails.ClientID %>');
-
-                if (!chk || !needPaymentRow || !planRow || !addedPlansRow || !planDetailsRow) { return; }
-
-                var needPaymentRowVisible = (needPaymentRow.style.display !== 'none');
-                var planRowVisible = (needPaymentRowVisible && chk.checked);
-
-                planRow.style.display = planRowVisible ? '' : 'none';
-
-                // Whether the chips / plan-details rows should actually be SHOWN depends on
-                // which plans have been added and which one is current, which the server only
-                // knows after a postback. So JS only ever force-hides these rows; showing
-                // them is left to whatever the server most recently rendered.
-                if (!planRowVisible) {
-                    addedPlansRow.style.display = 'none';
-                    planDetailsRow.style.display = 'none';
-                }
-            }
-
-            function togglePreExecutionVisibility() {
-                var radios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
-                var confirmationRow = document.getElementById('<%= rowConfirmationText.ClientID %>');
-                var parameterTypeRow = document.getElementById('<%= rowParameterType.ClientID %>');
-
-                if (!radios || !confirmationRow || !parameterTypeRow) { return; }
-
-                var selectedValue = '';
-                for (var i = 0; i < radios.length; i++) {
-                    if (radios[i].checked) {
-                        selectedValue = radios[i].value;
-                        break;
-                    }
+                // The textbox uses yyyy-MM-dd, the same format <input type="date"> uses,
+                // so the value only needs validating, not converting.
+                function toPickerValue(text) {
+                    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
                 }
 
-                confirmationRow.style.display = (selectedValue === 'Confirmation') ? '' : 'none';
-                parameterTypeRow.style.display = (selectedValue === 'Parameter') ? '' : 'none';
+                function initDatePicker(wrap) {
+                    var txt = wrap.querySelector('.txt-input');
+                    var btn = wrap.querySelector('.date-picker-btn');
+                    var dtp = wrap.querySelector('.date-picker-native');
+                    if (!txt || !btn || !dtp) return;
 
-                toggleParameterTypeVisibility();
-            }
-
-            function toggleParameterTypeVisibility() {
-                var parameterTypeRow = document.getElementById('<%= rowParameterType.ClientID %>');
-                var ddl = document.getElementById('<%= ddlParameterType.ClientID %>');
-                var formTitleRow = document.getElementById('<%= rowFormTitle.ClientID %>');
-                var selectSqlRow = document.getElementById('<%= rowSelectSQL.ClientID %>');
-
-                if (!parameterTypeRow || !ddl || !formTitleRow || !selectSqlRow) { return; }
-
-                var parameterRowVisible = (parameterTypeRow.style.display !== 'none');
-                var selectedValue = ddl.options[ddl.selectedIndex] ? ddl.options[ddl.selectedIndex].value : '';
-
-                var showFormTitle = parameterRowVisible && (
-                    selectedValue === 'JUSTIFICATION' ||
-                    selectedValue === 'RESTRICTION_WINDOW' ||
-                    selectedValue === 'RESTRICTION_NO_WINDOW' ||
-                    selectedValue === 'RESTRICTION_JUSTIFICATION');
-
-                var showSelectSql = parameterRowVisible && (
-                    selectedValue === 'RESTRICTION_WINDOW' ||
-                    selectedValue === 'RESTRICTION_NO_WINDOW' ||
-                    selectedValue === 'RESTRICTION_JUSTIFICATION');
-
-                formTitleRow.style.display = showFormTitle ? '' : 'none';
-                selectSqlRow.style.display = showSelectSql ? '' : 'none';
-            }
-
-            if (document.addEventListener) {
-                document.addEventListener('DOMContentLoaded', function () {
-                    toggleNeedPaymentVisibility();
-                    togglePreExecutionVisibility();
-
-                    var preExecutionRadios = document.getElementsByName('<%= rblPreExecution.UniqueID %>');
-                    for (var i = 0; i < preExecutionRadios.length; i++) {
-                        preExecutionRadios[i].addEventListener('change', togglePreExecutionVisibility);
+                    function openPicker() {
+                        dtp.value = toPickerValue(txt.value);
+                        if (typeof dtp.showPicker === 'function') {
+                            dtp.showPicker();
+                        } else {
+                            // older browsers: fall back to focusing the native control
+                            dtp.style.pointerEvents = 'auto';
+                            dtp.focus();
+                            dtp.click();
+                        }
                     }
-                });
-            }
+
+                    dtp.addEventListener('change', function () {
+                        if (dtp.value) {
+                            txt.value = dtp.value;
+                        }
+                    });
+
+                    btn.addEventListener('click', openPicker);
+                    txt.addEventListener('click', openPicker);
+                }
+
+                // Used by the X button and Cancel. window.close() only works for windows opened by script;
+                // otherwise fall back to going back one page.
+                window.closeForm = function () {
+                    window.close();
+                    setTimeout(function () {
+                        if (!window.closed && window.history.length > 1) {
+                            window.history.back();
+                        }
+                    }, 150);
+                };
+
+                var wraps = document.querySelectorAll('.date-picker');
+                for (var i = 0; i < wraps.length; i++) {
+                    initDatePicker(wraps[i]);
+                }
+            })();
         </script>
     </form>
 </body>

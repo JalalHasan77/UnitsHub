@@ -376,6 +376,29 @@ html, body, form {
             font-size: 15px;
         }
 
+        /* ---------- Message bar above "Transactions": green = success, red = problem ---------- */
+        .msg-bar {
+            display: block;
+            margin: 0 0 16px 0;
+            padding: 12px 16px;
+            border: 1px solid;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .msg-bar.msg-success {
+            background: #ecfdf3;
+            border-color: #86efac;
+            color: #15803d;
+        }
+
+        .msg-bar.msg-error {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #b91c1c;
+        }
+
         /* ---------- Transactions: action buttons under the title ---------- */
         .tx-actions {
             display: flex;
@@ -612,8 +635,14 @@ html, body, form {
                     <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblATGroupTitle" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblActionType" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblToStatusID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>
@@ -653,6 +682,7 @@ html, body, form {
                 </fieldset>
 
                 <div class="grid-section">
+                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-bar" EnableViewState="False" Visible="False" />
                     <span class="grid-section-title">Transactions</span>
                     <div class="tx-actions">
                         <asp:Button ID="btnPost" runat="server" Text="Post" CssClass="tx-btn tx-btn-primary" />

@@ -138,6 +138,30 @@
 
         .group-title { flex: 1; font-weight: 600; font-size: 14px; color: var(--ink); }
 
+        /* Dropdown + textbox on the right of each group header */
+        .group-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .group-header-controls .hdr-input {
+            height: 28px;
+            padding: 2px 8px;
+            border: 1.5px solid var(--border);
+            border-radius: 7px;
+            background: #ffffff;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--ink);
+            cursor: auto;
+        }
+
+        .group-header-controls select.hdr-input { width: 150px; cursor: pointer; }
+        .group-header-controls input.hdr-input  { width: 190px; }
+        .group-header-controls .hdr-input:focus { outline: none; border-color: var(--brand-1); }
+
         .group-remove {
             border: none;
             background: none;
@@ -234,6 +258,13 @@
                             <div class="group-header" draggable="true">
                                 <span class="group-chip"><%# Eval("Label") %></span>
                                 <span class="group-title"><%# Eval("Title") %></span>
+                                <span class="group-header-controls">
+                                    <asp:HiddenField ID="hdnHeaderGroupId" runat="server" Value='<%# Eval("GroupId") %>' />
+                                    <asp:DropDownList ID="ddlGroupOption" runat="server" CssClass="hdr-input">
+                                        <asp:ListItem Text="implement on.." Value="" />
+                                    </asp:DropDownList>
+                                    <asp:TextBox ID="txtGroupValue" runat="server" CssClass="hdr-input" placeholder="Enter the Reference Phrase" />
+                                </span>
                                 <asp:LinkButton ID="lnkRemoveGroup" runat="server" CssClass="group-remove"
                                     CommandName="RemoveGroup" CommandArgument='<%# Eval("GroupId") %>'
                                     CausesValidation="false" ToolTip="Remove group">&#10005;</asp:LinkButton>
@@ -343,6 +374,14 @@
                 document.addEventListener('dragend', function (e) {
                     if (e.target.classList && e.target.classList.contains('group-header')) { onDragEnd(e); }
                 });
+                // Header is draggable; don't start a drag when the user is clicking into
+                // the header's dropdown / textbox (otherwise typing/selecting drags the card)
+                document.addEventListener('mousedown', function (e) {
+                    var header = e.target.closest ? e.target.closest('.group-header') : null;
+                    if (!header) { return; }
+                    header.draggable = !e.target.closest('input, select, textarea');
+                });
+
                 document.addEventListener('dragover', onDragOver);
                 document.addEventListener('drop', onDrop);
             })();

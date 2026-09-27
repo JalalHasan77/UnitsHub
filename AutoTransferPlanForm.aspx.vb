@@ -27,6 +27,8 @@ Partial Class AutoTransferPlanForm
         Public Property Label As String
         Public Property Title As String
         Public Property SortOrder As Integer
+        Public Property HeaderOption As String      ' ddlGroupOption  -> UNITSHUB_ATP_GROUPS.IMPLEMENT_ON (PLAN_ID.DETAIL_ID)
+        Public Property HeaderValue As String       ' txtGroupValue   -> UNITSHUB_ATP_GROUPS.REFERENCE_PHRASE
         Public Property Details As New List(Of DetailEntry)
     End Class
 
@@ -103,14 +105,16 @@ Partial Class AutoTransferPlanForm
 
         Dim groupsDT As New Data.DataTable
         groupsDT = GetDataTable(EBDB,
-            "SELECT GROUP_ID, GROUP_TITLE, SORT_ORDER FROM UNITSHUB_ATP_GROUPS " &
+            "SELECT GROUP_ID, GROUP_TITLE, SORT_ORDER, IMPLEMENT_ON, REFERENCE_PHRASE FROM UNITSHUB_ATP_GROUPS " &
             "WHERE PLAN_ID = '" & planId.Replace("'", "''") & "' ORDER BY SORT_ORDER")
 
         For Each groupRow As Data.DataRow In groupsDT.Rows
             Dim group As New GroupEntry With {
                 .GroupId = Convert.ToString(groupRow("GROUP_ID")),
                 .Title = Convert.ToString(groupRow("GROUP_TITLE")),
-                .SortOrder = Convert.ToInt32(groupRow("SORT_ORDER"))
+                .SortOrder = Convert.ToInt32(groupRow("SORT_ORDER")),
+                .HeaderOption = Convert.ToString(groupRow("IMPLEMENT_ON")),
+                .HeaderValue = Convert.ToString(groupRow("REFERENCE_PHRASE"))
             }
 
             Dim detailsDT As New Data.DataTable
@@ -146,7 +150,31 @@ Partial Class AutoTransferPlanForm
     ''' textbox before an event handler gets a chance to read it via FindControl.
     ''' </summary>
     Protected Sub Page_PreRender(ByVal sender As Object, ByVal e As EventArgs) Handles Me.PreRender
+        If IsPostBack Then CaptureGroupHeaderValues()
         BindGroups()
+    End Sub
+
+    ''' <summary>
+    ''' Copies each group header's dropdown / textbox into the draft before the repeater
+    ''' is rebound (the rebind recreates those controls, so without this the user's
+    ''' choices would be lost on every postback). Groups removed during this postback
+    ''' are simply skipped.
+    ''' </summary>
+    Private Sub CaptureGroupHeaderValues()
+        For Each item As RepeaterItem In rptGroups.Items
+            If item.ItemType <> ListItemType.Item AndAlso item.ItemType <> ListItemType.AlternatingItem Then Continue For
+
+            Dim hdnGroupId As HiddenField = TryCast(item.FindControl("hdnHeaderGroupId"), HiddenField)
+            If hdnGroupId Is Nothing Then Continue For
+
+            Dim group = PlanDraft.Groups.FirstOrDefault(Function(g) g.GroupId = hdnGroupId.Value)
+            If group Is Nothing Then Continue For
+
+            Dim ddl As DropDownList = TryCast(item.FindControl("ddlGroupOption"), DropDownList)
+            Dim txt As TextBox = TryCast(item.FindControl("txtGroupValue"), TextBox)
+            If ddl IsNot Nothing Then group.HeaderOption = ddl.SelectedValue
+            If txt IsNot Nothing Then group.HeaderValue = txt.Text.Trim()
+        Next
     End Sub
 
     Private Sub BindGroups()
@@ -204,6 +232,30 @@ Partial Class AutoTransferPlanForm
         Response.Redirect(Request.RawUrl)
     End Sub
 
+    ' Payment-plan lines for the "implement on.." dropdowns, read once per request
+    ' (every group card uses the same list)
+    Private _implementOnOptions As Data.DataTable
+
+    Private Function GetImplementOnOptions() As Data.DataTable
+        If _implementOnOptions Is Nothing Then
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT P.PLAN_ID || '.' || D.DETAIL_ID AS ID, "
+            SQL = SQL + vbCrLf + "        P.NAME || ' (' || D.DESCRIPTION || ': ' || "
+            SQL = SQL + vbCrLf + "            CASE "
+            SQL = SQL + vbCrLf + "                WHEN D.AMOUNT IS NOT NULL THEN TO_CHAR(D.AMOUNT) "
+            SQL = SQL + vbCrLf + "                ELSE TO_CHAR(D.PERCENT) "
+            SQL = SQL + vbCrLf + "            END "
+            SQL = SQL + vbCrLf + "        || ')' AS NAME "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_PAYMENTPLAN P "
+            SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PAYMENTPLANDETAILS D ON P.PLAN_ID = D.PLAN_ID "
+            SQL = SQL + vbCrLf + " ORDER BY P.PLAN_ID, D.DETAIL_ID "
+
+            _implementOnOptions = GetDataTable(EBDB, SQL)
+            If _implementOnOptions Is Nothing Then _implementOnOptions = New Data.DataTable()
+        End If
+        Return _implementOnOptions
+    End Function
+
     Protected Sub rptGroups_ItemDataBound(ByVal sender As Object, ByVal e As RepeaterItemEventArgs)
         If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then
             Return
@@ -214,6 +266,21 @@ Partial Class AutoTransferPlanForm
 
         rptDetails.DataSource = group.Details.OrderBy(Function(d) d.SortOrder).ToList()
         rptDetails.DataBind()
+
+        ' Restore the header dropdown / textbox from the draft
+        Dim ddl As DropDownList = CType(e.Item.FindControl("ddlGroupOption"), DropDownList)
+        Dim txt As TextBox = CType(e.Item.FindControl("txtGroupValue"), TextBox)
+
+        ' Options: payment-plan lines (ID = PLAN_ID.DETAIL_ID), after "implement on.."
+        ddl.Items.Clear()
+        ddl.Items.Add(New ListItem("implement on..", ""))
+        For Each optionRow As Data.DataRow In GetImplementOnOptions().Rows
+            ddl.Items.Add(New ListItem(Convert.ToString(optionRow("NAME")), Convert.ToString(optionRow("ID"))))
+        Next
+
+        Dim savedOption As String = If(group.HeaderOption, "")
+        If ddl.Items.FindByValue(savedOption) IsNot Nothing Then ddl.SelectedValue = savedOption
+        txt.Text = If(group.HeaderValue, "")
     End Sub
 
     ''' <summary>
@@ -318,6 +385,10 @@ Partial Class AutoTransferPlanForm
             Return
         End If
 
+        ' The header dropdown / textbox values are normally copied into the draft in
+        ' PreRender, which runs AFTER this handler - copy them now so the save has them.
+        CaptureGroupHeaderValues()
+
         If PlanDraft.Groups.Count = 0 Then
             lblMessage.CssClass = "msg-success"
             lblMessage.Text = "Add at least one group before saving."
@@ -379,10 +450,12 @@ Partial Class AutoTransferPlanForm
             Dim groupId As String = nextGroupIdNumber.ToString("00000")
 
             Dim insertGroupSql As String =
-                "INSERT INTO UNITSHUB_ATP_GROUPS (GROUP_ID, PLAN_ID, GROUP_TITLE, SORT_ORDER) VALUES (" &
+                "INSERT INTO UNITSHUB_ATP_GROUPS (GROUP_ID, PLAN_ID, GROUP_TITLE, SORT_ORDER, IMPLEMENT_ON, REFERENCE_PHRASE) VALUES (" &
                 "'" & groupId & "', '" & planId & "', " &
                 "'" & group.Title.Replace("'", "''") & "', " &
-                group.SortOrder & ")"
+                group.SortOrder & ", " &
+                (If(String.IsNullOrEmpty(group.HeaderOption), "NULL", "'" & group.HeaderOption.Replace("'", "''") & "'")) & ", " &
+                (If(String.IsNullOrEmpty(group.HeaderValue), "NULL", "'" & group.HeaderValue.Replace("'", "''") & "'")) & ")"
             ExecuteNonQuery(EBDB, insertGroupSql)
 
             For Each detail As DetailEntry In group.Details.OrderBy(Function(d) d.SortOrder)
