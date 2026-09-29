@@ -242,8 +242,8 @@ Partial Class AutoTransfer
     '''   Transaction = "C" if the line has a Credit amount, "D" if it has a Debit amount
     '''   Amount      = that Credit or Debit amount
     '''   Reference   = the Unit Reference shown in UNIT DETAILS (lblUnitRef)
-    '''   Description = the group's REFERENCE_PHRASE + " " + Unit Reference
-    '''                 ("Reservation of Unit" if the group has no phrase)
+    '''   Description = the group's REFERENCE_PHRASE with [@Reference] replaced by the
+    '''                 Unit Reference (see BuildDescription)
     ''' Runs after LoadUnitInfo / LoadAccountInfo, which fill those two values.
     ''' Lines with neither a Debit nor a Credit amount are skipped.
     ''' </summary>
@@ -262,7 +262,7 @@ Partial Class AutoTransfer
 
             Dim UnitRef As String = lblUnitRef.Text.Trim()
             Dim Phrase As String = If(lblReferencePhrase.Text.Trim() = "", "Reservation of Unit", lblReferencePhrase.Text.Trim())
-            Dim Description As String = (Phrase & " " & UnitRef).Trim()
+            Dim Description As String = BuildDescription(Phrase, UnitRef)
             Dim PreSalesAccount As String = lblPreSalesAccount.Text.Trim()
 
             If Details IsNot Nothing Then
@@ -499,6 +499,44 @@ Partial Class AutoTransfer
         Return sessionUserID
     End Function
 
+    ''' <summary>
+    ''' Transactions Description from the group's REFERENCE_PHRASE:
+    '''   - "[@Reference]" (or "@Reference", any case) in the phrase is replaced by the
+    '''     Unit Reference, e.g. "Reservation of Unit [@Reference] - 1st payment"
+    '''     -> "Reservation of Unit 318724 - 1st payment"; the reference is NOT added again.
+    '''   - No placeholder: the reference is added at the end, unless the phrase already
+    '''     ends with it (so it never shows twice).
+    ''' Double spaces are collapsed, and a word repeated right after itself where the phrase
+    ''' meets the reference ("Unit Unit") is kept once.
+    ''' </summary>
+    Private Function BuildDescription(Phrase As String, UnitRef As String) As String
+        Dim Text As String = If(Phrase, "").Trim()
+        Dim Ref As String = If(UnitRef, "").Trim()
+
+        Dim HasPlaceholder As Boolean =
+            Text.IndexOf("[@Reference]", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            Text.IndexOf("@Reference", StringComparison.OrdinalIgnoreCase) >= 0
+
+        If HasPlaceholder Then
+            ' Bracketed form first, then any bare "@Reference" left
+            Text = System.Text.RegularExpressions.Regex.Replace(Text, "\[@Reference\]", Ref.Replace("$", "$$"),
+                                                                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            Text = System.Text.RegularExpressions.Regex.Replace(Text, "@Reference", Ref.Replace("$", "$$"),
+                                                                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        ElseIf Ref <> "" AndAlso Not Text.EndsWith(Ref, StringComparison.OrdinalIgnoreCase) Then
+            Text = Text & " " & Ref
+        End If
+
+        Text = System.Text.RegularExpressions.Regex.Replace(Text, "\s{2,}", " ").Trim()
+
+        ' Drop a word repeated right after itself, e.g. phrase "Reservation of Unit [@Reference]"
+        ' with reference "Unit 318724" -> "Reservation of Unit 318724", not "... Unit Unit 318724"
+        Text = System.Text.RegularExpressions.Regex.Replace(Text, "\b(\w+)\s+\1\b", "$1",
+                                                            System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+
+        Return Text
+    End Function
+
     ' ------------------------------------------------------------------
     ' Helpers
     ' ------------------------------------------------------------------
@@ -687,6 +725,30 @@ Partial Class AutoTransfer
                 Else
                     ShowMessage(Done & ", but " & String.Join("; ", Problems) & ".", False)
                 End If
+
+
+
+
+                '======================================================================
+                '======================================================================
+                '======================================================================
+                Dim Result As New Dictionary(Of String, Object)
+                Result.Add("Result", lblCID.Text)
+
+                Dim PostingResult As New List(Of Dictionary(Of String, Object))
+                PostingResult.Add(Result)
+
+                Dim ReturnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
+
+                VendorPopupHelper.RegisterPopupSelectionAndClose(
+                                            page:=Me,
+                                            returnValue:=PostingResult,
+                                            startupScriptKey:=ReturnKey,
+                                            skipPostBack:=False)
+                '======================================================================
+                '======================================================================
+                '======================================================================
+
             ElseIf PostedLines.Count = 0 Then
                 ShowMessage("Nothing to post.", False)
             End If

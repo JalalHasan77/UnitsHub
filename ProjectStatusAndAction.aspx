@@ -181,6 +181,23 @@
             font-size: 14px;
         }
 
+        /* "Add New State" shown only when the project has no states yet */
+        .btn-add-first-state {
+            margin-left: 16px;
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1a1464;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-add-first-state:hover {
+            background-color: #2a2390;
+        }
+
         .state-actions-panel {
             background-color: #dbeafe;
             border: 2px solid #1a1464;
@@ -330,7 +347,11 @@
                                             </asp:TemplateField>
                                         </Columns>
                                         <EmptyDataTemplate>
-                                            <div class="status-empty">No statuses defined for this project.</div>
+                                            <div class="status-empty">
+                                                No statuses defined for this project.
+                                                <asp:Button ID="btnAddFirstState" runat="server" Text="Add New State"
+                                                    CssClass="btn-add-first-state" CausesValidation="false" />
+                                            </div>
                                         </EmptyDataTemplate>
                                     </asp:GridView>
                                 </div>

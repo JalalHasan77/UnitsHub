@@ -247,6 +247,39 @@ html, body, form {
             margin-bottom: 8px;
         }
 
+        /* Same width as the Name + CPR boxes, so "Add New Customer" sits over the CPR box's right edge */
+        .customer-toolbar {
+            max-width: 520px;
+            margin-bottom: 4px;
+        }
+
+        /* The "Add New Customer" bar pushes the textboxes down, so instead of sitting at
+           the top of the row this label drops to the bottom and centres itself on the
+           Name / CPR boxes (box height: 14px text + 2 x 10px padding + borders) */
+        .customer-label {
+            align-self: flex-end;
+            display: flex;
+            align-items: center;
+            min-height: 41px;
+            padding-top: 0;
+        }
+
+        /* "Customer / CPR:" label that works as "Select Existing Customer" */
+        .label-link {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--brand-1);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+
+        .label-link:hover,
+        .label-link:focus-visible {
+            color: var(--brand-2);
+            outline: none;
+        }
+
         /* Disabled links (Enabled = False renders class "aspNetDisabled"): grey, and
            not clickable at all, so no script attached to them can run */
         .grid-link.aspNetDisabled,
@@ -382,6 +415,11 @@ html, body, form {
                 padding-top: 0;
             }
 
+            .customer-label {
+                align-self: auto;
+                min-height: 0;
+            }
+
             .required-note {
                 margin-left: 0;
             }
@@ -420,15 +458,6 @@ html, body, form {
                 <h1 class="page-title">Reserve A Unit</h1>
 
                 <div class="customer-actions">
-                    <asp:Button ID="btnAddNewCustomer"
-                        runat="server"
-                        Text="Add New Customer"
-                        CssClass="customer-button" />
-
-                    <asp:Button ID="btnSelectExistingCustomer"
-                        runat="server"
-                        Text="Select Existing Customer"
-                        CssClass="customer-button" />
                     <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
@@ -438,11 +467,21 @@ html, body, form {
                 </div>
 
                 <div class="form-row">
-                    <asp:Label ID="lblCustomerName"
-                        runat="server"
-                        Text="Customer / CPR:"
-                        CssClass="form-label" />
+                    <div class="form-label customer-label">
+                        <%-- Click to pick an existing customer (was the "Select Existing Customer" button) --%>
+                        <asp:LinkButton ID="lnkSelectCustomer"
+                            runat="server"
+                            CssClass="label-link"
+                            CausesValidation="False"
+                            ToolTip="Select an existing customer">Customer / CPR:</asp:LinkButton>
+                    </div>
                     <div class="form-control">
+                        <div class="grid-toolbar customer-toolbar">
+                            <asp:LinkButton ID="lnkAddNewCustomer"
+                                runat="server"
+                                CssClass="grid-link"
+                                CausesValidation="False">Add New Customer</asp:LinkButton>
+                        </div>
                         <div class="inline-fields">
                             <asp:TextBox ID="txtCustomerName"
                                 readonly="true"

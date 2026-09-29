@@ -3,98 +3,58 @@ Imports System.DateTime
 Imports System.Drawing
 Imports System.Globalization
 
-Partial Class ReserveUnit
+''' <summary>
+''' Popup page: links payments to a unit/contact. Trimmed down from ReserveUnit.aspx
+''' to the payments section only - no customer picking, account linking, "reserved by",
+''' reservation date or comments.
+'''
+''' LOAD  : LinkPaymentV2_Load reads NodeID/ProjectId/STATEID/ActionId from the query
+'''         string, resolves the unit's CONTACT_ID via LoadCustomerFromProperties(),
+'''         then BindPayments() -> GetPayments() fills gvPayments.
+''' POPUP : RegisterLinkPaymentPopup() wires lnkLinkPayment to open LinkPayment.aspx
+'''         (as a VendorPopupHelper "Standard" popup); its return value is read back in
+'''         lnkLinkPayment_Click, which is also where the UNITSHUB_PAYMENTS INSERT runs.
+''' SAVE  : btnSave_Click hands the result back to whatever opened THIS page (via
+'''         VendorPopupHelper.RegisterPopupSelectionAndClose) - CONTACT_ID, whether
+'''         every required payment line is now linked (ChangeStatus), whether a history
+'''         row should be written (InsertHistory), and a Summary of what was linked.
+''' </summary>
+Partial Class LinkPaymentV2
     Inherits System.Web.UI.Page
-    Private encryNdecry As New EncryDecry
 
-    Private Sub ReserveUnit_Load(sender As Object, e As EventArgs) Handles Me.Load
-        ' Read-only in the browser, but still posted back so the picked date reaches the server
-        txtReservationDate.Attributes("readonly") = "readonly"
-
+    Private Sub LinkPaymentV2_Load(sender As Object, e As EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
             gvPayments.ShowHeaderWhenEmpty = True
             Dim NeedsPayment As String = Request("NeedsPayment")
-
 
             lblPID.Text = Request("NodeID")
             lblPRJID.Text = Request("ProjectId")
             lblSTATEID.Text = Request("STATEID")
             lblActionID.Text = Request("ActionId")
 
-
-            txtReservationDate.Text = Date.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-
             ' NEED_PAYMENT: 1 = payment needed (show the panel), 0 / missing = no payment (hide it)
             pnlPayments.Visible = IsPaymentNeeded(NeedsPayment)
 
-            ' Load the unit's customer (CONTACT_ID), account and comments from UNITSHUB_CUSTOMERPROPERTIES
+            ' Resolve the unit's CONTACT_ID (the key payments are linked/shown against)
             LoadCustomerFromProperties()
 
-            ' Remember the customer the form opened with, so Save can tell whether a
-            ' different customer was assigned during this visit.
-            ViewState("OriginalCID") = lblCID.Text
             ViewState("PaymentAssigned") = False
             ViewState("LinkedPaymentNums") = New List(Of String)
             BindPayments()
         End If
 
         ' The LinkPayment popup is registered in UpdateControlsEnabledState, and only
-        ' once a customer is selected - see RegisterLinkPaymentPopup.
-
-
-        Dim MemberListParameters As New clsListProperties
-        With MemberListParameters
-            .ItemsSQL = "Select ID, NAME, NATIONALID from UNITSHUB_CONTACTS "
-            .CheckedItemsSQL = ""
-            .FormTitle = "Select Customer"
-            .ColumnHideAndShow = "YNN"
-            .EditableColumns = "NNN"
-            .ColumnsWidth = New Double() {3, 1}
-            .HoverableList = "Y"
-        End With
-        Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
-
-
-        ' "Customer / CPR:" link = Select Existing Customer
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      lnkSelectCustomer,
-                                      "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
-                                      400,
-                                      500,
-                                      PopupPlacement.Center,
-                                      "Select Adj",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      "SelectedCustomer")
-
-        ' "Add New Customer" link above the CPR box
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                              lnkAddNewCustomer,
-                              "ContactMaintenance.aspx?mode=New&isDialogue=yes",
-                              950,
-                              750,
-                              PopupPlacement.Center,
-                              "Select Adj",
-                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                              "SelectedCustomer")
-
+        ' once a contact is known - see RegisterLinkPaymentPopup.
         UpdateControlsEnabledState()
-
     End Sub
 
     ''' <summary>
-    ''' Everything on the form is disabled - except lnkAddNewCustomer and
-    ''' lnkSelectCustomer ("Customer / CPR:"), which always stay enabled - until a customer has
-    ''' actually been picked (lblCID.Text is set). Call this again any time lblCID.Text
-    ''' changes, since Load runs before that change and won't see it otherwise.
+    ''' Everything payment-related is disabled until this unit actually has a contact
+    ''' (lblCID.Text is set). Call this again any time lblCID.Text changes.
     ''' </summary>
     Private Sub UpdateControlsEnabledState()
         Dim HasCustomer As Boolean = Not String.IsNullOrEmpty(lblCID.Text)
 
-        txtCustomerName.Enabled = HasCustomer
-        txtCustomerCPR.Enabled = HasCustomer
-        lnkLinkAccount.Enabled = HasCustomer
-        txtAccount.Enabled = HasCustomer
-        ddlReservedBy.Enabled = HasCustomer
         lnkLinkPayment.Enabled = HasCustomer
         If HasCustomer Then
             ' Undo our own block from an earlier request (OnClientClick is kept in
@@ -108,47 +68,16 @@ Partial Class ReserveUnit
             lnkLinkPayment.OnClientClick = "return false;"
         End If
         gvPayments.Enabled = HasCustomer
-        txtReservationDate.Enabled = HasCustomer
-        btnReservationDate.Disabled = Not HasCustomer   ' HtmlButton uses Disabled, not Enabled
-        txtComments.Enabled = HasCustomer
         btnSave.Enabled = HasCustomer
         btnCancel.Enabled = HasCustomer
-
-        Dim AccountListParameters As New clsListProperties
-        With AccountListParameters
-            .ItemsSQL = "Select T3.BRCH_CODE ||'-'|| T3.CACC_NUM  as ID, '' as PropertyRef,T3.CUST_ID from bbsd_physical_persons@ICBS T1 " &
-                " Left Join bbsd_cust_members@ICBS T2 on T1.PHPR_ID=T2.CUSM_ID " &
-                " Left Join BBSD_CUST_ACCOUNTS@ICBS T3 on T2.CUST_ID=T3.CUST_ID WHERE PHPR_NATIONAL_NBR='770502083'" &
-                                 "  and T3.actp_type || T3.BRCH_CODE in (Select AccountType || Branch  from UNITSHUB_AccountBranchProjects)"
-            .CheckedItemsSQL = ""
-            .FormTitle = "Select Customer"
-            .ColumnHideAndShow = "NNN"
-            .EditableColumns = "NNN"
-            .ColumnsWidth = New Double() {3, 1}
-            .HoverableList = "Y"
-        End With
-        Dim SelectAccountParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(AccountListParameters)
-
-
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      lnkLinkAccount,
-                                      "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectAccountParameters),
-                                      400,
-                                      500,
-                                      PopupPlacement.Center,
-                                      "Select Adj",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      "SelectedAccount")
-
-
-
     End Sub
+
     Private LinkPaymentPopupRegistered As Boolean = False
 
     ''' <summary>
-    ''' Hooks the LinkPayment dialogue to lnkLinkPayment. Called from
-    ''' UpdateControlsEnabledState only when a customer is selected, so the link
-    ''' can't open the dialogue while lblCID is empty. Registers at most once per request.
+    ''' POPUP: hooks the LinkPayment dialogue to lnkLinkPayment. Called from
+    ''' UpdateControlsEnabledState only once a contact is known, so the link can't open
+    ''' the dialogue while lblCID is empty. Registers at most once per request.
     ''' </summary>
     Private Sub RegisterLinkPaymentPopup()
         If LinkPaymentPopupRegistered Then Exit Sub
@@ -165,60 +94,30 @@ Partial Class ReserveUnit
                                       "SelectedPayment")
     End Sub
 
-    Protected Sub lnkSelectCustomer_Click(sender As Object, e As EventArgs) Handles lnkSelectCustomer.Click, lnkAddNewCustomer.Click
-        Dim SelectedPayment As List(Of Dictionary(Of String, Object)) =
-        TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedCustomer"),
-                List(Of Dictionary(Of String, Object)))
-
-        If SelectedPayment Is Nothing OrElse SelectedPayment.Count = 0 Then Exit Sub
-
-        Dim row As Dictionary(Of String, Object) = SelectedPayment(0)
-        txtCustomerName.Text = Convert.ToString(row("NAME"))
-        txtCustomerCPR.Text = Convert.ToString(row("NATIONALID"))
-        lblCID.Text = Convert.ToString(row("ID"))
-
-        UpdateControlsEnabledState()
-        BindPayments()
-    End Sub
+    ''' <summary>
+    ''' SAVE: hands the result back to whatever opened this page.
+    '''   CONTACT_ID   = the unit's contact (lblCID.Text)
+    '''   ChangeStatus = "True" only when every required payment-plan line is linked
+    '''   InsertHistory = "True" only when at least one payment was linked this visit
+    '''   Summary      = "Payment No. ### is assigned." for each payment linked this visit
+    ''' </summary>
     Protected Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
-        ' TODO: validate and save the reservation.
-        ' Customer ID : lblCID.Text
-        ' Customer     : txtCustomerName.Text / txtCustomerCPR.Text
-        ' Reserved by  : ddlReservedBy.SelectedValue
-        ' Date         : txtReservationDate.Text  (yyyy-MM-dd)
-        ' Comments     : txtComments.Text
-        '=====================================================================
-        '=====================================================================
-        ' Use the key the opener passed in (?vpKey=...) so the opener can read the
-        ' result back with the same key it registered the popup with.
-        'Dim RowValues As New Dictionary(Of String, Object)
         Dim SelectedCustomer As New Dictionary(Of String, Object)
-        'SelectedCustomer.Add("NAME", "Roqaya and Elmeera")
-        'SelectedCustomer.Add("NATIONALID", "770110266")
         SelectedCustomer.Add("CONTACT_ID", lblCID.Text)
-        SelectedCustomer.Add("COMMENTS", txtComments.Text)
-        SelectedCustomer.Add("ACCOUNT", txtAccount.Text)
 
-        ' ChangeStatus = True only when a customer is selected AND every required
+        ' ChangeStatus = True only when a contact is known AND every required
         ' payment-plan line is linked; otherwise False.
         Dim ChangeStatus As Boolean = Not String.IsNullOrWhiteSpace(lblCID.Text) AndAlso AreAllRequiredPaymentsLinked()
         SelectedCustomer.Add("ChangeStatus", If(ChangeStatus, "True", "False"))
 
-        ' InsertHistory = True only when something was assigned during this visit:
-        '   - a customer different from the one the form opened with, or
-        '   - at least one payment linked with lnkLinkPayment.
-        ' MainPage.LinkButton3_Command writes the UNITSHUB_UNITSHISTORY row only when True.
-        Dim CustomerAssigned As Boolean = Not String.IsNullOrWhiteSpace(lblCID.Text) AndAlso
-                                          lblCID.Text <> Convert.ToString(ViewState("OriginalCID"))
+        ' InsertHistory = True only when at least one payment was linked with
+        ' lnkLinkPayment during this visit.
         Dim PaymentAssigned As Boolean = (ViewState("PaymentAssigned") IsNot Nothing AndAlso CBool(ViewState("PaymentAssigned")))
-        SelectedCustomer.Add("InsertHistory", If(CustomerAssigned OrElse PaymentAssigned, "True", "False"))
+        SelectedCustomer.Add("InsertHistory", If(PaymentAssigned, "True", "False"))
 
-        ' Summary of what was assigned during this visit; MainPage saves it into
+        ' Summary of what was linked during this visit; the opener saves it into
         ' UNITSHUB_UNITSHISTORY.SUMMARY
         Dim Summary As New List(Of String)
-        If CustomerAssigned Then
-            Summary.Add("Customer " & lblCID.Text & " is assigned")
-        End If
         Dim LinkedNums As List(Of String) = TryCast(ViewState("LinkedPaymentNums"), List(Of String))
         If LinkedNums IsNot Nothing Then
             For Each PaymentNum As String In LinkedNums
@@ -237,17 +136,17 @@ Partial Class ReserveUnit
                                     returnValue:=SelectedItems,
                                     startupScriptKey:=ReturnKey,
                                     skipPostBack:=False)
-
     End Sub
+
     ''' <summary>
     ''' True when every required payment line for this action's payment plan is linked:
     ''' each UNITSHUB_ACT_PAY_PLN_DETAILS row for this PROJECT_ID / STATUS_ID /
     ''' ACTION_ID / PLAN_ID has an ACTIVE UNITSHUB_PAYMENTS row for this NODE_ID and
     ''' CONTACT_ID with the same PLAN_ID and SEQ = DETAIL_ID.
-    '''   - No customer selected                  -> False
-    '''   - Action doesn't need payment           -> True
-    '''   - Payment needed but unit has no plan   -> False
-    '''   - Plan has no required lines configured -> True (nothing to link)
+    '''   - No contact known                       -> False
+    '''   - Action doesn't need payment             -> True
+    '''   - Payment needed but unit has no plan     -> False
+    '''   - Plan has no required lines configured   -> True (nothing to link)
     ''' </summary>
     Private Function AreAllRequiredPaymentsLinked() As Boolean
         If String.IsNullOrWhiteSpace(lblCID.Text) Then Return False
@@ -287,7 +186,7 @@ Partial Class ReserveUnit
 
     ''' <summary>
     ''' PAYMENT_ID of the ACTIVE UNITSHUB_PAYMENTS row just linked for this unit,
-    ''' customer, plan and SEQ (the highest one, in case of older duplicates).
+    ''' contact, plan and SEQ (the highest one, in case of older duplicates).
     ''' </summary>
     Private Function GetLinkedPaymentId(PlanId As String, Seq As String) As String
         Dim SQL As String = ""
@@ -305,6 +204,11 @@ Partial Class ReserveUnit
         Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
     End Function
 
+    ''' <summary>
+    ''' POPUP return + SAVE (to UNITSHUB_PAYMENTS): reads the payment chosen in the
+    ''' LinkPayment.aspx popup and inserts it as the next required payment-plan line
+    ''' for this unit/contact.
+    ''' </summary>
     Protected Sub lnkLinkPayment_Click(sender As Object, e As EventArgs) Handles lnkLinkPayment.Click
         lblPaymentMessage.Text = ""
 
@@ -398,7 +302,7 @@ Partial Class ReserveUnit
             Exit Sub
         End If
 
-        ' A payment was linked during this visit - MainPage should write a history row
+        ' A payment was linked during this visit - the opener should write a history row
         ViewState("PaymentAssigned") = True
 
         ' Remember the PAYMENT_ID the INSERT just generated, for the Summary on Save
@@ -534,14 +438,11 @@ Partial Class ReserveUnit
         SQL = SQL + vbCrLf + "       AND NAV.Display_order = A.Display_order "
         SQL = SQL + vbCrLf + " WHERE  N.NODE_ID = '" & lblPID.Text & "'"
 
-
         Return DB.RetreiveScalarSTRING(EBDB, SQL)
-
-
     End Function
 
-    ''' <summary>Fills gvPayments for this unit's node/project/status/action. Does
-    ''' nothing when the grid is hidden (Need Payment unticked for this action).</summary>
+    ''' <summary>LOAD: fills gvPayments for this unit's node/project/status/action.
+    ''' Does nothing when the grid is hidden (Need Payment unticked for this action).</summary>
     Private Sub BindPayments()
         If Not pnlPayments.Visible Then Exit Sub
         gvPayments.DataSource = GetPayments()
@@ -580,73 +481,39 @@ Partial Class ReserveUnit
 
         Return GetDataTable(EBDB, SQL)
     End Function
+
     ''' <summary>
-    ''' Looks for this unit (lblPID.Text) in UNITSHUB_CUSTOMERPROPERTIES. If a row is
-    ''' found, its CONTACT_ID becomes lblCID.Text and the customer's name and CPR are
-    ''' loaded from UNITSHUB_CONTACTS. If the unit has more than one customer row, the
-    ''' most recently created one (highest CREATED_AT) is used.
-    ''' Returns True when a customer was loaded.
-    ''' </summary>
-    ''' <summary>
-    ''' Looks for this unit (lblPID.Text) in UNITSHUB_CUSTOMERPROPERTIES. If a row is
-    ''' found, its CONTACT_ID becomes lblCID.Text, the customer's name and CPR are
-    ''' loaded from UNITSHUB_CONTACTS, and UNIT_ACCOUNT / COMMENTS from that same
-    ''' UNITSHUB_CUSTOMERPROPERTIES row populate txtAccount / txtComments. If the unit
-    ''' has more than one customer row, the most recently created one (highest
-    ''' CREATED_AT) is used.
-    ''' Returns True when a customer was loaded.
+    ''' LOAD: looks for this unit (lblPID.Text) in UNITSHUB_CUSTOMERPROPERTIES and, if
+    ''' found, sets lblCID.Text to its CONTACT_ID - the key payments are shown/linked
+    ''' against. If the unit has more than one customer row, the most recently created
+    ''' one (highest CREATED_AT) is used. Returns True when a contact was found.
     ''' </summary>
     Private Function LoadCustomerFromProperties() As Boolean
         If String.IsNullOrWhiteSpace(lblPID.Text) Then Return False
 
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT CONTACT_ID, UNIT_ACCOUNT, COMMENTS FROM ( "
-        SQL = SQL + vbCrLf + "     SELECT CONTACT_ID, UNIT_ACCOUNT, COMMENTS "
+        SQL = SQL + vbCrLf + " SELECT CONTACT_ID FROM ( "
+        SQL = SQL + vbCrLf + "     SELECT CONTACT_ID "
         SQL = SQL + vbCrLf + "     FROM   UNITSHUB_CUSTOMERPROPERTIES "
         SQL = SQL + vbCrLf + "     WHERE  NODE_ID = '" & lblPID.Text.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "       AND  CONTACT_ID IS NOT NULL "
         SQL = SQL + vbCrLf + "     ORDER BY CREATED_AT DESC "
         SQL = SQL + vbCrLf + " ) WHERE ROWNUM = 1 "
 
-        Dim PropertiesDT As DataTable = GetDataTable(EBDB, SQL)
-        If PropertiesDT Is Nothing OrElse PropertiesDT.Rows.Count = 0 Then Return False
-
-        Dim ContactId As String = Convert.ToString(PropertiesDT.Rows(0)("CONTACT_ID")).Trim()
+        Dim ContactId As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
         If String.IsNullOrEmpty(ContactId) Then Return False
 
         lblCID.Text = ContactId
-        txtAccount.Text = Convert.ToString(PropertiesDT.Rows(0)("UNIT_ACCOUNT"))
-        txtComments.Text = Convert.ToString(PropertiesDT.Rows(0)("COMMENTS"))
-
-        Dim ContactDT As DataTable = GetDataTable(EBDB,
-            "SELECT NAME, NATIONALID FROM UNITSHUB_CONTACTS WHERE ID = '" & ContactId.Replace("'", "''") & "'")
-        If ContactDT IsNot Nothing AndAlso ContactDT.Rows.Count > 0 Then
-            txtCustomerName.Text = Convert.ToString(ContactDT.Rows(0)("NAME"))
-            txtCustomerCPR.Text = Convert.ToString(ContactDT.Rows(0)("NATIONALID"))
-        End If
-
         Return True
     End Function
 
+    ''' <summary>POPUP close: cancels without saving anything.</summary>
     Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
+
+    ''' <summary>POPUP close: cancels without saving anything.</summary>
     Protected Sub btnCancel_Click(sender As Object, e As EventArgs) Handles btnCancel.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
-    End Sub
-
-    Private Sub lnkLinkAccount_Click(sender As Object, e As EventArgs) Handles lnkLinkAccount.Click
-        Dim SelectedAccount As List(Of Dictionary(Of String, Object)) =
-TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedAccount"),
-        List(Of Dictionary(Of String, Object)))
-
-        If SelectedAccount Is Nothing OrElse SelectedAccount.Count = 0 Then Exit Sub
-
-        Dim row As Dictionary(Of String, Object) = SelectedAccount(0)
-
-        txtAccount.Text = Convert.ToString(row("ID"))
-
-        UpdateControlsEnabledState()
-        BindPayments()
     End Sub
 End Class

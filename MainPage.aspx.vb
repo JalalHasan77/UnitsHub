@@ -280,8 +280,9 @@ Partial Class MainPage
             Dim RequestID As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("Reference"))
             Dim State As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("STATUS"))
             Dim NodeId As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("NodeId"))
+            Dim StateId As String = Convert.ToString(GridView1.DataKeys(row.RowIndex)("StateId"))
 
-            Dim Actions As List(Of WorkflowAction) = GetAvailableActions(RequestID, State)
+            Dim Actions As List(Of WorkflowAction) = GetAvailableActions(RequestID, StateId)
 
             GV.DataSource = Actions
             GV.DataBind()
@@ -677,25 +678,46 @@ Partial Class MainPage
             Function() DB.GetDataTable(EBDB, ViewSql))
 
 
-        SQL = ""
-        SQL = SQL + vbCrLf + " SELECT  "
-        SQL = SQL + vbCrLf + "    s.STATUS AS UnitStatus,  "
-        SQL = SQL + vbCrLf + "    COUNT(a.STATUS) AS UnitCount  "
-        SQL = SQL + vbCrLf + " FROM  "
-        SQL = SQL + vbCrLf + "    ( "
-        SQL = SQL + vbCrLf + "        SELECT STATE_ID, STATUS  "
-        SQL = SQL + vbCrLf + "        FROM UNITSHUB_PROJECTSTATUS  "
-        SQL = SQL + vbCrLf + "        WHERE PROJECT_ID = '" & lcProjectID & "' "
-        SQL = SQL + vbCrLf + "    ) s  "
-        SQL = SQL + vbCrLf + "    LEFT JOIN UNITSHUB_PRJ001_APARTMMENTS a  "
-        SQL = SQL + vbCrLf + "        ON UPPER(a.STATUS) = UPPER(s.STATE_ID)  "
-        SQL = SQL + vbCrLf + " GROUP BY  "
-        SQL = SQL + vbCrLf + "    s.STATE_ID, s.STATUS "
-        SQL = SQL + vbCrLf + " ORDER BY  "
-        SQL = SQL + vbCrLf + "    s.STATE_ID; "
+        'SQL = ""
+        'SQL = SQL + vbCrLf + " SELECT  "
+        'SQL = SQL + vbCrLf + "    s.STATUS AS UnitStatus,  "
+        'SQL = SQL + vbCrLf + "    COUNT(a.STATUS) AS UnitCount  "
+        'SQL = SQL + vbCrLf + " FROM  "
+        'SQL = SQL + vbCrLf + "    ( "
+        'SQL = SQL + vbCrLf + "        SELECT STATE_ID, STATUS  "
+        'SQL = SQL + vbCrLf + "        FROM UNITSHUB_PROJECTSTATUS  "
+        'SQL = SQL + vbCrLf + "        WHERE PROJECT_ID = '" & lcProjectID & "' "
+        'SQL = SQL + vbCrLf + "    ) s  "
+        'SQL = SQL + vbCrLf + "    LEFT JOIN UNITSHUB_PRJ001_APARTMMENTS a  "
+        'SQL = SQL + vbCrLf + "        ON UPPER(a.STATUS) = UPPER(s.STATE_ID)  "
+        'SQL = SQL + vbCrLf + " GROUP BY  "
+        'SQL = SQL + vbCrLf + "    s.STATE_ID, s.STATUS "
+        'SQL = SQL + vbCrLf + " ORDER BY  "
+        'SQL = SQL + vbCrLf + "    s.STATE_ID; "
 
+        Dim statistics As DataTable = DT.Clone()
 
-        GridView2.DataSource = DB.GetDataTable(EBDB, SQL)
+        statistics.Columns.Clear()
+        statistics.Columns.Add("Text", GetType(String))
+        statistics.Columns.Add("Count", GetType(Integer))
+
+        Dim grouped = DT0.AsEnumerable() _
+    .GroupBy(Function(r)
+                 Dim status As String = r.Field(Of String)("Status")
+                 Dim subtitle As String = r.Field(Of String)("Status_Subtitle")
+
+                 If String.IsNullOrWhiteSpace(subtitle) Then
+                     Return status
+                 Else
+                     Return status & ":" & subtitle
+                 End If
+             End Function)
+
+        For Each g In grouped
+            statistics.Rows.Add(g.Key, g.Count())
+        Next
+
+        GridView2.DataSource = statistics ' DB.GetDataTable(EBDB, SQL)
         GridView2.DataBind()
 
         'Hide Status and Status_subtitle from GridView ===========================================
@@ -707,31 +729,31 @@ Partial Class MainPage
         'End of: Hide Status and Status_subtitle from GridView ===================================
 
 
-        Dim ProjectTable As String = GetOrAddToCache(Of String)(
-            "ProjectViewName_" & lcProjectID, 10,
-            Function() DB.RetreiveScalarSTRING(EBDB, "Select VIEWNAME from UNITSHUB_VIEWS where PROJECT_ID ='" & lcProjectID & "' and TREELEVEL =1"))
-        DT = GetDataTable(EBDB, "Select * from " & ProjectTable)
+        'Dim ProjectTable As String = GetOrAddToCache(Of String)(
+        '    "ProjectViewName_" & lcProjectID, 10,
+        '    Function() DB.RetreiveScalarSTRING(EBDB, "Select VIEWNAME from UNITSHUB_VIEWS where PROJECT_ID ='" & lcProjectID & "' and TREELEVEL =1"))
+        'DT = GetDataTable(EBDB, "Select * from " & ProjectTable)
 
-        Dim dtFields As New DataTable()
+        'Dim dtFields As New DataTable()
 
-        dtFields.Columns.Add("FIELD_NAME")
-        dtFields.Columns.Add("FIELD_VALUE")
+        'dtFields.Columns.Add("FIELD_NAME")
+        'dtFields.Columns.Add("FIELD_VALUE")
 
-        For Each col As DataColumn In DT.Rows(0).Table.Columns
-            Dim r As DataRow = dtFields.NewRow()
+        'For Each col As DataColumn In DT.Rows(0).Table.Columns
+        '    Dim r As DataRow = dtFields.NewRow()
 
-            r("FIELD_NAME") = col.ColumnName
-            r("FIELD_VALUE") = DT.Rows(0)(col).ToString()
+        '    r("FIELD_NAME") = col.ColumnName
+        '    r("FIELD_VALUE") = DT.Rows(0)(col).ToString()
 
-            dtFields.Rows.Add(r)
-        Next
+        '    dtFields.Rows.Add(r)
+        'Next
 
-        Dim rowsPerColumn As Integer = 7
+        'Dim rowsPerColumn As Integer = 7
 
-        DataList2.RepeatColumns = Math.Ceiling(dtFields.Rows.Count / rowsPerColumn)
+        'DataList2.RepeatColumns = Math.Ceiling(dtFields.Rows.Count / rowsPerColumn)
 
-        DataList2.DataSource = dtFields
-        DataList2.DataBind()
+        'DataList2.DataSource = dtFields
+        'DataList2.DataBind()
 
         Label2.Text = DropDownList1.SelectedItem.Text
 
@@ -1070,8 +1092,10 @@ Partial Class MainPage
 
 
 
+        ' Match actions on the row's STATE_ID, not its status name: several states can
+        ' share a name (e.g. 0768 and 1024 are both "Sold", with different subtitles)
         Dim Actions As List(Of WorkflowAction) =
-            GetAvailableActions(RequestID, State)
+            GetAvailableActions(RequestID, StateId)
 
         GV.DataSource = Actions
         GV.DataBind()
@@ -1418,13 +1442,13 @@ Partial Class MainPage
 
     ''' <summary>
     ''' Returns the actions available to the current user, for the currently selected
-    ''' project (DropDownList1), filtered down to the given row's STATE_ID (its
-    ''' STATUS). Each GridView row calls this with its own RequestID/State, so the
+    ''' project (DropDownList1), filtered down to the given row's STATE_ID. Each
+    ''' GridView row calls this with its own RequestID/StateId, so the
     ''' same permission set (fetched/cached once per project+user) ends up producing
     ''' a different menu per row whenever that row's status differs.
     ''' </summary>
     Public Function GetAvailableActions(ByVal RequestID As String,
-                                    ByVal State As String) As List(Of WorkflowAction)
+                                    ByVal StateId As String) As List(Of WorkflowAction)
 
         Dim lcProjectID As String = DropDownList1.SelectedItem.Value
         Dim UserID As String = GetCurrentUserID()
@@ -1442,14 +1466,14 @@ Partial Class MainPage
 
         Dim Actions As New List(Of WorkflowAction)
 
-        ' GridView1's STATUS column holds the human-readable status NAME
-        ' (UNITSHUB_UNITSSTATUS.STATUS - see BuildPivotSql's "US.STATUS AS ""Status""").
-        ' LoadAvailableActionsForProject now joins UNITSHUB_UNITSSTATUS itself and
-        ' returns that same STATUS name (aliased STATUS_NAME) alongside STATE_ID, so
-        ' match directly on the name - no separate code<->name lookup needed.
+        ' Match on STATE_ID (the status table's real key), not the status NAME: two
+        ' states can share a name - e.g. 0768 and 1024 are both "Sold" (different
+        ' subtitles) - and matching by name gave every "Sold" row both states' actions.
+        ' NormalizeStateId ignores leading zeros ("768" = "0768").
+        Dim targetStateId As String = NormalizeStateId(StateId)
         Dim matchingRows = actionsTable.AsEnumerable().
-            Where(Function(r) String.Equals(Convert.ToString(r("STATUS_NAME")).Trim(),
-                                             If(State, "").Trim(),
+            Where(Function(r) String.Equals(NormalizeStateId(Convert.ToString(r("STATUS_ID"))),
+                                             targetStateId,
                                              StringComparison.OrdinalIgnoreCase))
 
         For Each DR As DataRow In matchingRows
@@ -1667,7 +1691,7 @@ Partial Class MainPage
     Protected Sub LinkButton3_Command(sender As Object, e As EventArgs)
 
         Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
-        'If returnValue Is Nothing Then Exit Sub
+        If returnValue Is Nothing Then Exit Sub
 
         ' TryCast: Cancel/Close return False instead of a list, and CType would throw on that
         Dim Row As List(Of Dictionary(Of String, Object)) = TryCast(returnValue, List(Of Dictionary(Of String, Object)))
@@ -1695,10 +1719,19 @@ Partial Class MainPage
 
         Select Case DT.Rows(0)("ACTION_TYPE").ToString.ToUpper
             Case "CHANGE"
-                ' ChangeStatus comes back from ReserveUnit: "True" only when every required payment is linked
-                Dim ChangeStatus As Boolean = False
-                If Row IsNot Nothing AndAlso Row.Count > 0 AndAlso Row(0).ContainsKey("ChangeStatus") Then
-                    ChangeStatus = (Convert.ToString(Row(0)("ChangeStatus")) = "True")
+                ' ChangeStatus only comes back when the popup was ReserveUnit: "True" only when every
+                ' required payment is linked. For any other popup (ConfirmBox, other dialogue pages)
+                ' there is no ChangeStatus to check, so the status change is not gated.
+                Dim DialoguePage As String = Convert.ToString(DT.Rows(0)("DIALOGUE_TEXT"))
+                Dim FromReserveUnit As Boolean = (Convert.ToString(DT.Rows(0)("NEED_DIALOGUE")) = "1" AndAlso
+                                                  DialoguePage.IndexOf("ReserveUnit", StringComparison.OrdinalIgnoreCase) >= 0)
+
+                Dim ChangeStatus As Boolean = True
+                If FromReserveUnit Then
+                    ChangeStatus = False
+                    If Row IsNot Nothing AndAlso Row.Count > 0 AndAlso Row(0).ContainsKey("ChangeStatus") Then
+                        ChangeStatus = (Convert.ToString(Row(0)("ChangeStatus")) = "True")
+                    End If
                 End If
 
                 If ChangeStatus Then ApplyNodeStatusChange(NodeId, ToStatusId)

@@ -55,6 +55,7 @@ Public Class ProjectStatusAndAction
         If String.IsNullOrEmpty(projectId) Then
             gvProjectStatus.DataSource = Nothing
             gvProjectStatus.DataBind()
+            WireAddFirstStateButton(projectId, True)   ' hides the button - no project
             Return
         End If
 
@@ -66,7 +67,49 @@ Public Class ProjectStatusAndAction
 
         gvProjectStatus.DataSource = DT
         gvProjectStatus.DataBind()
+
+        WireAddFirstStateButton(projectId, DT Is Nothing OrElse DT.Rows.Count = 0)
     End Sub
+
+    ''' <summary>
+    ''' When the project has no states, the grid shows its EmptyDataTemplate with an
+    ''' "Add New State" button. It opens AddProjectStatus.aspx like "Add State ▲/▼", but
+    ''' with MODE=FIRST, so the popup saves the state as STATE_ID 0000. After the popup
+    ''' saves, it posts back here and Page_Load reloads the grid with the new state.
+    ''' </summary>
+    Private Sub WireAddFirstStateButton(projectId As String, gridIsEmpty As Boolean)
+        If Not gridIsEmpty Then Exit Sub
+
+        Dim btnAddFirstState As Button = TryCast(FindControlRecursive(gvProjectStatus, "btnAddFirstState"), Button)
+        If btnAddFirstState Is Nothing Then Exit Sub
+
+        ' No project selected -> nothing to add a state to
+        btnAddFirstState.Visible = Not String.IsNullOrEmpty(projectId)
+        If Not btnAddFirstState.Visible Then Exit Sub
+
+        Dim popupUrlFirst As String = "AddProjectStatus.aspx?ProjectID=" & Server.UrlEncode(projectId) &
+                                      "&StatusID=0000" &
+                                      "&MODE=FIRST"
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              btnAddFirstState,
+                                              popupUrlFirst,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.Standard)
+    End Sub
+
+    ''' <summary>Finds a control by ID anywhere under Parent (the empty-data row is nested).</summary>
+    Private Function FindControlRecursive(Parent As Control, Id As String) As Control
+        If Parent Is Nothing Then Return Nothing
+        If Parent.ID = Id Then Return Parent
+        For Each Child As Control In Parent.Controls
+            Dim Found As Control = FindControlRecursive(Child, Id)
+            If Found IsNot Nothing Then Return Found
+        Next
+        Return Nothing
+    End Function
 
     ''' <summary>
     ''' Converts a hex color string (with or without a leading '#') into a Color.

@@ -35,7 +35,10 @@ Partial Class AddProjectStatus
         End Set
     End Property
 
-    ''' <summary>Currently always "NEW"; reserved for a future edit mode.</summary>
+    ''' <summary>
+    ''' "NEW" (Add State ▲/▼), "EDIT", or "FIRST" - the first state of a project whose
+    ''' status grid is still empty; it is saved with STATE_ID 0000.
+    ''' </summary>
     Private Property ModeParam As String
         Get
             Return CStr(If(ViewState("ModeParam"), String.Empty))
@@ -211,18 +214,41 @@ Partial Class AddProjectStatus
     ''' <summary>
     ''' Inserts a new row into UNITSHUB_PROJECTSTATUS from the form values. The new STATE_ID
     ''' is the midpoint between the reference state (StatusIdParam) and its neighbor in the
-    ''' direction of DirParam — "Asc" (Add State ▲) looks for the first larger STATE_ID in
-    ''' the same project, "Desc" (Add State ▼) looks for the first smaller one.
+    ''' direction of DirParam — "Desc" (Add State ▼, below the row) looks for the next larger
+    ''' STATE_ID in the same project, "Asc" (Add State ▲, above the row) for the next smaller
+    ''' one. With no neighbor below, ▼ steps down by 1024 (0000 -> 1024 -> 2048 ...), never
+    ''' past 9216; with no neighbor above, ▲ uses half the row's ID.
     ''' </summary>
     Private Sub SaveNewStatus()
         Dim stateId As String = Nothing
 
-        If Not String.IsNullOrEmpty(StatusIdParam) AndAlso Not String.IsNullOrEmpty(DirParam) Then
+        Dim projectCountDT As Data.DataTable = GetDataTable(EBDB,
+            "SELECT COUNT(*) AS CNT FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" &
+            ddlProjectName.SelectedValue.Replace("'", "''") & "'")
+        Dim projectHasStates As Boolean = CInt(projectCountDT.Rows(0)("CNT")) > 0
+
+        If String.Equals(ModeParam, "FIRST", StringComparison.OrdinalIgnoreCase) Then
+            ' First state of a project whose grid is empty: always STATE_ID 0000.
+            ' If the project already has states (e.g. added from another window),
+            ' refuse instead of creating a duplicate/out-of-order 0000.
+            If projectHasStates Then
+                lblMessage.CssClass = "msg-error"
+                lblMessage.Text = "This project already has states - use Add State ▲/▼ from the list instead."
+                Return
+            End If
+            stateId = "0000"
+
+        ElseIf Not String.IsNullOrEmpty(StatusIdParam) AndAlso Not String.IsNullOrEmpty(DirParam) Then
             Dim projectId As String = ddlProjectName.SelectedValue
             Dim referenceId As Integer = CInt(StatusIdParam)
 
+            ' The list is ordered by STATE_ID, so:
+            '   ▼ (Dir=Desc) = insert BELOW the row  -> between it and the next LARGER STATE_ID
+            '   ▲ (Dir=Asc)  = insert ABOVE the row  -> between it and the next SMALLER STATE_ID
+            Dim goingDown As Boolean = (DirParam <> "Asc")
+
             Dim neighborSql As String
-            If DirParam = "Asc" Then
+            If goingDown Then
                 neighborSql =
                     "SELECT MIN(TO_NUMBER(STATE_ID)) AS NEIGHBOR_ID FROM UNITSHUB_PROJECTSTATUS " &
                     "WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' AND TO_NUMBER(STATE_ID) > " & referenceId
@@ -234,28 +260,56 @@ Partial Class AddProjectStatus
 
             Dim neighborDT As New Data.DataTable
             neighborDT = GetDataTable(EBDB, neighborSql)
+            Dim hasNeighbor As Boolean = neighborDT.Rows.Count > 0 AndAlso neighborDT.Rows(0)("NEIGHBOR_ID") IsNot DBNull.Value
 
-            If neighborDT.Rows(0)("NEIGHBOR_ID") Is DBNull.Value Then
+            Const StateStep As Integer = 1024      ' gap used when there is no neighbor below
+            Const LastStateId As Integer = 9216    ' highest STATE_ID (end state)
+
+            Dim newStateIdNumber As Integer
+            If hasNeighbor Then
+                ' Midpoint between the row and its neighbor (0000..9216 -> 1024 as before)
+                Dim neighborId As Integer = CInt(neighborDT.Rows(0)("NEIGHBOR_ID"))
+                Dim isBoundaryPair As Boolean =
+                    (referenceId = 0 AndAlso neighborId = LastStateId) OrElse
+                    (referenceId = LastStateId AndAlso neighborId = 0)
+                newStateIdNumber = If(isBoundaryPair, StateStep, CInt(Math.Floor((referenceId + neighborId) / 2)))
+
+            ElseIf goingDown Then
+                ' Nothing below this row yet (e.g. only 0000 exists): next step down,
+                ' 0000 -> 1024 -> 2048 ... but never past the end state 9216.
+                newStateIdNumber = referenceId + StateStep
+                If newStateIdNumber >= LastStateId Then
+                    newStateIdNumber = CInt(Math.Floor((referenceId + LastStateId) / 2))
+                End If
+
+            Else
+                ' Nothing above this row: halfway between 0000 and it
+                newStateIdNumber = CInt(Math.Floor(referenceId / 2))
+            End If
+
+            ' No whole number left between the two states (e.g. 0512 and 0513)
+            If newStateIdNumber = referenceId OrElse newStateIdNumber < 0 OrElse newStateIdNumber > LastStateId Then
                 lblMessage.CssClass = "msg-error"
-                lblMessage.Text = "Could not find a neighboring status to insert " &
-                    If(DirParam = "Asc", "above", "below") & " STATE_ID " & referenceId.ToString("0000") & "."
+                lblMessage.Text = "There is no free STATE_ID " &
+                    If(goingDown, "below", "above") & " STATE_ID " & referenceId.ToString("0000") & "."
                 Return
             End If
 
-            Dim neighborId As Integer = CInt(neighborDT.Rows(0)("NEIGHBOR_ID"))
-
-            Dim isBoundaryPair As Boolean =
-                (referenceId = 0 AndAlso neighborId = 9216) OrElse
-                (referenceId = 9216 AndAlso neighborId = 0)
-
-            Dim newStateIdNumber As Integer
-            If isBoundaryPair Then
-                newStateIdNumber = 1024
-            Else
-                newStateIdNumber = CInt((referenceId + neighborId) / 2)
+            ' Don't reuse an ID that already exists in this project
+            Dim takenDT As Data.DataTable = GetDataTable(EBDB,
+                "SELECT COUNT(*) AS CNT FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" & projectId.Replace("'", "''") &
+                "' AND TO_NUMBER(STATE_ID) = " & newStateIdNumber)
+            If CInt(takenDT.Rows(0)("CNT")) > 0 Then
+                lblMessage.CssClass = "msg-error"
+                lblMessage.Text = "STATE_ID " & newStateIdNumber.ToString("0000") & " already exists in this project."
+                Return
             End If
 
             stateId = newStateIdNumber.ToString("0000")
+        ElseIf Not projectHasStates Then
+            ' No reference state and the project has no states yet: this is its first one
+            stateId = "0000"
+
         Else
             ' No reference state given (e.g. page opened outside the normal Add State ▲/▼
             ' popup flow) — fall back to a plain next-available id.
