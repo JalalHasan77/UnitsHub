@@ -637,6 +637,7 @@ html, body, form {
                     <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblUnitPrice" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>

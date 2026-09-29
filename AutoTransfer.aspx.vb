@@ -236,8 +236,7 @@ Partial Class AutoTransfer
     ''' <summary>
     ''' Builds the Transactions grid from the UNITSHUB_ATP_DETAILS lines of the action's
     ''' AutoTransfer group (lblATGroupID):
-    '''   Account     = ACCOUNT_NUMBER; if it contains "xxx" (any case), the Pre Sales
-    '''                 Account (UNIT_ACCOUNT) is used instead
+    '''   Account     = ACCOUNT_NUMBER, exactly as stored in the plan
     '''   Type        = TYPE (or TYPE_OF_ESCROW if there is no TYPE column)
     '''   Transaction = "C" if the line has a Credit amount, "D" if it has a Debit amount
     '''   Amount      = that Credit or Debit amount
@@ -263,12 +262,25 @@ Partial Class AutoTransfer
             Dim UnitRef As String = lblUnitRef.Text.Trim()
             Dim Phrase As String = If(lblReferencePhrase.Text.Trim() = "", "Reservation of Unit", lblReferencePhrase.Text.Trim())
             Dim Description As String = BuildDescription(Phrase, UnitRef)
-            Dim PreSalesAccount As String = lblPreSalesAccount.Text.Trim()
+
+            ' Unit price for the [UnitPrice] formulas in DEBIT / CREDIT
+            Dim UnitPrice As Decimal = GetUnitPrice()
+            lblUnitPrice.Text = UnitPrice.ToString("0.000", CultureInfo.InvariantCulture)
+            Dim FormulaErrors As New List(Of String)
+            Dim AccountProblems As New List(Of String)
 
             If Details IsNot Nothing Then
                 For Each Detail As DataRow In Details.Rows
-                    Dim Credit As Decimal = ParseAmount(GetColumnValue(Detail, "CREDIT"))
-                    Dim Debit As Decimal = ParseAmount(GetColumnValue(Detail, "DEBIT"))
+                    Dim Credit As Decimal
+                    Dim Debit As Decimal
+                    Try
+                        Credit = EvaluateAmount(GetColumnValue(Detail, "CREDIT"), UnitPrice)
+                        Debit = EvaluateAmount(GetColumnValue(Detail, "DEBIT"), UnitPrice)
+                    Catch ex As Exception
+                        ' Leave the line out rather than post a wrong amount, and say why
+                        FormulaErrors.Add(GetColumnValue(Detail, "ACCOUNT_DESCRIPTION", "ACCOUNT_NUMBER") & ": " & ex.Message)
+                        Continue For
+                    End Try
 
                     Dim Transaction As String
                     Dim Amount As Decimal
@@ -282,10 +294,12 @@ Partial Class AutoTransfer
                         Continue For
                     End If
 
-                    ' Placeholder accounts (containing "xxx") become the unit's Pre Sales Account
+                    ' Account exactly as stored in the plan (ACCOUNT_NUMBER) - nothing is
+                    ' substituted or calculated on it. Only an empty one is reported.
+                    Dim LineName As String = GetColumnValue(Detail, "ACCOUNT_DESCRIPTION", "TYPE", "TYPE_OF_ESCROW")
                     Dim Account As String = GetColumnValue(Detail, "ACCOUNT_NUMBER")
-                    If Account.IndexOf("xxx", StringComparison.OrdinalIgnoreCase) >= 0 Then
-                        Account = PreSalesAccount
+                    If Account = "" Then
+                        AccountProblems.Add(LineName & ": no account number in the AutoTransfer plan")
                     End If
 
                     Result.Rows.Add(
@@ -296,6 +310,15 @@ Partial Class AutoTransfer
                         UnitRef,
                         Description)
                 Next
+            End If
+
+            If AccountProblems.Count > 0 OrElse FormulaErrors.Count > 0 Then
+                Dim Parts As New List(Of String)
+                If AccountProblems.Count > 0 Then Parts.Add("Missing accounts - " & String.Join("; ", AccountProblems))
+                If FormulaErrors.Count > 0 Then Parts.Add("Lines left out because their amount couldn't be worked out - " & String.Join("; ", FormulaErrors))
+                ShowMessage(String.Join(" | ", Parts), False)
+            ElseIf UnitPrice = 0D Then
+                ShowMessage("This unit has no Price, so amounts based on [UnitPrice] are 0.", False)
             End If
         End If
 
@@ -538,6 +561,82 @@ Partial Class AutoTransfer
     End Function
 
     ' ------------------------------------------------------------------
+    ' Unit price + DEBIT / CREDIT formulas
+    ' ------------------------------------------------------------------
+
+    ''' <summary>
+    ''' The unit's price from UNITSHUB_NODE_ATTRIBUTE_VALUE: the unit's node type comes from
+    ''' UNITSHUB_NODES, the DISPLAY_ORDER of its "Price" attribute from UNITSHUB_ATTRIBUTES
+    ''' (for this project + node type). Returns 0 if there's no price.
+    ''' </summary>
+    Private Function GetUnitPrice() As Decimal
+        If String.IsNullOrWhiteSpace(lblPID.Text) Then Return 0D
+
+        Dim NodeId As String = lblPID.Text.Trim().Replace("'", "''")
+        Dim ProjectID As String = lblPRJID.Text.Trim().Replace("'", "''")
+
+        Dim Node_Type As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT NODE_TYPE_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & NodeId & "'")).Trim()
+        If Node_Type = "" Then Return 0D
+
+        Dim PriceDisplayOrder As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            " SELECT DISPLAY_ORDER " &
+            " FROM   UNITSHUB_ATTRIBUTES " &
+            " WHERE  UPPER(ATTRIBUTE_NAME) = UPPER('Price') " &
+            "   AND  PROJECT_ID = '" & ProjectID & "' AND NODE_TYPE_ID = '" & Node_Type.Replace("'", "''") & "'")).Trim()
+        If PriceDisplayOrder = "" Then Return 0D
+
+        ' DISPLAY_ORDER may be stored as 9 in one table and '009' in the other - compare as numbers
+        Dim PriceText As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            " SELECT VALUE_TEXT FROM UNITSHUB_NODE_ATTRIBUTE_VALUE " &
+            " WHERE  NODE_ID = '" & NodeId & "' " &
+            "   AND  TO_NUMBER(DISPLAY_ORDER) = TO_NUMBER('" & PriceDisplayOrder.Replace("'", "''") & "')"))
+
+        Return ParseAmount(PriceText)
+    End Function
+
+    ''' <summary>
+    ''' Works out a DEBIT / CREDIT value from UNITSHUB_ATP_DETAILS. It can be a plain number
+    ''' ("200", "1,500.000") or a formula using the unit price, e.g.
+    '''     [UnitPrice]*[30%]-[200]   with a price of 100000   ->   29800
+    ''' Rules: [UnitPrice] (also [Unit Price]) = the unit's price; [30%] or 30% = 0.30;
+    ''' [200] = 200; + - * / and brackets ( ) are allowed. The result is rounded to 3
+    ''' decimals. Empty = 0. Anything else (letters, unknown [names]) throws a FormatException.
+    ''' </summary>
+    Private Function EvaluateAmount(Formula As String, UnitPrice As Decimal) As Decimal
+        Dim Expr As String = Convert.ToString(Formula).Trim()
+        If Expr = "" Then Return 0D
+
+        Dim RX = System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        Dim Num = Function(Value As Decimal) "(" & Value.ToString("0.0############", CultureInfo.InvariantCulture) & ")"
+
+        ' [UnitPrice] / [Unit Price]
+        Expr = System.Text.RegularExpressions.Regex.Replace(Expr, "\[\s*Unit\s*Price\s*\]", Num(UnitPrice), RX)
+
+        ' Thousands separators inside numbers: 1,500.5 -> 1500.5
+        Expr = System.Text.RegularExpressions.Regex.Replace(Expr, "(?<=\d),(?=\d{3}\b)", "")
+
+        ' Percentages, with or without brackets: [30%] / 30% -> (0.3)
+        Expr = System.Text.RegularExpressions.Regex.Replace(Expr, "\[?\s*(\d+(?:\.\d+)?)\s*%\s*\]?",
+            Function(m) Num(Decimal.Parse(m.Groups(1).Value, CultureInfo.InvariantCulture) / 100D))
+
+        ' Bracketed numbers: [200] -> (200.0)
+        Expr = System.Text.RegularExpressions.Regex.Replace(Expr, "\[\s*(\d+(?:\.\d+)?)\s*\]",
+            Function(m) Num(Decimal.Parse(m.Groups(1).Value, CultureInfo.InvariantCulture)))
+
+        ' Plain whole numbers get a ".0" so the calculation never does integer division
+        Expr = System.Text.RegularExpressions.Regex.Replace(Expr, "(?<![\d.])(\d+)(?![\d.])", "$1.0")
+
+        ' Only numbers, + - * / ( ) and spaces may be left
+        If Not System.Text.RegularExpressions.Regex.IsMatch(Expr, "^[\d\.\s\+\-\*/\(\)]+$") Then
+            Throw New FormatException("'" & Formula & "' is not a valid amount or formula.")
+        End If
+
+        Dim Result As Object = New DataTable().Compute(Expr, Nothing)
+        Return Math.Round(Convert.ToDecimal(Result, CultureInfo.InvariantCulture), 3, MidpointRounding.AwayFromZero)
+    End Function
+
+    ' ------------------------------------------------------------------
     ' Helpers
     ' ------------------------------------------------------------------
 
@@ -612,7 +711,32 @@ Partial Class AutoTransfer
     Private Function FormatAmount(Value As Decimal) As String
         Return Value.ToString("N3", CultureInfo.InvariantCulture)
     End Function
+    ''' <summary>
+    ''' Checks the grid before posting: every line needs an account (not empty).
+    ''' Shows a red message and returns False otherwise.
+    ''' </summary>
     Function Validate_Entries() As Boolean
+        Dim Bad As New List(Of String)
+        Dim LineNo As Integer = 0
+        For Each r As GridViewRow In gvTransactions.Rows
+            If r.RowType <> DataControlRowType.DataRow Then Continue For
+            LineNo += 1
+            Dim Acc As String = GetCellText(r, 0)
+            If Acc = "" Then
+                Bad.Add("line " & LineNo & " (no account)")
+            End If
+        Next
+
+        If LineNo = 0 Then
+            ShowMessage("Nothing to post.", False)
+            Return False
+        End If
+
+        If Bad.Count > 0 Then
+            ShowMessage("Can't post - these lines have no account: " & String.Join(", ", Bad) & ".", False)
+            Return False
+        End If
+
         Return True
     End Function
 
@@ -749,9 +873,17 @@ Partial Class AutoTransfer
                 '======================================================================
                 '======================================================================
 
+                'GenerateInvoice(InvoiceNum:=lnTraNo,
+                'DisplayInvoice:=True,
+                'PdfTitle:=PdfTitle,
+                'FolderName:=FolderName)
+
+
             ElseIf PostedLines.Count = 0 Then
                 ShowMessage("Nothing to post.", False)
             End If
+
+
 
             '=========================================================================================
             '=========================================================================================
