@@ -28,6 +28,12 @@ Partial Class AutoTransfer
 
         ' Once an invoice PDF exists (ViewState), keep Display / Re-Generate usable
         EnableInvoiceButtons()
+
+        ' Once Post has succeeded, keep Post disabled on every later postback
+        If CBool(If(ViewState("Posted"), False)) Then btnPost.Enabled = False
+
+        ' Show Display / Re-Generate Invoice only when the grid has a 200- / Customer / D line
+        ApplyInvoiceRule()
     End Sub
 
     ''' <summary>
@@ -884,6 +890,10 @@ Partial Class AutoTransfer
 
             ' Loop finished: record the transfer only when every line was posted
             If AllPosted AndAlso PostedLines.Count > 0 Then
+                ' Posting succeeded: disable Post in all cases (invoice or not, and even if a
+                ' follow-up step below fails) so the same lines can't be posted twice.
+                DisablePostButton()
+
                 Dim DateNTime As Long = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                 Dim UnitPaymentId As String = ""
 
@@ -934,11 +944,14 @@ Partial Class AutoTransfer
                 ' Display Invoice / Re-Generate Invoice (Post is disabled at the same time).
                 ' The form doesn't close itself; the user closes it with [x], which makes
                 ' MainPage refresh its grid (the status/history were already done above).
-                Try
-                    GenerateInvoice()
-                Catch ex As Exception
-                    ShowMessage(Done & ", but generating the invoice failed: " & ex.Message, False)
-                End Try
+                ' Invoice only when the grid has a 200- / Customer / D line (see ApplyInvoiceRule)
+                If ApplyInvoiceRule() Then
+                    Try
+                        GenerateInvoice()
+                    Catch ex As Exception
+                        ShowMessage(Done & ", but generating the invoice failed: " & ex.Message, False)
+                    End Try
+                End If
 
 
 
@@ -985,29 +998,92 @@ Partial Class AutoTransfer
 
 
     ''' <summary>
+    ''' True when the Transactions grid has a line with:
+    '''   Account     = 200-xxxxx  (starts with "200-")
+    '''   Type        = Customer
+    '''   Transaction = D
+    ''' Only such a transfer gets an invoice.
+    ''' </summary>
+    Private Function HasCustomerDebitOn200() As Boolean
+        Return FindCustomerDebitRowOn200() IsNot Nothing
+    End Function
+
+    ''' <summary>
+    ''' The first Transactions grid line with Account 200-xxxxx, Type = Customer and
+    ''' Transaction = D, or Nothing if there is none.
+    ''' </summary>
+    Private Function FindCustomerDebitRowOn200() As GridViewRow
+        For Each r As GridViewRow In gvTransactions.Rows
+            If r.RowType <> DataControlRowType.DataRow Then Continue For
+
+            Dim Acc As String = GetCellText(r, 0)   ' Account
+            Dim Typ As String = GetCellText(r, 1)   ' Type
+            Dim Tra As String = GetCellText(r, 2)   ' Transaction
+
+            If Acc.StartsWith("200-", StringComparison.Ordinal) AndAlso
+               String.Equals(Typ, "Customer", StringComparison.OrdinalIgnoreCase) AndAlso
+               String.Equals(Tra, "D", StringComparison.OrdinalIgnoreCase) Then
+                Return r
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Amount of the 200- / Customer / D line in the Transactions grid (column 3,
+    ''' shown as "1,234.500"), or 0 if there is no such line.
+    ''' </summary>
+    Private Function GetCustomerDebitAmountOn200() As Decimal
+        Dim r As GridViewRow = FindCustomerDebitRowOn200()
+        If r Is Nothing Then Return 0D
+        Return ParseAmount(GetCellText(r, 3))   ' Amount
+    End Function
+
+    ''' <summary>
+    ''' If the grid has a 200- / Customer / D line: shows btnDisplayInvoice and
+    ''' btnRegenerateInvoice and returns True (GenerateInvoice may run).
+    ''' Otherwise: hides both buttons and returns False (GenerateInvoice must not run).
+    ''' </summary>
+    Private Function ApplyInvoiceRule() As Boolean
+        Dim InvoiceAllowed As Boolean = HasCustomerDebitOn200()
+        btnDisplayInvoice.Visible = InvoiceAllowed
+        btnRegenerateInvoice.Visible = InvoiceAllowed
+        Return InvoiceAllowed
+    End Function
+
+    ''' <summary>
+    ''' Disables btnPost after a successful post and remembers it in ViewState("Posted"),
+    ''' so Page_Load keeps it disabled on later postbacks (Display / Re-Generate Invoice).
+    ''' </summary>
+    Private Sub DisablePostButton()
+        ViewState("Posted") = True
+        btnPost.Enabled = False
+    End Sub
+
+    ''' <summary>
     ''' Invoice step after a successful post. For now it works out and keeps the invoice
     ''' amounts (SaveInvoiceValues); building / saving the invoice document itself is
     ''' still to be added (TODO).
     ''' </summary>
     Private Sub GenerateInvoice()
-        ' Unit price as loaded for the Transactions grid; look it up again if it's missing
-        Dim lnUnit_Price As Decimal = ParseAmount(lblUnitPrice.Text)
-        If lnUnit_Price = 0D Then lnUnit_Price = GetUnitPrice()
+        ' Amount of the 200- / Customer / D line in the Transactions grid
+        Dim lnAmount As Decimal = GetCustomerDebitAmountOn200()
 
-        SaveInvoiceValues(lnUnit_Price)
+        SaveInvoiceValues(lnAmount)
 
         ' TODO: build / save the invoice using Commission_fee_value.Text and VAT_output_value.Text
     End Sub
 
     ''' <summary>
     ''' Keeps the invoice amounts on the form (hidden labels in AutoTransfer.aspx):
-    '''   Commission_fee_value = unit price x 0.7%   (0.007)
-    '''   VAT_output_value     = unit price x 0.07%  (0.0007, i.e. 10% of the commission)
-    ''' Both formatted "0.0##", e.g. price 100000 -> 700.0 and 70.0
+    '''   Commission_fee_value = amount x 0.7%   (0.007)
+    '''   VAT_output_value     = amount x 0.07%  (0.0007, i.e. 10% of the commission)
+    ''' where amount = the 200- / Customer / D line's Amount in the Transactions grid.
+    ''' Both formatted "0.0##", e.g. amount 100000 -> 700.0 and 70.0
     ''' </summary>
-    Private Sub SaveInvoiceValues(lnUnit_Price As Decimal)
-        Commission_fee_value.Text = Format(CDec(lnUnit_Price) * 0.007D, "0.0##")
-        VAT_output_value.Text = Format(CDec(lnUnit_Price) * 0.0007D, "0.0##")
+    Private Sub SaveInvoiceValues(lnAmount As Decimal)
+        Commission_fee_value.Text = Format(CDec(lnAmount) * 0.007D, "0.0##")
+        VAT_output_value.Text = Format(CDec(lnAmount) * 0.0007D, "0.0##")
 
         Dim SQL As String = ""
         SQL = SQL + vbCrLf + " SELECT n.PROJECT_ID AS ID, "
@@ -1139,6 +1215,7 @@ Partial Class AutoTransfer
 
     ''' <summary>Builds the invoice PDF again, with the same invoice number.</summary>
     Protected Sub btnRegenerateInvoice_Click(sender As Object, e As EventArgs) Handles btnRegenerateInvoice.Click
+        If Not ApplyInvoiceRule() Then Exit Sub
         Try
             GenerateInvoice()
             ShowMessage("Invoice " & Convert.ToString(ViewState("InvoiceNum")) & " was generated again.", True)
@@ -1430,6 +1507,7 @@ Partial Class AutoTransfer
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
     Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        If Not ApplyInvoiceRule() Then Exit Sub
         GenerateInvoice()
     End Sub
 End Class
