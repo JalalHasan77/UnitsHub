@@ -350,9 +350,11 @@ Partial Class AutoTransfer
     ' ------------------------------------------------------------------
 
     ''' <summary>
-    ''' After a successful post: if the action is a "CHANGE" action with a target status,
-    ''' moves the unit to that status (ApplyNodeStatusChange), then always writes a
-    ''' UNITSHUB_UNITSHISTORY row with the AutoTransfer in its SUMMARY. If the status
+    ''' After a successful post, does what MainPage's Case "CHANGE" does: if the action is
+    ''' a "CHANGE" action with a target status, moves the unit to that status
+    ''' (ApplyNodeStatusChange) and updates the customer's UNITSHUB_CUSTOMERPROPERTIES row
+    ''' (UpsertCustomerProperty); then always writes a UNITSHUB_UNITSHISTORY row with the
+    ''' AutoTransfer in its SUMMARY. If the status
     ''' didn't change, FROM_STATUS and TO_STATUS are both the current status.
     ''' Returns True when the status was changed.
     ''' </summary>
@@ -364,7 +366,13 @@ Partial Class AutoTransfer
             String.Equals(lblActionType.Text.Trim(), "CHANGE", StringComparison.OrdinalIgnoreCase) AndAlso
             ToStatus <> "" AndAlso ToStatus <> FromStatus
 
+        ' Same steps as MainPage.LinkButton3_Command, Case "CHANGE":
+        '   1. ApplyNodeStatusChange   2. UpsertCustomerProperty   3. InsertUnitsHistory
         If ChangeStatus Then ApplyNodeStatusChange(lblPID.Text.Trim(), ToStatus)
+
+        If String.Equals(lblActionType.Text.Trim(), "CHANGE", StringComparison.OrdinalIgnoreCase) Then
+            UpsertCustomerProperty(lblPID.Text.Trim(), lblCID.Text.Trim(), If(ChangeStatus, ToStatus, FromStatus))
+        End If
 
         Dim Summary As String =
             "AutoTransfer " & If(lblATGroupTitle.Text.Trim() = "", "", "'" & lblATGroupTitle.Text.Trim() & "' ") &
@@ -382,6 +390,51 @@ Partial Class AutoTransfer
 
         Return ChangeStatus
     End Function
+
+    ''' <summary>
+    ''' AutoTransfer's version of MainPage.UpsertCustomerProperty for the unit's customer
+    ''' (UNITSHUB_CUSTOMERPROPERTIES row for NODE_ID + CONTACT_ID):
+    '''   - row exists  -> only STATUS is updated. START_DATE, UNIT_ACCOUNT and COMMENTS
+    '''                    were set when the unit was reserved; AutoTransfer has no new
+    '''                    values for them, so they are kept (MainPage's version would
+    '''                    blank them, which would also wipe the Pre Sales Account).
+    '''   - no row yet  -> inserted like MainPage does, with UNIT_ACCOUNT = the Pre Sales
+    '''                    Account shown on this form.
+    ''' </summary>
+    Private Sub UpsertCustomerProperty(NodeId As String, ContactId As String, StatusId As String)
+        If String.IsNullOrWhiteSpace(NodeId) OrElse String.IsNullOrWhiteSpace(ContactId) Then Exit Sub
+
+        Dim safeNodeId As String = NodeId.Trim().Replace("'", "''")
+        Dim safeContactId As String = ContactId.Trim().Replace("'", "''")
+        Dim safeStatus As String = If(StatusId, "").Trim().Replace("'", "''")
+
+        Dim whereClause As String = " WHERE NODE_ID = '" & safeNodeId & "' AND CONTACT_ID = '" & safeContactId & "'"
+
+        Dim existingCount As Integer = 0
+        Integer.TryParse(DB.RetreiveScalarSTRING(EBDB, "SELECT COUNT(*) FROM UNITSHUB_CUSTOMERPROPERTIES" & whereClause), existingCount)
+
+        Dim SQL As String
+        If existingCount > 0 Then
+            SQL = "UPDATE UNITSHUB_CUSTOMERPROPERTIES SET STATUS = '" & safeStatus & "'" & whereClause
+        Else
+            Dim startDate As String = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            Dim createdAt As String = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)
+            Dim safeAccount As String = lblPreSalesAccount.Text.Trim().Replace("'", "''")
+
+            SQL = "INSERT INTO UNITSHUB_CUSTOMERPROPERTIES " &
+                  "(NODE_ID, CONTACT_ID, STATUS, START_DATE, END_DATE, UNIT_ACCOUNT, CREATED_AT, COMMENTS) VALUES (" &
+                  "'" & safeNodeId & "', " &
+                  "'" & safeContactId & "', " &
+                  "'" & safeStatus & "', " &
+                  "'" & startDate & "', " &
+                  "'', " &
+                  "'" & safeAccount & "', " &
+                  "'" & createdAt & "', " &
+                  "'')"
+        End If
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
 
     ''' <summary>
     ''' Display name of a status of this project: STATUS - SUBTITLE from
