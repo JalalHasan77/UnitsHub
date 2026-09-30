@@ -690,6 +690,7 @@
                         <tr>
                             <td style="width: 50%">
                                 <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="36pt" ForeColor="White" Text="Label"></asp:Label>
+                                <asp:Button ID="Button1" runat="server" Text="Button" />
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
 

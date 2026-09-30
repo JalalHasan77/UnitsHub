@@ -116,6 +116,16 @@ Partial Class MainPage
                                       VendorPopupHelper.PopupDisplayMode.FrameOnly,
                                       returnKey:=ConfirmationPopupReturnKey)
 
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      Button1,
+                                      "DisplayInvoice.aspx?PDF=27147",
+                                      1000, 0,
+                                      PopupPlacement.Center,
+                                      "",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                      returnKey:=OpenActionPopupReturnKey)
+
+
 
         PopulateSideMenu()
         RepopulateGridActionsIfNeeded()
@@ -1762,9 +1772,6 @@ Partial Class MainPage
                     Dim HistoryToStatus As String = If(ChangeStatus, ToStatusId, StateId)
                     InsertUnitsHistory(ProjectId, NodeId, ContactId, StateId, HistoryToStatus, PaymentPlan, ActionId, Summary)
                 End If
-                'If DT.Rows(0)("NEED_PAYMENT").ToString = "1" Then
-
-                'End If
             Case ""
 
 

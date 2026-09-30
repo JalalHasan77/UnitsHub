@@ -25,6 +25,9 @@ Partial Class AutoTransfer
             BindTransactions()  ' Transactions grid (UNITSHUB_ATP_DETAILS)
             LoadNextInvoiceNo() ' lblInvoiceNo
         End If
+
+        ' Once an invoice PDF exists (ViewState), keep Display / Re-Generate usable
+        EnableInvoiceButtons()
     End Sub
 
     ''' <summary>
@@ -842,6 +845,11 @@ Partial Class AutoTransfer
                 ' Each follow-up step reports its own problem; the message bar shows them all
                 Dim Problems As New List(Of String)
 
+                ' Take the invoice number now, at post time (it was only a preview when the
+                ' form opened). The payment update below and GenerateInvoice both use this
+                ' same lblInvoiceNo, so the payment and the invoice always agree.
+                LoadNextInvoiceNo()
+
                 Try
                     If UpdatePaymentAutoTransfer(UnitPaymentId, DateNTime) = 0 Then
                         Problems.Add("no matching payment was found in UNITSHUB_PAYMENTS to mark")
@@ -869,27 +877,16 @@ Partial Class AutoTransfer
 
 
 
-                '======================================================================
-                '======================================================================
-                '======================================================================
-                Dim Result As New Dictionary(Of String, Object)
-                Result.Add("Result", lblCID.Text)
+                ' Invoice: generated now, and the form stays open so the user can use
+                ' Display Invoice / Re-Generate Invoice (Post is disabled at the same time).
+                ' The form doesn't close itself; the user closes it with [x], which makes
+                ' MainPage refresh its grid (the status/history were already done above).
+                Try
+                    GenerateInvoice()
+                Catch ex As Exception
+                    ShowMessage(Done & ", but generating the invoice failed: " & ex.Message, False)
+                End Try
 
-                Dim PostingResult As New List(Of Dictionary(Of String, Object))
-                PostingResult.Add(Result)
-
-                Dim ReturnKey As String = VendorPopupHelper.GetPopupReturnKey(Me)
-
-                VendorPopupHelper.RegisterPopupSelectionAndClose(
-                                            page:=Me,
-                                            returnValue:=PostingResult,
-                                            startupScriptKey:=ReturnKey,
-                                            skipPostBack:=False)
-                '======================================================================
-                '======================================================================
-                '======================================================================
-
-                GenerateInvoice()
 
 
             ElseIf PostedLines.Count = 0 Then
@@ -1045,6 +1042,56 @@ Partial Class AutoTransfer
         FileName = folderPath & "\" & DT.Rows(0)("InvoiceNum").ToString & ".pdf"
         p.ExportToDisk(CrystalDecisions.Shared.ExportFormatType.PortableDocFormat, FileName.Replace("\\", "\"))
         p.Close()
+
+        ' PDF is on disk: ReportsTemplate\<Project>\<InvoiceNum>.pdf - remember it and
+        ' switch on Display Invoice / Re-Generate Invoice
+        ViewState("InvoiceProject") = DT.Rows(0)("Project").ToString
+        ViewState("InvoiceNum") = DT.Rows(0)("InvoiceNum").ToString
+        EnableInvoiceButtons()
+    End Sub
+
+    Private Const OpenActionPopupReturnKey As String = "DisplayInvoicePopup"
+    Private InvoicePopupRegistered As Boolean = False
+
+    ''' <summary>
+    ''' After an invoice PDF has been generated (ViewState InvoiceNum / InvoiceProject):
+    ''' enables btnDisplayInvoice and btnRegenerateInvoice, disables btnPost (the lines
+    ''' are already posted - no second post), and attaches the DisplayInvoice.aspx popup
+    ''' to btnDisplayInvoice (once per request).
+    ''' Before that, Display / Re-Generate stay disabled as set in the markup.
+    ''' </summary>
+    Private Sub EnableInvoiceButtons()
+        Dim InvoiceNum As String = Convert.ToString(ViewState("InvoiceNum"))
+        If InvoiceNum = "" Then Exit Sub
+
+        btnDisplayInvoice.Enabled = True
+        btnRegenerateInvoice.Enabled = True
+        btnPost.Enabled = False
+
+        If InvoicePopupRegistered Then Exit Sub
+        InvoicePopupRegistered = True
+
+        Dim Url As String = "DisplayInvoice.aspx?PDF=" & Server.UrlEncode(InvoiceNum) &
+                            "&Project=" & Server.UrlEncode(Convert.ToString(ViewState("InvoiceProject")))
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              btnDisplayInvoice,
+                                              Url,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
+    End Sub
+
+    ''' <summary>Builds the invoice PDF again, with the same invoice number.</summary>
+    Protected Sub btnRegenerateInvoice_Click(sender As Object, e As EventArgs) Handles btnRegenerateInvoice.Click
+        Try
+            GenerateInvoice()
+            ShowMessage("Invoice " & Convert.ToString(ViewState("InvoiceNum")) & " was generated again.", True)
+        Catch ex As Exception
+            ShowMessage("Re-generating the invoice failed: " & ex.Message, False)
+        End Try
     End Sub
 
     Function GetAppPath() As String
@@ -1071,9 +1118,9 @@ Partial Class AutoTransfer
         Dim Result As Double
         'If Double.TryParse(Text, Globalization.NumberStyles.Number, Globalization.CultureInfo.InvariantCulture, Result) Then
         If Double.TryParse(Text, NumberStyles.Number, CultureInfo.InvariantCulture, Result) Then
-                Return Result
-            End If
-            Return 0
+            Return Result
+        End If
+        Return 0
     End Function
 
     Public Function Bringparameters(drCustomerRow As DataRow,
@@ -1286,6 +1333,8 @@ Partial Class AutoTransfer
     '''   LASTAUTOTRANSFER     = the AutoTransfer group's title
     '''   LASTAUTOTRANSFERID   = UNITPAYMENT_ID of the batch just saved
     '''   LASTAUTOTRANSFERDATE = same Unix timestamp as the batch
+    '''   INVOICENUM           = the invoice number generated for this post (lblInvoiceNo)
+    ''' All in ONE UPDATE - this is the only place the form writes to UNITSHUB_PAYMENTS.
     ''' Returns how many payment rows were updated (0 = no matching payment).
     ''' </summary>
     Private Function UpdatePaymentAutoTransfer(UnitPaymentId As String, DateNTime As Long) As Integer
@@ -1306,7 +1355,8 @@ Partial Class AutoTransfer
             "UPDATE UNITSHUB_PAYMENTS SET " &
             "LASTAUTOTRANSFER = " & Q(lblATGroupTitle.Text.Trim()) & ", " &
             "LASTAUTOTRANSFERID = " & Q(UnitPaymentId) & ", " &
-            "LASTAUTOTRANSFERDATE = " & DateNTime.ToString(CultureInfo.InvariantCulture) &
+            "LASTAUTOTRANSFERDATE = " & DateNTime.ToString(CultureInfo.InvariantCulture) & ", " &
+            "INVOICENUM = " & Q(lblInvoiceNo.Text.Trim()) &
             WhereClause)
 
         Return Matches
