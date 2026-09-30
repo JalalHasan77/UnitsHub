@@ -627,7 +627,8 @@ html, body, form {
 
         <div class="page-container">
             <div class="reserve-card">
-                <h1 class="page-title">AutoTransfer</h1>
+                <h1 class="page-title">AutoTransfer<asp:Button ID="Button1" runat="server" Text="Button" />
+                </h1>
                 <!-- IDs passed in / looked up; kept on the page (hidden) so they survive postbacks -->
                 <div class="hidden-fields">
                     <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
@@ -638,6 +639,9 @@ html, body, form {
                     <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblUnitPrice" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="Commission_fee_value" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="VAT_output_value" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblInvoiceNo" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>

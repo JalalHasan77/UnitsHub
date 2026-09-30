@@ -48,6 +48,25 @@ Public Module PF
         Return dt
     End Function
 
+    Public Function DictionaryToDataTable(dict As IDictionary(Of String, String)) As DataTable
+        Dim dt As New DataTable("DictTable")
+
+        '1) Build the schema – one column per key
+        For Each kvp In dict
+            'Use Object for maximum flexibility; change to kvp.Value.GetType if keys share a consistent type
+            dt.Columns.Add(kvp.Key, GetType(String))
+        Next
+
+        '2) Populate the single row
+        Dim row As DataRow = dt.NewRow()
+        For Each kvp In dict
+            row(kvp.Key) = kvp.Value
+        Next
+        dt.Rows.Add(row)
+
+        Return dt
+    End Function
+
     Public Sub PopulateDropDownList(ByRef ddl As DropDownList,
                                      sql As Object,
                                      DataConnection As String,

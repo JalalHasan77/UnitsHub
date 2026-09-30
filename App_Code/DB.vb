@@ -49,7 +49,7 @@ Public Module DB
     End Function
 
 
-    Private Function ICBS_CS(Optional lcDatabase As String = "") As String
+    Public Function ICBS_CS(Optional lcDatabase As String = "") As String
         Select Case UCase(lcDatabase)
             Case "UAT"
                 ICBS_CS = "Provider=OraOLEDB.Oracle;Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=s0320.EskanBank.com)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ICBSTRN3)));User Id=ICBS;Password=sbci;"

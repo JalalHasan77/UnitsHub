@@ -2,6 +2,8 @@
 Imports System.DateTime
 Imports System.Drawing
 Imports System.Globalization
+Imports System.IO
+Imports CrystalDecisions.CrystalReports.Engine
 
 Partial Class AutoTransfer
     Inherits System.Web.UI.Page
@@ -21,7 +23,21 @@ Partial Class AutoTransfer
             LoadAccountInfo()   ' Pre Sales Account (+ its type in the title), Balance
             LoadAmounts()       ' Paid Amount, Remaining
             BindTransactions()  ' Transactions grid (UNITSHUB_ATP_DETAILS)
+            LoadNextInvoiceNo() ' lblInvoiceNo
         End If
+    End Sub
+
+    ''' <summary>
+    ''' Next invoice number = highest INVOICE_NUM in INVOICING_INVOICES + 1 (1 if the
+    ''' table is empty). Non-numeric INVOICE_NUM values, if any, are ignored.
+    ''' Read when the form opens - see the note in the reply about two users at once.
+    ''' </summary>
+    Private Sub LoadNextInvoiceNo()
+        Dim SQL As String =
+            "SELECT NVL(MAX(TO_NUMBER(INVOICE_NUM)), 0) + 1 FROM INVOICING_INVOICES " &
+            "WHERE REGEXP_LIKE(TRIM(INVOICE_NUM), '^[0-9]+$')"
+
+        lblInvoiceNo.Text = Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
     End Sub
 
     ''' <summary>
@@ -873,10 +889,7 @@ Partial Class AutoTransfer
                 '======================================================================
                 '======================================================================
 
-                'GenerateInvoice(InvoiceNum:=lnTraNo,
-                'DisplayInvoice:=True,
-                'PdfTitle:=PdfTitle,
-                'FolderName:=FolderName)
+                GenerateInvoice()
 
 
             ElseIf PostedLines.Count = 0 Then
@@ -919,6 +932,286 @@ Partial Class AutoTransfer
         End If
 
     End Sub
+
+
+    ''' <summary>
+    ''' Invoice step after a successful post. For now it works out and keeps the invoice
+    ''' amounts (SaveInvoiceValues); building / saving the invoice document itself is
+    ''' still to be added (TODO).
+    ''' </summary>
+    Private Sub GenerateInvoice()
+        ' Unit price as loaded for the Transactions grid; look it up again if it's missing
+        Dim lnUnit_Price As Decimal = ParseAmount(lblUnitPrice.Text)
+        If lnUnit_Price = 0D Then lnUnit_Price = GetUnitPrice()
+
+        SaveInvoiceValues(lnUnit_Price)
+
+        ' TODO: build / save the invoice using Commission_fee_value.Text and VAT_output_value.Text
+    End Sub
+
+    ''' <summary>
+    ''' Keeps the invoice amounts on the form (hidden labels in AutoTransfer.aspx):
+    '''   Commission_fee_value = unit price x 0.7%   (0.007)
+    '''   VAT_output_value     = unit price x 0.07%  (0.0007, i.e. 10% of the commission)
+    ''' Both formatted "0.0##", e.g. price 100000 -> 700.0 and 70.0
+    ''' </summary>
+    Private Sub SaveInvoiceValues(lnUnit_Price As Decimal)
+        Commission_fee_value.Text = Format(CDec(lnUnit_Price) * 0.007D, "0.0##")
+        VAT_output_value.Text = Format(CDec(lnUnit_Price) * 0.0007D, "0.0##")
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT n.PROJECT_ID AS ID, "
+        SQL = SQL + vbCrLf + "        MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'TITLE'            THEN v.VALUE_TEXT END) AS TITLE, "
+        SQL = SQL + vbCrLf + "        MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'CONTRACTORCUSTNO' THEN v.VALUE_TEXT END) AS CONTRACTORCUSTNO, "
+        SQL = SQL + vbCrLf + "        '" & VAT_output_value.Text & "' AS VAT, "
+        SQL = SQL + vbCrLf + "        MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'VAT'              THEN v.VALUE_TEXT END) AS VATPercentage, "
+        SQL = SQL + vbCrLf + "        MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'FEES'             THEN v.VALUE_TEXT END) AS FEES, "
+        SQL = SQL + vbCrLf + "        MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'DISCOUNT'         THEN v.VALUE_TEXT END) AS DISCOUNT, "
+        SQL = SQL + vbCrLf + "        '" & Commission_fee_value.Text & "' AS COMMISION "
+        SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES n "
+        SQL = SQL + vbCrLf + " JOIN   UNITSHUB_NODE_ATTRIBUTE_VALUE v "
+        SQL = SQL + vbCrLf + "        ON v.NODE_ID = n.NODE_ID "
+        SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES a "
+        SQL = SQL + vbCrLf + "        ON  a.PROJECT_ID   = n.PROJECT_ID "
+        SQL = SQL + vbCrLf + "        AND a.NODE_TYPE_ID = n.NODE_TYPE_ID "
+        SQL = SQL + vbCrLf + "        AND TO_NUMBER(a.DISPLAY_ORDER) = TO_NUMBER(v.DISPLAY_ORDER) "
+        SQL = SQL + vbCrLf + " WHERE  n.PROJECT_ID   = '" & lblPRJID.Text & "' "
+        SQL = SQL + vbCrLf + "   AND  n.NODE_TYPE_ID = '000' "
+        SQL = SQL + vbCrLf + " GROUP BY n.PROJECT_ID, n.NODE_ID "
+        Dim dtProjectsCharges As New Data.DataTable
+        dtProjectsCharges = GetDataTable(EBDB_CS, SQL)
+
+        Dim dtCustomer As New Data.DataTable
+        dtCustomer = PF.DictionaryToDataTable(dict:=AddNameTINaddress(CustomerNo:=dtProjectsCharges.Rows(0)("CONTRACTORCUSTNO").ToString))
+
+
+        '==========================================================================
+        Dim dtUnits As New DataTable
+        ' Add columns
+        dtUnits.Columns.Add("REFERENCE", GetType(String))
+        dtUnits.Columns.Add("ID", GetType(String))
+        dtUnits.Columns.Add("DT", GetType(String))
+        dtUnits.Columns.Add("TransactionNo", GetType(String))
+
+        Dim DR As DataRow
+        DR = dtUnits.NewRow
+        DR("REFERENCE") = lblUnitRef.Text
+        DR("ID") = lblPID.Text
+        DR("DT") = Format(Now, "yyyy-MM-dd")
+        DR("TransactionNo") = lblInvoiceNo.Text
+
+        dtUnits.Rows.Add(DR)
+        '=============================================================
+        Dim dtONEINVOICE As New DataTable
+
+        Dim GrandParameter As New Dictionary(Of String, String)
+        GrandParameter = Bringparameters(dtCustomer:=dtCustomer, dtProject:=dtProjectsCharges, dtTansaction:=dtUnits)
+
+        dtONEINVOICE.Rows.Clear()
+        dtONEINVOICE.AcceptChanges()
+        dtONEINVOICE = PF.DictionaryToDataTable(GrandParameter)
+
+        GeneratePDF(dtONEINVOICE)
+
+    End Sub
+
+    Sub GeneratePDF(ByVal DT As DataTable)
+        Dim DS As New Data.DataSet
+        DT.TableName = "InvoiceComponents"
+        Dim p As New ReportDocument
+        IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory & "\Logs.txt", "I am Here 747")
+
+        p.Load(Server.MapPath(GetAppPath() & "\ReportsTemplate\InvoiceReport.rpt"))
+        IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory & "\Logs.txt", "I am Here 750")
+        'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", vbCrLf & "Reached Here 748")
+
+        Dim folderPath As String = Server.MapPath(GetAppPath() & "\ReportsTemplate\" & DT.Rows(0)("Project").ToString)
+        Dim FileName As String
+        'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", vbCrLf & folderPath)
+        If Not Directory.Exists(folderPath) Then
+            Directory.CreateDirectory(folderPath)
+        End If
+
+        DS.Tables.Add(DT)
+        DS.DataSetName = "Invoices-01"
+        p.SetDataSource(DS)
+        p.Refresh()
+
+        'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", "Reached Here 752")
+
+        Dim CurrentUser As String = GetCurrentUserID()
+
+
+        FileName = folderPath & "\" & DT.Rows(0)("InvoiceNum").ToString & ".pdf"
+        p.ExportToDisk(CrystalDecisions.Shared.ExportFormatType.PortableDocFormat, FileName.Replace("\\", "\"))
+        p.Close()
+    End Sub
+
+    Function GetAppPath() As String
+        Dim lcPath As String = HttpRuntime.AppDomainAppVirtualPath
+        GetAppPath = lcPath
+        If lcPath = "\" Or lcPath = "/" Then
+            GetAppPath = ""
+        End If
+    End Function
+
+
+    Public Function Bringparameters(dtCustomer As DataTable,
+                            dtProject As DataTable,
+                            dtTansaction As DataTable) As Dictionary(Of String, String)
+        Return Bringparameters(drCustomerRow:=dtCustomer.Rows(0),
+                               drProjectRow:=dtProject.Rows(0),
+                               drTansactionRow:=dtTansaction.Rows(0))
+    End Function
+
+    ''' <summary>Number from a cell/text; "", NULL or anything non-numeric gives 0.</summary>
+    Private Function ToDbl(Value As Object) As Double
+        If Value Is Nothing OrElse Value Is DBNull.Value Then Return 0
+        Dim Text As String = Convert.ToString(Value).Replace(",", "").Trim()
+        Dim Result As Double
+        'If Double.TryParse(Text, Globalization.NumberStyles.Number, Globalization.CultureInfo.InvariantCulture, Result) Then
+        If Double.TryParse(Text, NumberStyles.Number, CultureInfo.InvariantCulture, Result) Then
+                Return Result
+            End If
+            Return 0
+    End Function
+
+    Public Function Bringparameters(drCustomerRow As DataRow,
+                            drProjectRow As DataRow,
+                            drTansactionRow As DataRow) As Dictionary(Of String, String)
+
+        Dim vat As Double = CDbl(drProjectRow("VAT")) 'VAT_percentage
+        Dim GrandTotal As Double = 0.0
+        GrandTotal = ToDbl(drProjectRow("COMMISION")) +
+                      ToDbl(drProjectRow("Fees")) +
+                      ToDbl(vat) -
+                      ToDbl(drProjectRow("Discount"))
+
+        GrandTotal = Format(GrandTotal, "#,###,##0.000")
+
+        Dim INV_NUM As String = lblInvoiceNo.Text
+
+        Dim parameters As New Dictionary(Of String, String)
+        parameters.Add("TO", drCustomerRow("FULL_NAME").ToString)
+        parameters.Add("Address", drCustomerRow("ADDRESS").ToString)
+        parameters.Add("ClientID", Right("000000" & drCustomerRow("ClientNo").ToString, 6))
+        parameters.Add("TIN", drCustomerRow("TIN").ToString)
+        parameters.Add("DateOfSupply", drTansactionRow("DT").ToString)
+        parameters.Add("Description", "Commission for assisting in the sale of unit (" & drTansactionRow("REFERENCE").ToString & ")")
+        parameters.Add("DueAmount", CDbl(drProjectRow("COMMISION").ToString).ToString("#.000"))
+        parameters.Add("InvoiceNum", INV_NUM)
+        parameters.Add("DateIssues", Date.Now().ToString("yyyy-MM-dd"))
+        parameters.Add("DueAmountTotal", CDbl(drProjectRow("COMMISION").ToString).ToString("#.000"))
+        parameters.Add("TransactionFee", drProjectRow("Fees").ToString)
+        parameters.Add("BankTIN", "210011959000002")
+        parameters.Add("Discount", drProjectRow("Discount").ToString)
+        parameters.Add("VAT", vat.ToString("#.000"))
+        parameters.Add("VATPercentage", 100 * ToDbl(drProjectRow("VATPercentage")))
+        parameters.Add("TOTAL", GrandTotal.ToString("#.000"))
+        parameters.Add("UnitReference", drTansactionRow("REFERENCE").ToString)
+        parameters.Add("Project", drProjectRow("TITLE").ToString)
+
+        Return parameters
+    End Function
+
+
+
+    Function AddNameTINaddress(ByVal CustomerNo As String) As Generic.Dictionary(Of String, String)
+        Dim parameters As New Generic.Dictionary(Of String, String)
+
+        Dim custType = Chech_Moral_Physical(Cust_ID:=CustomerNo)
+
+        Dim dr As Data.DataRow
+        If custType("CUSM_TYPE") = "1" Then
+            dr = Get_Physical(CustomerNo)
+        Else custType("CUSM_TYPE") = "2"
+            dr = Get_Moral(CustomerNo)
+        End If
+
+
+        'TODO: remove the following in live unit ==========================================
+        Dim dt As New DataTable("Customers")
+        ' --- Define schema ---
+        dt.Columns.Add("ID", GetType(String))
+        dt.Columns.Add("CUSTOMER_NUMBER", GetType(String))
+        dt.Columns.Add("FULL_NAME", GetType(String))
+        dt.Columns.Add("TIN", GetType(String))
+        dt.Columns.Add("BLOCK", GetType(String))
+        dt.Columns.Add("BUILDING", GetType(String))
+        dt.Columns.Add("FLAT", GetType(String))
+        dt.Columns.Add("ROAD", GetType(String))
+
+        Dim dr1 As DataRow
+        dr1 = dt.NewRow
+        dt.AcceptChanges()
+
+        Dim address As New List(Of String)
+        If Not String.IsNullOrEmpty(dr("BLOCK").ToString()) Then
+            address.Add("Block " + dr("BLOCK").ToString())
+        End If
+        If Not String.IsNullOrEmpty(dr("ROAD").ToString()) Then
+            address.Add("Road " + dr("ROAD").ToString())
+        End If
+        If Not String.IsNullOrEmpty(dr("BUILDING").ToString()) Then
+            address.Add("Biulding " + dr("BUILDING").ToString())
+        End If
+        If Not String.IsNullOrEmpty(dr("FLAT").ToString()) Then
+            address.Add("Flat " + dr("FLAT").ToString())
+        End If
+
+        parameters.Add("TIN", dr("TIN").ToString)
+        parameters.Add("FULL_NAME", dr("FULL_NAME").ToString)
+        parameters.Add("ADDRESS", Join(address.ToArray, "-"))
+        parameters.Add("ClientNo", CustomerNo)
+
+        Return parameters
+    End Function
+
+    Protected Function Chech_Moral_Physical(ByVal Cust_ID As String) As Data.DataRow
+        Dim lcSql As String = ""
+        lcSql = lcSql + " Select  CUSM_TYPE FROM BBSD_CUST_MEMBERS@ICBS WHERE CUST_ID='" + Cust_ID + "' "
+        Dim dr = GetDataRow(EBDB, lcSql)
+        Return (dr)
+    End Function
+
+    Protected Function Get_Physical(ByVal Cust_ID As String) As Data.DataRow
+        Dim lcSql As String = ""
+        lcSql = lcSql + " Select  "
+        lcSql = lcSql + "       T1.PHPR_ID AS ID, T3.CUST_ID AS Customer_Number, "
+        lcSql = lcSql + "       T1.PHPR_FULL_NAME FULL_NAME, T1.PHPR_TAX_ID TIN, "
+        lcSql = lcSql + "       T4.LCTY_CODE AS BLOCK, T4.PADR_B_LINE_2 AS BUILDING, T4.PADR_B_LINE_3 AS FLAT, T4.PADR_B_LINE_4 AS ROAD"
+        lcSql = lcSql + " from bbsd_physical_persons@ICBS T1 "
+        lcSql = lcSql + " left join bbsd_cust_members@ICBS T2 on T1.PHPR_ID=T2.CUSM_ID "
+        lcSql = lcSql + " Left Join BBSD_CUSTOMERS@ICBS T3 on T2.CUST_ID=T3.CUST_ID "
+        lcSql = lcSql + " Left Join BBSD_PHPR_ADDRESSES@ICBS T4 on T1.PHPR_ID=T4.PHPR_ID"
+        lcSql = lcSql + " WHERE T3.CUST_ID='" + Cust_ID + "'"
+        Dim dr = GetDataRow(EBDB, lcSql)
+        Return (dr)
+    End Function
+
+    Protected Function Get_Moral(Cust_ID As String) As Data.DataRow
+        Dim lcSql As String = ""
+        lcSql = lcSql + vbCrLf + " Select distinct   "
+        lcSql = lcSql + vbCrLf + " substr('000000' || T1.MRPR_ID, -6) AS ID,  "
+        lcSql = lcSql + vbCrLf + " T1.MRPR_ID As Customer_Number,   "
+        lcSql = lcSql + vbCrLf + " T1.MRPR_B_NAME FULL_NAME,  "
+        lcSql = lcSql + vbCrLf + " replace(T1.MRPR_TAX_ID_NBR,'-','') TIN,   "
+        lcSql = lcSql + vbCrLf + " replace(T4.LCTY_CODE,'-','') AS BLOCK,   "
+        lcSql = lcSql + vbCrLf + " replace(T4.MADR_B_LINE_2,'-','') As BUILDING,   "
+        lcSql = lcSql + vbCrLf + " replace(T4.MADR_B_LINE_3,'-','') AS FLAT,   "
+        lcSql = lcSql + vbCrLf + " replace(T4.MADR_B_LINE_4,'-','') AS ROAD   "
+        lcSql = lcSql + vbCrLf + " From bbsd_moral_persons@ICBS T1   "
+        lcSql = lcSql + vbCrLf + " Left Join bbsd_cust_members@ICBS T2 on T1.MRPR_ID=T2.CUSM_ID  Left Join BBSD_CUSTOMERS@ICBS T3 on T2.CUST_ID=T3.CUST_ID   "
+        lcSql = lcSql + vbCrLf + " Left Join BBSD_MRPR_ADDRESSES@ICBS T4 on T1.MRPR_ID=T4.MRPR_ID  WHERE T2.CUST_ID ='" & Cust_ID & "' "
+
+
+        Dim dr = GetDataRow(EBDB, lcSql)
+        Return (dr)
+    End Function
+
+
+
+
 
 
     ''' <summary>
@@ -1032,5 +1325,8 @@ Partial Class AutoTransfer
 
     Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
         VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
+    Protected Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        GenerateInvoice()
     End Sub
 End Class
