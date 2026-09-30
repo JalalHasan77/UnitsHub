@@ -1701,7 +1701,10 @@ Partial Class MainPage
     Protected Sub LinkButton3_Command(sender As Object, e As EventArgs)
 
         Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
-        If returnValue Is Nothing Then Exit Sub
+        If returnValue Is Nothing Then
+            loadData()
+            Exit Sub
+        End If
 
         ' TryCast: Cancel/Close return False instead of a list, and CType would throw on that
         Dim Row As List(Of Dictionary(Of String, Object)) = TryCast(returnValue, List(Of Dictionary(Of String, Object)))
