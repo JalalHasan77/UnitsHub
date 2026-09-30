@@ -1071,7 +1071,7 @@ Partial Class AutoTransfer
 
         SaveInvoiceValues(lnAmount)
 
-        ' TODO: build / save the invoice using Commission_fee_value.Text and VAT_output_value.Text
+        ' SaveInvoiceValues also saves INVOICING_INVOICES / INVOICING_INVOICE_ITEMS and builds the PDF
     End Sub
 
     ''' <summary>
@@ -1137,9 +1137,90 @@ Partial Class AutoTransfer
         dtONEINVOICE.AcceptChanges()
         dtONEINVOICE = PF.DictionaryToDataTable(GrandParameter)
 
+        ' Save the invoice and its line (insert, or update if the invoice number is
+        ' already there, e.g. on Re-Generate) before building the PDF
+        insertInto_invoicing_invoices(GrandParameter)
+        insertInto_invoicing_invoices_ITems(GrandParameter)
+
         GeneratePDF(dtONEINVOICE)
 
     End Sub
+
+    ''' <summary>
+    ''' Inserts / updates the invoice header in INVOICING_INVOICES (keyed by invoice_num).
+    ''' Same field mapping as the old insertInto_invoicing_invoices; Parameters is the
+    ''' dictionary built by Bringparameters.
+    ''' </summary>
+    Private Sub insertInto_invoicing_invoices(Parameters As Dictionary(Of String, String))
+        Dim DestinationFields As String() = {"invoice_num", "client_no", "total_amount", "total_due", "trans_amount", "discount_amount", "vat", "vat_percentage", "ext_ref_num"}
+        Dim SourceFields As String() = {"InvoiceNum", "ClientID", "TOTAL", "DueAmountTotal", "TransactionFee", "Discount", "VAT", "VATPercentage", "UnitReference"}
+
+        Dim Dic As Dictionary(Of String, String) = MapInvoiceFields(SourceFields, DestinationFields, Parameters)
+        Dic.Add("user_id", GetCurrentUserID())
+        Dic.Add("date_issued", Date.Now.ToString("yyyy-MM-dd"))
+
+        DB.ExecuteNonQuery(EBDB_CS, BuildInvoiceUpsertSql("INVOICING_INVOICES", Dic))
+    End Sub
+
+    ''' <summary>
+    ''' Inserts / updates the invoice line in INVOICING_INVOICE_ITEMS (keyed by invoice_num).
+    ''' Same field mapping as the old insertInto_invoicing_invoices_ITems.
+    ''' </summary>
+    Private Sub insertInto_invoicing_invoices_ITems(Parameters As Dictionary(Of String, String))
+        Dim DestinationFields As String() = {"invoice_num", "date_of_supply", "description", "due_amount"}
+
+        Dim SourceFields As String() = {"InvoiceNum", "DateOfSupply", "Description", "DueAmount"}
+
+
+
+        Dim Dic As Dictionary(Of String, String) = MapInvoiceFields(SourceFields, DestinationFields, Parameters)
+
+        DB.ExecuteNonQuery(EBDB_CS, BuildInvoiceUpsertSql("INVOICING_INVOICE_ITEMS", Dic))
+    End Sub
+
+    ''' <summary>
+    ''' Copies Parameters(SourceFields(i)) into a new dictionary under DestinationFields(i)
+    ''' (replaces the old TransferDictionaryValues). Missing keys become "".
+    ''' </summary>
+    Private Function MapInvoiceFields(SourceFields As String(), DestinationFields As String(),
+                                      Parameters As Dictionary(Of String, String)) As Dictionary(Of String, String)
+        Dim Dic As New Dictionary(Of String, String)
+        For i As Integer = 0 To DestinationFields.Length - 1
+            Dim Key As String = SourceFields(i).Trim()
+            Dim Value As String = ""
+            If Parameters IsNot Nothing AndAlso Parameters.ContainsKey(Key) Then Value = Convert.ToString(Parameters(Key))
+            Dic(DestinationFields(i)) = Value.Trim()
+        Next
+        Return Dic
+    End Function
+
+    ''' <summary>
+    ''' One Oracle MERGE keyed by invoice_num: updates the row if that invoice number
+    ''' exists, otherwise inserts it. Values are passed as quoted text, as the old code did.
+    ''' </summary>
+    Private Function BuildInvoiceUpsertSql(Table As String, Dic As Dictionary(Of String, String)) As String
+        Const KeyField As String = "invoice_num"
+        If Not Dic.ContainsKey(KeyField) OrElse Dic(KeyField) = "" Then
+            Throw New Exception("No invoice number to save in " & Table & ".")
+        End If
+
+        Dim Cols As New List(Of String)
+        Dim Vals As New List(Of String)
+        Dim Sets As New List(Of String)
+        For Each kv As KeyValuePair(Of String, String) In Dic
+            Dim V As String = "'" & kv.Value.Replace("'", "''") & "'"
+            Cols.Add(kv.Key)
+            Vals.Add(V)
+            If kv.Key <> KeyField Then Sets.Add("t." & kv.Key & " = " & V)
+        Next
+
+        Return " MERGE INTO " & Table & " t " &
+               " USING (SELECT '" & Dic(KeyField).Replace("'", "''") & "' AS invoice_num FROM DUAL) s " &
+               "    ON (t.invoice_num = s.invoice_num) " &
+               " WHEN MATCHED THEN UPDATE SET " & String.Join(", ", Sets) &
+               " WHEN NOT MATCHED THEN INSERT (" & String.Join(", ", Cols) & ") " &
+               "      VALUES (" & String.Join(", ", Vals) & ")"
+    End Function
 
     Sub GeneratePDF(ByVal DT As DataTable)
         Dim DS As New Data.DataSet
@@ -1279,9 +1360,9 @@ Partial Class AutoTransfer
         parameters.Add("InvoiceNum", INV_NUM)
         parameters.Add("DateIssues", Date.Now().ToString("yyyy-MM-dd"))
         parameters.Add("DueAmountTotal", CDbl(drProjectRow("COMMISION").ToString).ToString("#.000"))
-        parameters.Add("TransactionFee", drProjectRow("Fees").ToString)
+        parameters.Add("TransactionFee", ToDbl(drProjectRow("Fees").ToString).ToString("#.000"))
         parameters.Add("BankTIN", "210011959000002")
-        parameters.Add("Discount", drProjectRow("Discount").ToString)
+        parameters.Add("Discount", ToDbl(drProjectRow("Discount").ToString).ToString("#.000"))
         parameters.Add("VAT", vat.ToString("#.000"))
         parameters.Add("VATPercentage", 100 * ToDbl(drProjectRow("VATPercentage")))
         parameters.Add("TOTAL", GrandTotal.ToString("#.000"))
