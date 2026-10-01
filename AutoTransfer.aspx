@@ -635,6 +635,7 @@ html, body, form {
                     <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblSUBSTATEID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
@@ -648,6 +649,7 @@ html, body, form {
                     <asp:Label ID="lblATGroupTitle" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblActionType" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblToStatusID" runat="server" Text=""></asp:Label>
+                    <asp:Label ID="lblToSubStateID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>

@@ -16,6 +16,11 @@ Partial Class AutoTransfer
             lblSTATEID.Text = Request("STATEID")
             lblActionID.Text = Request("ActionId")
 
+            ' Unit's current sub-status: passed by MainPage (&SUBSTATEID=), otherwise read
+            ' from the unit itself
+            lblSUBSTATEID.Text = Convert.ToString(Request("SUBSTATEID")).Trim()
+            If lblSUBSTATEID.Text = "" Then lblSUBSTATEID.Text = GetUnitSubStatus(lblPID.Text)
+
             LoadActionAutoTransfer()   ' lblATPlanID, lblATGroupID, lblPlanID, lblPlanSeq, lblReferencePhrase
 
             LoadCustomer()      ' CUSTOMER box
@@ -57,7 +62,7 @@ Partial Class AutoTransfer
         If String.IsNullOrWhiteSpace(lblActionID.Text) Then Exit Sub
 
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT AUTOTRANSFER_PLAN_ID, AUTOTRANSFER_GROUP, ACTION_TYPE, TO_STATUS_ID "
+        SQL = SQL + vbCrLf + " SELECT AUTOTRANSFER_PLAN_ID, AUTOTRANSFER_GROUP, ACTION_TYPE, TO_STATUS_ID, TO_SUBSTATE_ID "
         SQL = SQL + vbCrLf + " FROM   UNITSHUB_ACTIONS "
         SQL = SQL + vbCrLf + " WHERE  PROJECT_ID = '" & lblPRJID.Text.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "   AND  STATUS_ID  = '" & lblSTATEID.Text.Replace("'", "''") & "' "
@@ -70,6 +75,7 @@ Partial Class AutoTransfer
         lblATGroupID.Text = Convert.ToString(DT.Rows(0)("AUTOTRANSFER_GROUP")).Trim()
         lblActionType.Text = Convert.ToString(DT.Rows(0)("ACTION_TYPE")).Trim()     ' "CHANGE" = moves the unit's status
         lblToStatusID.Text = Convert.ToString(DT.Rows(0)("TO_STATUS_ID")).Trim()
+        lblToSubStateID.Text = Convert.ToString(DT.Rows(0)("TO_SUBSTATE_ID")).Trim()   ' "" = no sub-status
 
         LoadGroupSettings()
     End Sub
@@ -367,14 +373,17 @@ Partial Class AutoTransfer
     Private Function ApplyActionAfterPost(UnitPaymentId As String, TraNo As Integer, EntryCount As Integer) As Boolean
         Dim FromStatus As String = lblSTATEID.Text.Trim()
         Dim ToStatus As String = lblToStatusID.Text.Trim()
+        Dim FromSub As String = lblSUBSTATEID.Text.Trim()
+        Dim ToSub As String = lblToSubStateID.Text.Trim()
 
+        ' A move is a change of status OR of sub-status (e.g. Sold 1024 -> Sold 2048)
         Dim ChangeStatus As Boolean =
             String.Equals(lblActionType.Text.Trim(), "CHANGE", StringComparison.OrdinalIgnoreCase) AndAlso
-            ToStatus <> "" AndAlso ToStatus <> FromStatus
+            ToStatus <> "" AndAlso (ToStatus <> FromStatus OrElse ToSub <> FromSub)
 
         ' Same steps as MainPage.LinkButton3_Command, Case "CHANGE":
-        '   1. ApplyNodeStatusChange   2. UpsertCustomerProperty   3. InsertUnitsHistory
-        If ChangeStatus Then ApplyNodeStatusChange(lblPID.Text.Trim(), ToStatus)
+        '   1. ApplyNodeStatusChange (status + sub-status)   2. UpsertCustomerProperty   3. InsertUnitsHistory
+        If ChangeStatus Then ApplyNodeStatusChange(lblPID.Text.Trim(), ToStatus, ToSub)
 
         If String.Equals(lblActionType.Text.Trim(), "CHANGE", StringComparison.OrdinalIgnoreCase) Then
             UpsertCustomerProperty(lblPID.Text.Trim(), lblCID.Text.Trim(), If(ChangeStatus, ToStatus, FromStatus))
@@ -385,14 +394,17 @@ Partial Class AutoTransfer
             "posted: ID " & UnitPaymentId &
             ", Transaction No. " & TraNo.ToString(CultureInfo.InvariantCulture) &
             ", " & EntryCount.ToString(CultureInfo.InvariantCulture) & " entries"
-        If ChangeStatus Then Summary &= "; Status changed from " & GetStatusName(FromStatus) & " to " & GetStatusName(ToStatus)
+        If ChangeStatus Then Summary &= "; Status changed from " & GetStatusName(FromStatus, FromSub) &
+                                        " to " & GetStatusName(ToStatus, ToSub)
 
         InsertUnitsHistory(lblPRJID.Text.Trim(), lblPID.Text.Trim(), lblCID.Text.Trim(),
                            FromStatus, If(ChangeStatus, ToStatus, FromStatus),
                            lblPlanID.Text.Trim(), lblActionID.Text.Trim(),
                            Summary,
                            AutoTransfer:=TraNo.ToString(CultureInfo.InvariantCulture),
-                           AutoTransferRows:=UnitPaymentId)
+                           AutoTransferRows:=UnitPaymentId,
+                           FromSubStatus:=FromSub,
+                           ToSubStatus:=If(ChangeStatus, ToSub, FromSub))
 
         Return ChangeStatus
     End Function
@@ -443,22 +455,36 @@ Partial Class AutoTransfer
     End Sub
 
     ''' <summary>
-    ''' Display name of a status of this project: STATUS - SUBTITLE from
-    ''' UNITSHUB_PROJECTSTATUS (just STATUS when there is no subtitle), e.g.
-    ''' "Reserved - Pending Payment". Falls back to the status ID if it isn't found.
+    ''' Display name of a status of this project: "STATUS - SUBTITLE". The subtitle is the
+    ''' sub-status's (UNITSHUB_PROJECTSUBSTATUS) when SubStateId is given and found,
+    ''' otherwise the status's own (UNITSHUB_PROJECTSTATUS), e.g. "Sold - Waiting 2nd
+    ''' Payment", "Vacant - Ready To Reserve". Just STATUS when there's no subtitle.
+    ''' Falls back to the IDs if the status isn't found.
     ''' </summary>
-    Private Function GetStatusName(StateId As String) As String
+    Private Function GetStatusName(StateId As String, Optional SubStateId As String = "") As String
         Dim Id As String = If(StateId, "").Trim()
         If Id = "" Then Return ""
+        Dim SubId As String = If(SubStateId, "").Trim()
+        Dim safeProject As String = lblPRJID.Text.Trim().Replace("'", "''")
 
         Dim DT As DataTable = GetDataTable(EBDB,
             "SELECT STATUS, SUBTITLE FROM UNITSHUB_PROJECTSTATUS " &
-            "WHERE PROJECT_ID = '" & lblPRJID.Text.Trim().Replace("'", "''") & "' " &
+            "WHERE PROJECT_ID = '" & safeProject & "' " &
             "AND STATE_ID = '" & Id.Replace("'", "''") & "'")
-        If DT Is Nothing OrElse DT.Rows.Count = 0 Then Return Id
+        If DT Is Nothing OrElse DT.Rows.Count = 0 Then Return If(SubId = "", Id, Id & "/" & SubId)
 
         Dim StatusText As String = Convert.ToString(DT.Rows(0)("STATUS")).Trim()
         Dim SubTitle As String = Convert.ToString(DT.Rows(0)("SUBTITLE")).Trim()
+
+        If SubId <> "" Then
+            Dim SubTitleText As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+                "SELECT SUBTITLE FROM UNITSHUB_PROJECTSUBSTATUS " &
+                "WHERE PROJECT_ID = '" & safeProject & "' " &
+                "AND STATE_ID = '" & Id.Replace("'", "''") & "' " &
+                "AND SUBSTATE_ID = '" & SubId.Replace("'", "''") & "'")).Trim()
+            SubTitle = If(SubTitleText <> "", SubTitleText, SubId)
+        End If
+
         If StatusText = "" Then Return Id
         Return If(SubTitle = "", StatusText, StatusText & " - " & SubTitle)
     End Function
@@ -466,9 +492,10 @@ Partial Class AutoTransfer
     ''' <summary>
     ''' Sets the unit's Status attribute to ToStatusId (UNITSHUB_NODE_ATTRIBUTE_VALUE row
     ''' at the DISPLAY_ORDER of the "Status" attribute for the unit's project and node
-    ''' type) - same update as MainPage.ApplyNodeStatusChange.
+    ''' type) and its SubStatus attribute to ToSubStateId ("" clears it) - same update as
+    ''' MainPage.ApplyNodeStatusChange.
     ''' </summary>
-    Private Sub ApplyNodeStatusChange(NodeId As String, ToStatusId As String)
+    Private Sub ApplyNodeStatusChange(NodeId As String, ToStatusId As String, Optional ToSubStateId As String = "")
         Dim safeNodeId As String = If(NodeId, "").Replace("'", "''")
         Dim safeToStatusId As String = If(ToStatusId, "").Replace("'", "''")
 
@@ -484,7 +511,62 @@ Partial Class AutoTransfer
                             " AND DISPLAY_ORDER = '" & DisplayOrderNumber.ToString("000") & "'"
 
         DB.ExecuteNonQuery(EBDB_CS, SQL)
+
+        SetNodeSubStatus(NodeId, ToSubStateId)
     End Sub
+
+    ''' <summary>
+    ''' Writes the unit's SubStatus attribute (updates it, or inserts it if the unit has
+    ''' none yet). Does nothing if the unit's project / node type has no SubStatus
+    ''' attribute. Same as MainPage.SetNodeSubStatus.
+    ''' </summary>
+    Private Sub SetNodeSubStatus(NodeId As String, SubStateId As String)
+        Dim safeNodeId As String = If(NodeId, "").Trim().Replace("'", "''")
+        If safeNodeId = "" Then Exit Sub
+
+        Dim SubOrder As String = GetAttributeDisplayOrder(NodeId, "SubStatus")
+        Dim SubOrderNumber As Integer
+        If Not Integer.TryParse(SubOrder, SubOrderNumber) Then Exit Sub
+
+        Dim DisplayOrder As String = SubOrderNumber.ToString("000")
+        Dim safeValue As String = If(SubStateId, "").Trim().Replace("'", "''")
+
+        Dim SQL As String =
+            "MERGE INTO UNITSHUB_NODE_ATTRIBUTE_VALUE v " &
+            "USING (SELECT '" & safeNodeId & "' AS NODE_ID, '" & DisplayOrder & "' AS DISPLAY_ORDER FROM DUAL) s " &
+            "ON (v.NODE_ID = s.NODE_ID AND TO_NUMBER(v.DISPLAY_ORDER) = TO_NUMBER(s.DISPLAY_ORDER)) " &
+            "WHEN MATCHED THEN UPDATE SET v.VALUE_TEXT = '" & safeValue & "' " &
+            "WHEN NOT MATCHED THEN INSERT (NODE_ID, DISPLAY_ORDER, VALUE_TEXT) " &
+            "VALUES (s.NODE_ID, s.DISPLAY_ORDER, '" & safeValue & "')"
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+    ''' <summary>The unit's current SubStatus value ("" if none / no SubStatus attribute).</summary>
+    Private Function GetUnitSubStatus(NodeId As String) As String
+        Dim SubOrder As String = GetAttributeDisplayOrder(NodeId, "SubStatus")
+        Dim SubOrderNumber As Integer
+        If Not Integer.TryParse(SubOrder, SubOrderNumber) Then Return ""
+
+        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT VALUE_TEXT FROM UNITSHUB_NODE_ATTRIBUTE_VALUE " &
+            "WHERE NODE_ID = '" & If(NodeId, "").Trim().Replace("'", "''") & "' " &
+            "AND TO_NUMBER(DISPLAY_ORDER) = " & SubOrderNumber)).Trim()
+    End Function
+
+    ''' <summary>
+    ''' DISPLAY_ORDER of an attribute (by name, any case) for the unit's project and node
+    ''' type ("" if that attribute doesn't exist there).
+    ''' </summary>
+    Private Function GetAttributeDisplayOrder(NodeId As String, AttributeName As String) As String
+        Dim SQL As String = "SELECT A.DISPLAY_ORDER " &
+                            "FROM UNITSHUB_NODES N " &
+                            "JOIN UNITSHUB_ATTRIBUTES A ON A.PROJECT_ID = N.PROJECT_ID AND A.NODE_TYPE_ID = N.NODE_TYPE_ID " &
+                            "WHERE UPPER(A.ATTRIBUTE_NAME) = '" & AttributeName.ToUpperInvariant().Replace("'", "''") & "' " &
+                            "AND N.NODE_ID = '" & If(NodeId, "").Trim().Replace("'", "''") & "' " &
+                            "AND ROWNUM = 1"
+        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
+    End Function
 
     ''' <summary>
     ''' DISPLAY_ORDER of the "Status" attribute (UNITSHUB_ATTRIBUTES) for the unit's project
@@ -510,13 +592,16 @@ Partial Class AutoTransfer
     ''' plus AUTOTRANSFER / AUTOTRANSFERROWS, which are filled here (MainPage leaves them
     ''' empty): AUTOTRANSFER = TRANO of the posting, AUTOTRANSFERROWS = its UNITPAYMENT_ID
     ''' (the same way PAYMENTS / PAYMENTSROWS hold TRANSACTIONID / PAYMENT_ID).
+    ''' FROM_SUBSTATUS / TO_SUBSTATUS = the unit's sub-status before / after ("" = none).
     ''' </summary>
     Private Sub InsertUnitsHistory(ProjectId As String, NodeId As String, ContactId As String,
                                    FromStatus As String, ToStatus As String,
                                    PaymentPlan As String, ActionId As String,
                                    Optional Summary As String = "",
                                    Optional AutoTransfer As String = "",
-                                   Optional AutoTransferRows As String = "")
+                                   Optional AutoTransferRows As String = "",
+                                   Optional FromSubStatus As String = "",
+                                   Optional ToSubStatus As String = "")
 
         If String.IsNullOrWhiteSpace(NodeId) Then Exit Sub
 
@@ -525,6 +610,8 @@ Partial Class AutoTransfer
         Dim safeContactId As String = If(ContactId, "").Trim().Replace("'", "''")
         Dim safeFromStatus As String = If(FromStatus, "").Replace("'", "''")
         Dim safeToStatus As String = If(ToStatus, "").Replace("'", "''")
+        Dim safeFromSubStatus As String = If(FromSubStatus, "").Trim().Replace("'", "''")   ' "" = no sub-status
+        Dim safeToSubStatus As String = If(ToSubStatus, "").Trim().Replace("'", "''")
         Dim safePaymentPlan As String = If(PaymentPlan, "").Replace("'", "''")
         Dim safeActionId As String = If(ActionId, "").Trim().Replace("'", "''")
         Dim safeUserId As String = If(GetCurrentUserID(), "").Replace("'", "''")
@@ -542,13 +629,15 @@ Partial Class AutoTransfer
 
         Dim SQL As String =
             "INSERT INTO UNITSHUB_UNITSHISTORY " &
-            "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, PAYMENT_PLAN, ACTION_ID, " &
+            "(PROJECT_ID, NODE_ID, CONTACT_ID, FROM_STATUS, TO_STATUS, FROM_SUBSTATUS, TO_SUBSTATUS, PAYMENT_PLAN, ACTION_ID, " &
             "PAYMENTS, PAYMENTSROWS, AUTOTRANSFER, AUTOTRANSFERROWS, IMPLEMENTEDBY, WORKSTATION, DATENTIME, SUMMARY) VALUES (" &
             "'" & safeProjectId & "', " &
             "'" & safeNodeId & "', " &
             "'" & safeContactId & "', " &
             "'" & safeFromStatus & "', " &
             "'" & safeToStatus & "', " &
+            "'" & safeFromSubStatus & "', " &
+            "'" & safeToSubStatus & "', " &
             "'" & safePaymentPlan & "', " &
             "'" & safeActionId & "', " &
             "'" & safePayments & "', " &
@@ -930,7 +1019,7 @@ Partial Class AutoTransfer
                 End Try
 
                 Dim Done As String = "Posted " & PostedLines.Count & " entries (Transaction No. " & lnTraNo & ", ID " & UnitPaymentId & ")" &
-                                     If(StatusChanged, " and changed the unit status to " & GetStatusName(lblToStatusID.Text.Trim()), "")
+                                     If(StatusChanged, " and changed the unit status to " & GetStatusName(lblToStatusID.Text.Trim(), lblToSubStateID.Text.Trim()), "")
                 If Problems.Count = 0 Then
                     ShowMessage(Done & ".", True)
                 Else
