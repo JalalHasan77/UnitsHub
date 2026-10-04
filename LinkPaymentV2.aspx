@@ -122,6 +122,26 @@ html, body, form {
             margin-bottom: 8px;
         }
 
+        /* Payments: "Payments:" (left) and "Link a payment" (right) on one line,
+           the grid underneath using the full width - no label column on the left */
+        .payments-section {
+            margin-bottom: 18px;
+        }
+
+        .payments-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .payments-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
         /* Disabled links (Enabled = False renders class "aspNetDisabled"): grey, and
            not clickable at all, so no script attached to them can run */
         .grid-link.aspNetDisabled,
@@ -302,18 +322,19 @@ html, body, form {
                      SAVE: btnSave_Click reports back to this page's own opener (via
                            VendorPopupHelper.RegisterPopupSelectionAndClose) whether every
                            required payment line is now linked. --%>
-                <asp:Panel ID="pnlPayments" runat="server" CssClass="form-row" Visible="False">
-                    <asp:Label ID="lblPayments"
-                        runat="server"
-                        Text="Payments:"
-                        CssClass="form-label" />
-                    <div class="form-control">
-                        <div class="grid-toolbar">
-                            <asp:LinkButton ID="lnkLinkPayment"
-                                runat="server"
-                                CssClass="grid-link"
-                                CausesValidation="False">Link a payment</asp:LinkButton>
-                        </div>
+                <asp:Panel ID="pnlPayments" runat="server" CssClass="payments-section" Visible="False">
+                    <%-- Title and link on one line, grid full width underneath --%>
+                    <div class="payments-head">
+                        <asp:Label ID="lblPayments"
+                            runat="server"
+                            Text="Payments:"
+                            CssClass="payments-title" />
+                        <asp:LinkButton ID="lnkLinkPayment"
+                            runat="server"
+                            CssClass="grid-link"
+                            CausesValidation="False">Link a payment</asp:LinkButton>
+                    </div>
+                    <div>
                         <asp:Label ID="lblPaymentMessage"
                             runat="server"
                             CssClass="payment-message"
