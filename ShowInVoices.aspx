@@ -1,8 +1,8 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="AutoTransfer.aspx.vb" Inherits="AutoTransfer" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
+﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ShowInVoices.aspx.vb" Inherits="ShowInVoices" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
 
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head runat="server">
-    <title>AutoTransfer</title>
+    <title>Invoices</title>
     <style type="text/css">
         *, ::after, ::before { box-sizing: border-box; }
 
@@ -39,7 +39,7 @@ html, body, form {
             min-height: 58px;
             background: linear-gradient(120deg, var(--brand-1), var(--brand-2) 75%);
             color: #ffffff;
-            font-size: 20px;
+            font-size: 19px;
             font-weight: 700;
             padding: 0 24px;
         }
@@ -90,7 +90,7 @@ html, body, form {
 }
         .page-title {
             margin: 0 0 28px 0;
-            font-size: 26px;
+            font-size: 25px;
             font-weight: 700;
             color: var(--ink);
         }
@@ -109,7 +109,7 @@ html, body, form {
             border: 1px solid var(--brand-1);
             background: #ffffff;
             color: var(--brand-1);
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             font-family: inherit;
             cursor: pointer;
@@ -133,7 +133,7 @@ html, body, form {
             width: 150px;
             flex-shrink: 0;
             padding-top: 10px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--ink);
         }
@@ -153,7 +153,7 @@ html, body, form {
             border-radius: 9px;
             background: #f8fafc;
             color: var(--ink);
-            font-size: 14px;
+            font-size: 13px;
             font-family: inherit;
         }
 
@@ -231,7 +231,7 @@ html, body, form {
         }
 
         .grid-link {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--brand-1);
             text-decoration: none;
@@ -255,7 +255,7 @@ html, body, form {
         .pay-grid {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 12px;
         }
 
         .pay-grid th {
@@ -321,7 +321,7 @@ html, body, form {
 
         .required-note {
             margin: -6px 0 18px 168px;
-            font-size: 12px;
+            font-size: 11px;
             color: var(--muted);
         }
 
@@ -336,12 +336,12 @@ html, body, form {
         .info-row .form-label {
             width: 190px;
             padding-top: 0;
-            font-size: 17px;
+            font-size: 16px;
         }
 
         .info-value {
             display: block;
-            font-size: 17px;
+            font-size: 16px;
             color: var(--ink);
             min-height: 22px;
         }
@@ -354,7 +354,7 @@ html, body, form {
         .grid-section-title {
             display: block;
             margin-bottom: 12px;
-            font-size: 17px;
+            font-size: 16px;
             font-weight: 600;
             color: var(--ink);
         }
@@ -364,7 +364,7 @@ html, body, form {
         }
 
         .grid-section .pay-grid {
-            font-size: 15px;
+            font-size: 14px;
         }
 
         .grid-section .pay-grid th,
@@ -373,7 +373,7 @@ html, body, form {
         }
 
         .grid-section .grid-link {
-            font-size: 15px;
+            font-size: 14px;
         }
 
         /* ---------- Message bar above "Transactions": green = success, red = problem ---------- */
@@ -383,7 +383,7 @@ html, body, form {
             padding: 12px 16px;
             border: 1px solid;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
         }
 
@@ -413,7 +413,7 @@ html, body, form {
             border-radius: 8px;
             background: #ffffff;
             color: var(--brand-1);
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             font-family: inherit;
             cursor: pointer;
@@ -455,7 +455,7 @@ html, body, form {
 
         .customer-box legend {
             padding: 0 4px;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--ink);
         }
 
@@ -467,7 +467,7 @@ html, body, form {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             column-gap: 40px;
             margin-top: 14px;
-            font-size: 14px;
+            font-size: 13px;
             line-height: 1.6;
         }
 
@@ -521,7 +521,7 @@ html, body, form {
 
         .at-label {
             flex: 0 0 105px;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--ink);
         }
 
@@ -532,7 +532,7 @@ html, body, form {
             border: 1px solid #d4d0d8;
             border-radius: 3px;
             background: #f5f3f7;
-            font-size: 14px;
+            font-size: 13px;
             font-family: inherit;
             color: var(--ink);
         }
@@ -559,6 +559,76 @@ html, body, form {
             display: none;
         }
 
+        /* ---------- Unit History ---------- */
+        .history-sub {
+            margin: -18px 0 18px 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .history-grid td { vertical-align: top; }
+
+        /* Header: dark blue with white text */
+        .history-grid th {
+            background: #1a1464;
+            color: #ffffff;
+            border-bottom: none;
+        }
+
+        /* Alternating rows (row 1 is the header, so the first data row is row 2 = white) */
+        .history-grid tr:nth-child(even) td { background: #ffffff; }
+        .history-grid tr:nth-child(odd) td { background: #f1f4fb; }
+        .history-grid .when { white-space: nowrap; color: var(--muted); }
+        .history-grid .when .d { display: block; color: var(--ink); font-weight: 600; }
+        .history-grid .when .t { display: block; font-size: 11px; }
+        .history-grid .action { min-width: 130px; }
+        .history-grid .summary { min-width: 260px; }
+
+        /* Invoices grid */
+        .history-grid .seq { width: 50px; color: var(--muted); }
+        .history-grid .amount { white-space: nowrap; font-weight: 600; }
+        .invoice-link {
+            color: #1a1464;
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        .invoice-link:hover { color: #3b82f6; }
+        .no-invoice { color: var(--ink); }
+
+        /* Status card, same look as the cards on MainPage: status name on the card colour,
+           sub-status in a rounded box underneath */
+        .st-card {
+            display: inline-block;
+            min-width: 150px;
+            max-width: 220px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: #e2e8f0;
+            color: #1e293b;
+            text-align: center;
+        }
+
+        .st-card .st-title {
+            display: block;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        .st-card .st-sub {
+            display: block;
+            margin-top: 6px;
+            padding: 5px 8px;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #1e293b;
+            font-size: 11px;
+            line-height: 1.3;
+        }
+
         .pay-grid tr.selected-row td {
             background: #eef2ff;
             font-weight: 600;
@@ -566,7 +636,7 @@ html, body, form {
 
         .selected-note {
             margin: 10px 0 0 0;
-            font-size: 13px;
+            font-size: 12px;
             color: var(--brand-1);
             font-weight: 600;
         }
@@ -615,7 +685,7 @@ html, body, form {
 <body>
     <form id="form1" runat="server">
         <div class="top-strip">
-            <span>AutoTransfer</span>
+            <span>Invoices</span>
             <asp:ImageButton ID="imgClose"
                 runat="server"
                 CssClass="close-btn"
@@ -627,96 +697,43 @@ html, body, form {
 
         <div class="page-container">
             <div class="reserve-card">
-                <h1 class="page-title">AutoTransfer<asp:Button ID="Button1" runat="server" Text="Button" />
-                </h1>
-                <!-- IDs passed in / looked up; kept on the page (hidden) so they survive postbacks -->
+
+                <!-- Values passed in from MainPage - kept on the page, not shown -->
                 <div class="hidden-fields">
-                    <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSUBSTATEID" runat="server" Text=""></asp:Label>
                     <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblUnitPrice" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="Commission_fee_value" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="VAT_output_value" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblInvoiceNo" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATGroupTitle" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblActionType" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblToStatusID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblToSubStateID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>
                 </div>
 
-                <fieldset class="customer-box">
-                    <legend>CUSTOMER</legend>
-                    <div class="kv-columns">
-                        <ul class="kv-col">
-                            <li><strong><span>CPR</span><span>:</span></strong> <asp:Label ID="lblCPR" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>NAME</span><span>:</span></strong> <asp:Label ID="lblCustomerName" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Mobile</span><span>:</span></strong> <asp:Label ID="lblMobile" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                        <ul class="kv-col">
-                            <li><strong><span>Land Line</span><span>:</span></strong> <asp:Label ID="lblLandLine" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Customer Number</span><span>:</span></strong> <asp:Label ID="lblCustomerNumber" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Person Number</span><span>:</span></strong> <asp:Label ID="lblPersonNumber" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                    </div>
-                </fieldset>
+                <h1 class="page-title">Invoices</h1>
+                <div class="history-sub"><asp:Literal ID="litInvoicesFor" runat="server" /></div>
 
-                <fieldset class="customer-box">
-                    <legend>UNIT DETAILS</legend>
-                    <div class="kv-columns">
-                        <ul class="kv-col">
-                            <li><strong><span>Unit Reference</span><span>:</span></strong> <asp:Label ID="lblUnitRef" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Pre Sales Account<asp:Label ID="lblAccountType" runat="server" Text=""></asp:Label></span><span>:</span></strong> <asp:Label ID="lblPreSalesAccount" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Paid Amount</span><span>:</span></strong> <asp:Label ID="lblPaidAmount" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Cost of Sales</span><span>:</span></strong> <asp:Label ID="lblCostOfSales" runat="server" Text="0.000"></asp:Label></li>
-                        </ul>
-                        <ul class="kv-col">
-                            <li><strong><span>Price</span><span>:</span></strong> <asp:Label ID="lblPrice" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Balance</span><span>:</span></strong> <asp:Label ID="lblBalance" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Remaining</span><span>:</span></strong> <asp:Label ID="lblRemaining" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                    </div>
-                </fieldset>
-
-                <div class="grid-section">
-                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-bar" EnableViewState="False" Visible="False" />
-                    <span class="grid-section-title">Transactions</span>
-                    <div class="tx-actions">
-                        <asp:Button ID="btnPost" runat="server" Text="Post" CssClass="tx-btn tx-btn-primary" />
-                        <asp:Button ID="btnDisplayInvoice" runat="server" Text="Display Invoice" CssClass="tx-btn" Enabled="False" />
-                        <asp:Button ID="btnRegenerateInvoice" runat="server" Text="Re-Generate Invoice" CssClass="tx-btn" Enabled="False" />
-                    </div>
-                    <div class="grid-wrap">
-                        <asp:GridView ID="gvTransactions"
-                            runat="server"
-                            AutoGenerateColumns="False"
-                            CssClass="pay-grid"
-                            GridLines="None"
-                            ShowHeaderWhenEmpty="True"
-                            EmptyDataText="No AutoTransfer lines for this action.">
-                            <EmptyDataRowStyle CssClass="empty" />
-                            <Columns>
-                                <asp:BoundField DataField="Account" HeaderText="Account" />
-                                <asp:BoundField DataField="Type" HeaderText="Type" />
-                                <asp:BoundField DataField="Transaction" HeaderText="Transaction" />
-                                <asp:BoundField DataField="Amount" HeaderText="Amount" DataFormatString="{0:N3}"
-                                    HeaderStyle-CssClass="num" ItemStyle-CssClass="num" />
-                                <asp:BoundField DataField="Reference" HeaderText="Reference" />
-                                <asp:BoundField DataField="Description" HeaderText="Description" />
-                            </Columns>
-                        </asp:GridView>
-                    </div>
+                <div class="grid-wrap">
+                    <asp:GridView ID="gvInvoices"
+                        runat="server"
+                        AutoGenerateColumns="False"
+                        CssClass="pay-grid history-grid"
+                        GridLines="None"
+                        ShowHeaderWhenEmpty="True"
+                        DataKeyNames="INVOICENUM"
+                        EmptyDataText="No payments recorded for this unit yet.">
+                        <EmptyDataRowStyle CssClass="empty" />
+                        <Columns>
+                            <asp:BoundField DataField="SEQ_NO" HeaderText="Seq" ItemStyle-CssClass="seq" />
+                            <asp:BoundField DataField="DATE_TEXT" HeaderText="Date" ItemStyle-CssClass="when" />
+                            <asp:TemplateField HeaderText="Description">
+                                <ItemTemplate>
+                                    <asp:LinkButton ID="lnkInvoice" runat="server" CssClass="invoice-link" CausesValidation="false" />
+                                    <asp:Label ID="lblNoInvoice" runat="server" CssClass="no-invoice" Visible="false" />
+                                </ItemTemplate>
+                            </asp:TemplateField>
+                            <asp:BoundField DataField="INVOICENUM" HeaderText="Invoice No." />
+                            <asp:BoundField DataField="AMOUNT_TEXT" HeaderText="Amount" HeaderStyle-CssClass="num" ItemStyle-CssClass="num amount" />
+                        </Columns>
+                    </asp:GridView>
                 </div>
+
             </div>
         </div>
 

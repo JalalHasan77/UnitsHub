@@ -1311,6 +1311,57 @@ Partial Class AutoTransfer
                "      VALUES (" & String.Join(", ", Vals) & ")"
     End Function
 
+    ''' <summary>
+    ''' Keeps the Address on the invoice to ONE line: the Address field's "Can Grow" is
+    ''' switched off, and if the address is too long for the field's width the font is made
+    ''' smaller (down to 6pt) so it still fits. Works on the field bound to
+    ''' {InvoiceComponents.Address}; nothing happens if the report has no such field.
+    ''' </summary>
+    Private Sub KeepAddressOnOneLine(p As ReportDocument, Address As String)
+        Dim text As String = If(Address, "").Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+
+        For Each obj As ReportObject In p.ReportDefinition.ReportObjects
+            Dim fo As FieldObject = TryCast(obj, FieldObject)
+            If fo Is Nothing Then Continue For
+
+            Dim boundTo As String = ""
+            Try
+                boundTo = Convert.ToString(fo.DataSource.FormulaName)
+            Catch
+            End Try
+            If boundTo.IndexOf(".Address}", StringComparison.OrdinalIgnoreCase) < 0 Then Continue For
+
+            fo.ObjectFormat.EnableCanGrow = False
+
+            ' Rough fit: an average character is about half the font size wide.
+            ' Width is in twips (1pt = 20 twips) -> characters that fit = Width / (size * 10)
+            Dim size As Single = fo.Font.Size
+            If text.Length > 0 AndAlso fo.Width > 0 Then
+                Dim fits As Integer = CInt(Math.Floor(fo.Width / (size * 10.0F)))
+                If text.Length > fits Then
+                    Dim newSize As Single = CSng(Math.Floor(fo.Width / (text.Length * 10.0F)))
+                    If newSize < 6.0F Then newSize = 6.0F
+                    If newSize < size Then
+                        fo.ApplyFont(New System.Drawing.Font(fo.Font.FontFamily, newSize, fo.Font.Style))
+                    End If
+                End If
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Sets a report parameter only if the report has it, so the PDF still generates
+    ''' before the parameter has been added to InvoiceReport.rpt.
+    ''' </summary>
+    Private Sub SetReportParameterIfExists(p As ReportDocument, Name As String, Value As String)
+        For Each pf As ParameterFieldDefinition In p.DataDefinition.ParameterFields
+            If String.Equals(pf.Name, Name, StringComparison.OrdinalIgnoreCase) Then
+                p.SetParameterValue(pf.Name, If(Value, ""))
+                Exit Sub
+            End If
+        Next
+    End Sub
+
     Sub GeneratePDF(ByVal DT As DataTable)
         Dim DS As New Data.DataSet
         DT.TableName = "InvoiceComponents"
@@ -1332,6 +1383,11 @@ Partial Class AutoTransfer
         DS.DataSetName = "Invoices-01"
         p.SetDataSource(DS)
         p.Refresh()
+
+        ' Address always on one line; From / CPR for the new lines under it
+        KeepAddressOnOneLine(p, If(DT.Columns.Contains("Address"), DT.Rows(0)("Address").ToString, ""))
+        SetReportParameterIfExists(p, "FromName", If(DT.Columns.Contains("FromName"), DT.Rows(0)("FromName").ToString, lblCustomerName.Text))
+        SetReportParameterIfExists(p, "CPR", If(DT.Columns.Contains("CPR"), DT.Rows(0)("CPR").ToString, lblCPR.Text))
 
         'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", "Reached Here 752")
 
@@ -1440,7 +1496,12 @@ Partial Class AutoTransfer
 
         Dim parameters As New Dictionary(Of String, String)
         parameters.Add("TO", drCustomerRow("FULL_NAME").ToString)
-        parameters.Add("Address", drCustomerRow("ADDRESS").ToString)
+        ' Address on one line (line breaks and repeated spaces removed)
+        parameters.Add("Address", System.Text.RegularExpressions.Regex.Replace(
+                                      drCustomerRow("ADDRESS").ToString.Replace(vbCr, " ").Replace(vbLf, " "), "\s{2,}", " ").Trim())
+        ' "From:" = the contact (customer) on this unit, "CPR:" = their national ID
+        parameters.Add("FromName", lblCustomerName.Text.Trim())
+        parameters.Add("CPR", lblCPR.Text.Trim())
         parameters.Add("ClientID", Right("000000" & drCustomerRow("ClientNo").ToString, 6))
         parameters.Add("TIN", drCustomerRow("TIN").ToString)
         parameters.Add("DateOfSupply", drTansactionRow("DT").ToString)
