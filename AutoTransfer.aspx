@@ -626,97 +626,13 @@ html, body, form {
         </div>
 
         <div class="page-container">
-            <div class="reserve-card">
-                <h1 class="page-title">AutoTransfer<asp:Button ID="Button1" runat="server" Text="Button" />
-                </h1>
-                <!-- IDs passed in / looked up; kept on the page (hidden) so they survive postbacks -->
-                <div class="hidden-fields">
-                    <asp:Label ID="lblCID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPRJID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSTATEID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSUBSTATEID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblActionID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPlanID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblPlanSeq" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblUnitPrice" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="Commission_fee_value" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="VAT_output_value" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblInvoiceNo" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblReferencePhrase" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATPlanID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATGroupID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblATGroupTitle" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblActionType" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblToStatusID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblToSubStateID" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedAccount" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedBranch" runat="server" Text=""></asp:Label>
-                    <asp:Label ID="lblSelectedCustId" runat="server" Text=""></asp:Label>
-                </div>
 
-                <fieldset class="customer-box">
-                    <legend>CUSTOMER</legend>
-                    <div class="kv-columns">
-                        <ul class="kv-col">
-                            <li><strong><span>CPR</span><span>:</span></strong> <asp:Label ID="lblCPR" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>NAME</span><span>:</span></strong> <asp:Label ID="lblCustomerName" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Mobile</span><span>:</span></strong> <asp:Label ID="lblMobile" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                        <ul class="kv-col">
-                            <li><strong><span>Land Line</span><span>:</span></strong> <asp:Label ID="lblLandLine" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Customer Number</span><span>:</span></strong> <asp:Label ID="lblCustomerNumber" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Person Number</span><span>:</span></strong> <asp:Label ID="lblPersonNumber" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                    </div>
-                </fieldset>
 
-                <fieldset class="customer-box">
-                    <legend>UNIT DETAILS</legend>
-                    <div class="kv-columns">
-                        <ul class="kv-col">
-                            <li><strong><span>Unit Reference</span><span>:</span></strong> <asp:Label ID="lblUnitRef" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Pre Sales Account<asp:Label ID="lblAccountType" runat="server" Text=""></asp:Label></span><span>:</span></strong> <asp:Label ID="lblPreSalesAccount" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Paid Amount</span><span>:</span></strong> <asp:Label ID="lblPaidAmount" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Cost of Sales</span><span>:</span></strong> <asp:Label ID="lblCostOfSales" runat="server" Text="0.000"></asp:Label></li>
-                        </ul>
-                        <ul class="kv-col">
-                            <li><strong><span>Price</span><span>:</span></strong> <asp:Label ID="lblPrice" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Balance</span><span>:</span></strong> <asp:Label ID="lblBalance" runat="server" Text=""></asp:Label></li>
-                            <li><strong><span>Remaining</span><span>:</span></strong> <asp:Label ID="lblRemaining" runat="server" Text=""></asp:Label></li>
-                        </ul>
-                    </div>
-                </fieldset>
 
-                <div class="grid-section">
-                    <asp:Label ID="lblMessage" runat="server" CssClass="msg-bar" EnableViewState="False" Visible="False" />
-                    <span class="grid-section-title">Transactions</span>
-                    <div class="tx-actions">
-                        <asp:Button ID="btnPost" runat="server" Text="Post" CssClass="tx-btn tx-btn-primary" />
-                        <asp:Button ID="btnDisplayInvoice" runat="server" Text="Display Invoice" CssClass="tx-btn" Enabled="False" />
-                        <asp:Button ID="btnRegenerateInvoice" runat="server" Text="Re-Generate Invoice" CssClass="tx-btn" Enabled="False" />
-                    </div>
-                    <div class="grid-wrap">
-                        <asp:GridView ID="gvTransactions"
-                            runat="server"
-                            AutoGenerateColumns="False"
-                            CssClass="pay-grid"
-                            GridLines="None"
-                            ShowHeaderWhenEmpty="True"
-                            EmptyDataText="No AutoTransfer lines for this action.">
-                            <EmptyDataRowStyle CssClass="empty" />
-                            <Columns>
-                                <asp:BoundField DataField="Account" HeaderText="Account" />
-                                <asp:BoundField DataField="Type" HeaderText="Type" />
-                                <asp:BoundField DataField="Transaction" HeaderText="Transaction" />
-                                <asp:BoundField DataField="Amount" HeaderText="Amount" DataFormatString="{0:N3}"
-                                    HeaderStyle-CssClass="num" ItemStyle-CssClass="num" />
-                                <asp:BoundField DataField="Reference" HeaderText="Reference" />
-                                <asp:BoundField DataField="Description" HeaderText="Description" />
-                            </Columns>
-                        </asp:GridView>
-                    </div>
-                </div>
+
+
+
+                
             </div>
         </div>
 
