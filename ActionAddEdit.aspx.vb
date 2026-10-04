@@ -22,6 +22,7 @@ Partial Class ActionAddEdit
         Public Property NeedPayment As Boolean
         Public Property PaymentPlanIds As New List(Of String)
         Public Property ToStatusId As String
+        Public Property ToSubStateId As String       ' target sub-status ("" = none)
         Public Property Script As String
         Public Property PreExecution As String
         Public Property ConfirmationText As String
@@ -165,13 +166,18 @@ Partial Class ActionAddEdit
                 lblSTATUSID.Text = Request.QueryString("StatusID")
             End If
 
-            If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
+            If Not String.IsNullOrEmpty(Request.QueryString("ActionID")) Then
                 lblActionID.Text = Request.QueryString("ActionID")
             End If
 
-            If Not String.IsNullOrEmpty(Request.QueryString("StatusID")) Then
+            If Not String.IsNullOrEmpty(Request.QueryString("Mode")) Then
                 lblMode.Text = Request.QueryString("Mode")
             End If
+
+            ' Placement this action is opened for: StatusID (a status or '*' = all
+            ' statuses) and SUBSTATEID (a sub-status or '*' = all its sub-statuses)
+            lblSUBSTATEID.Text = If(String.IsNullOrEmpty(Request.QueryString("SUBSTATEID")), "*", Request.QueryString("SUBSTATEID"))
+            lblPlacement.Text = "Used in: " & GetPlacementLabel(lblSTATUSID.Text, lblSUBSTATEID.Text)
             'lblMode.Text = "Edit"
             'lblSTATUSID.Text = "0000"
             'lblActionID.Text = "00001"
@@ -445,6 +451,82 @@ Partial Class ActionAddEdit
         ddlToStatus.DataBind()
 
         ddlToStatus.Items.Insert(0, New ListItem("To Status", ""))
+        LoadToSubStatuses()
+    End Sub
+
+    ''' <summary>Fills ddlToSubStatus with the sub-statuses of the selected To Status.</summary>
+    Private Sub LoadToSubStatuses()
+        ddlToSubStatus.Items.Clear()
+        ddlToSubStatus.Items.Add(New ListItem("No sub-status", ""))
+        If String.IsNullOrEmpty(ddlToStatus.SelectedValue) Then Exit Sub
+
+        Dim DT As Data.DataTable = GetDataTable(EBDB,
+            "SELECT SUBSTATE_ID, SUBTITLE FROM UNITSHUB_PROJECTSUBSTATUS " &
+            "WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
+            "AND STATE_ID = '" & ddlToStatus.SelectedValue.Replace("'", "''") & "' ORDER BY SORT_ORDER")
+        If DT Is Nothing Then Exit Sub
+        For Each r As Data.DataRow In DT.Rows
+            ddlToSubStatus.Items.Add(New ListItem(Convert.ToString(r("SUBTITLE")), Convert.ToString(r("SUBSTATE_ID"))))
+        Next
+    End Sub
+
+    Protected Sub ddlToStatus_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        LoadToSubStatuses()
+    End Sub
+
+    ''' <summary>Readable name of a placement, e.g. "Sold - Waiting 2nd payment", "All of Sold", "All statuses".</summary>
+    Private Function GetPlacementLabel(StatusId As String, SubStateId As String) As String
+        Dim st As String = If(StatusId, "").Trim()
+        Dim sb As String = If(SubStateId, "").Trim()
+        If st = "*" OrElse st = "" Then Return "All statuses"
+
+        Dim statusName As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT STATUS FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
+            "AND STATE_ID = '" & st.Replace("'", "''") & "'")).Trim()
+        If statusName = "" Then statusName = st
+        If sb = "" OrElse sb = "*" Then Return "All of " & statusName
+
+        Dim subName As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT SUBTITLE FROM UNITSHUB_PROJECTSUBSTATUS WHERE PROJECT_ID = '" & lblProjectID.Text.Replace("'", "''") & "' " &
+            "AND STATE_ID = '" & st.Replace("'", "''") & "' AND SUBSTATE_ID = '" & sb.Replace("'", "''") & "'")).Trim()
+        Return statusName & " - " & If(subName = "", sb, subName)
+    End Function
+
+    ''' <summary>
+    ''' STATUS_ID stored on the action row itself (its "home"). Payment-plan detail rows
+    ''' (UNITSHUB_ACT_PAY_PLN_DETAILS) are keyed by it, so they stay attached to the action
+    ''' whichever placement it's opened from.
+    ''' </summary>
+    Private Property ActionHomeStatus As String
+        Get
+            Dim v As String = Convert.ToString(ViewState("ActionHomeStatus"))
+            Return If(v = "", lblSTATUSID.Text, v)
+        End Get
+        Set(value As String)
+            ViewState("ActionHomeStatus") = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Writes this action's placement for (lblSTATUSID, lblSUBSTATEID) with its target:
+    ''' updates it if it exists, otherwise adds it (UNITSHUB_ACTION_PLACEMENTS).
+    ''' </summary>
+    Private Sub SavePlacement(ByVal actionId As String, ByVal model As ActionControlModel)
+        Dim Q = Function(v As String) If(String.IsNullOrEmpty(v), "NULL", "'" & v.Replace("'", "''") & "'")
+        Dim st As String = If(lblSTATUSID.Text.Trim() = "", "*", lblSTATUSID.Text.Trim())
+        Dim sb As String = If(lblSUBSTATEID.Text.Trim() = "", "*", lblSUBSTATEID.Text.Trim())
+
+        Dim sql As String =
+            "MERGE INTO UNITSHUB_ACTION_PLACEMENTS p " &
+            "USING (SELECT " & Q(lblProjectID.Text.Trim()) & " AS PROJECT_ID, " & Q(actionId) & " AS ACTION_ID, " &
+            Q(st) & " AS STATUS_ID, " & Q(sb) & " AS SUBSTATE_ID FROM DUAL) s " &
+            "ON (p.PROJECT_ID = s.PROJECT_ID AND p.ACTION_ID = s.ACTION_ID AND p.STATUS_ID = s.STATUS_ID AND p.SUBSTATE_ID = s.SUBSTATE_ID) " &
+            "WHEN MATCHED THEN UPDATE SET p.TO_STATUS_ID = " & Q(model.ToStatusId) & ", p.TO_SUBSTATE_ID = " & Q(model.ToSubStateId) & " " &
+            "WHEN NOT MATCHED THEN INSERT (PROJECT_ID, ACTION_ID, STATUS_ID, SUBSTATE_ID, TO_STATUS_ID, TO_SUBSTATE_ID, SORT_ORDER, IS_ACTIVE) " &
+            "VALUES (s.PROJECT_ID, s.ACTION_ID, s.STATUS_ID, s.SUBSTATE_ID, " & Q(model.ToStatusId) & ", " & Q(model.ToSubStateId) & ", " &
+            CInt(Val(actionId)).ToString() & ", 'Y')"
+
+        ExecuteNonQuery(EBDB, sql)
     End Sub
 
     ''' <summary>
@@ -594,18 +676,21 @@ Partial Class ActionAddEdit
 
 
         Dim actionDT As New Data.DataTable
+        ' An action may be placed in many statuses, so it's identified by its ID alone
         Dim actionSql As String =
             "SELECT * FROM UNITSHUB_ACTIONS WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' " &
-            "AND STATUS_ID = '" & StatusID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID & "'"
+            "AND ACTION_ID = '" & ActionID.Replace("'", "''") & "'"
         actionDT = GetDataTable(EBDB, actionSql)
 
         If actionDT.Rows.Count = 0 Then
-            lblMessage.Text = "No saved action found for this Project / Status / Action ID."
+            lblMessage.Text = "No saved action found for this Project / Action ID."
             lblMessage.Visible = True
             Return
         End If
 
         Dim row As Data.DataRow = actionDT.Rows(0)
+        ActionHomeStatus = SafeString(row("STATUS_ID"))
+        StatusID = ActionHomeStatus     ' payment-plan details below are keyed by the action's home status
 
         rblActionStatus.SelectedValue = If(SafeBool(row("IS_ACTIVE")), "Active", "InActive")
         txtActionTitle.Text = SafeString(row("ACTION_TITLE"))
@@ -631,7 +716,20 @@ Partial Class ActionAddEdit
         ' AUTOTRANSFER_PLAN_ID is restored below, once chkNeedAutoTransfer is known, so the
         ' groups/details grid can be reloaded for that plan in the same step.
 
-        SafeSetSelectedValue(ddlToStatus, SafeString(row("TO_STATUS_ID")))
+        ' Target: from this placement if it exists, otherwise from the action row
+        Dim toStatus As String = SafeString(row("TO_STATUS_ID"))
+        Dim toSub As String = If(row.Table.Columns.Contains("TO_SUBSTATE_ID"), SafeString(row("TO_SUBSTATE_ID")), "")
+        Dim placementDT As Data.DataTable = GetDataTable(EBDB,
+            "SELECT TO_STATUS_ID, TO_SUBSTATE_ID FROM UNITSHUB_ACTION_PLACEMENTS " &
+            "WHERE PROJECT_ID = '" & ProjectID.Replace("'", "''") & "' AND ACTION_ID = '" & ActionID.Replace("'", "''") & "' " &
+            "AND STATUS_ID = '" & lblSTATUSID.Text.Replace("'", "''") & "' AND SUBSTATE_ID = '" & lblSUBSTATEID.Text.Replace("'", "''") & "'")
+        If placementDT IsNot Nothing AndAlso placementDT.Rows.Count > 0 Then
+            toStatus = SafeString(placementDT.Rows(0)("TO_STATUS_ID"))
+            toSub = SafeString(placementDT.Rows(0)("TO_SUBSTATE_ID"))
+        End If
+        SafeSetSelectedValue(ddlToStatus, toStatus)
+        LoadToSubStatuses()
+        SafeSetSelectedValue(ddlToSubStatus, toSub)
 
         txtScript.Text = SafeString(row("SCRIPT_TEXT"))
         SafeSetSelectedValue(rblPreExecution, SafeString(row("PRE_EXECUTION")))
@@ -761,6 +859,7 @@ Partial Class ActionAddEdit
         ' Type = "Change Status", even though the To Status field itself is now always
         ' visible on the General tab (rather than only appearing for that Action Type).
         model.ToStatusId = If(model.ActionType = "CHANGE", ddlToStatus.SelectedValue, Nothing)
+        model.ToSubStateId = If(model.ActionType = "CHANGE", ddlToSubStatus.SelectedValue, Nothing)
 
         model.ShowInDefault = cblShowIn.Items.FindByValue("Default").Selected
         model.ShowInPreview = cblShowIn.Items.FindByValue("Preview").Selected
@@ -826,7 +925,7 @@ Partial Class ActionAddEdit
             "INSERT INTO UNITSHUB_ACTIONS (PROJECT_ID, STATUS_ID, ACTION_ID, IS_ACTIVE, ACTION_TITLE, ACTION_TYPE, " &
             "IMPLEMENTER_TITLE, SHOW_IN_DEFAULT, SHOW_IN_PREVIEW, RECEIVE_PARAMETERS_ENABLED, RECEIVE_PARAMETERS_MODE, " &
             "NEED_PAYMENT, PAYMENT_PLAN_ID, NEED_AUTOTRANSFER, AUTOTRANSFER_PLAN_ID, AUTOTRANSFER_GROUP, NEED_DIALOGUE, DIALOGUE_TEXT, " &
-            "TO_STATUS_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
+            "TO_STATUS_ID, TO_SUBSTATE_ID, SCRIPT_TEXT, PRE_EXECUTION, CONFIRMATION_TEXT, " &
             "PARAMETER_TYPE, FORM_TITLE, SELECT_SQL) VALUES (" &
             "'" & lblProjectID.Text.Replace("'", "''") & "', " &
             "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
@@ -847,6 +946,7 @@ Partial Class ActionAddEdit
             (If(model.NeedDialogue, "1", "0")) & ", " &
             (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
+            (If(String.IsNullOrEmpty(model.ToSubStateId), "NULL", "'" & model.ToSubStateId & "'")) & ", " &
             "'" & If(model.Script, "").Replace("'", "''") & "', " &
             "'" & model.PreExecution & "', " &
             (If(String.IsNullOrEmpty(model.ConfirmationText), "NULL", "'" & model.ConfirmationText.Replace("'", "''") & "'")) & ", " &
@@ -858,7 +958,11 @@ Partial Class ActionAddEdit
         ExecuteNonQuery(EBDB, insertActionSql)
 
         ' 3. Insert child detail rows for the newly generated action.
+        ActionHomeStatus = lblSTATUSID.Text
         SavePlanDetailRows(model, actionId)
+
+        ' 4. Place it where it was created from (status / sub-status / '*'), with its target
+        SavePlacement(actionId, model)
     End Sub
 
     ''' <summary>
@@ -891,6 +995,7 @@ Partial Class ActionAddEdit
             "NEED_DIALOGUE = " & (If(model.NeedDialogue, "1", "0")) & ", " &
             "DIALOGUE_TEXT = " & (If(String.IsNullOrEmpty(model.DialogueText), "NULL", "'" & model.DialogueText.Replace("'", "''") & "'")) & ", " &
             "TO_STATUS_ID = " & (If(String.IsNullOrEmpty(model.ToStatusId), "NULL", "'" & model.ToStatusId & "'")) & ", " &
+            "TO_SUBSTATE_ID = " & (If(String.IsNullOrEmpty(model.ToSubStateId), "NULL", "'" & model.ToSubStateId & "'")) & ", " &
             "SCRIPT_TEXT = '" & If(model.Script, "").Replace("'", "''") & "', " &
             "PRE_EXECUTION = '" & model.PreExecution & "', " &
             "CONFIRMATION_TEXT = " & (If(String.IsNullOrEmpty(model.ConfirmationText), "NULL", "'" & model.ConfirmationText.Replace("'", "''") & "'")) & ", " &
@@ -898,17 +1003,19 @@ Partial Class ActionAddEdit
             "FORM_TITLE = " & (If(String.IsNullOrEmpty(model.FormTitle), "NULL", "'" & model.FormTitle.Replace("'", "''") & "'")) & ", " &
             "SELECT_SQL = " & (If(String.IsNullOrEmpty(model.SelectSQL), "NULL", "'" & model.SelectSQL.Replace("'", "''") & "'")) & " " &
             "WHERE PROJECT_ID = '" & model.ProjectId.Replace("'", "''") & "' " &
-            "AND STATUS_ID = '" & model.StatusId.Replace("'", "''") & "' " &
             "AND ACTION_ID = '" & actionId & "'"
 
         ExecuteNonQuery(EBDB, updateActionSql)
 
         Dim deleteDetailsSql As String =
             "DELETE FROM UNITSHUB_ACT_PAY_PLN_DETAILS WHERE PROJECT_ID = '" & model.ProjectId.Replace("'", "''") & "' " &
-            "AND STATUS_ID = '" & model.StatusId.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
+            "AND STATUS_ID = '" & ActionHomeStatus.Replace("'", "''") & "' AND ACTION_ID = '" & actionId & "'"
         ExecuteNonQuery(EBDB, deleteDetailsSql)
 
         SavePlanDetailRows(model, actionId)
+
+        ' Target of the placement this action was opened from
+        SavePlacement(actionId, model)
     End Sub
 
     ''' <summary>
@@ -955,7 +1062,7 @@ Partial Class ActionAddEdit
             "INSERT INTO UNITSHUB_ACT_PAY_PLN_DETAILS (ID, PROJECT_ID, STATUS_ID, ACTION_ID, PLAN_ID, DETAIL_ID) VALUES (" &
             "'" & detailRowId & "', " &
             "'" & lblProjectID.Text.Replace("'", "''") & "', " &
-            "'" & lblSTATUSID.Text.Replace("'", "''") & "', " &
+            "'" & ActionHomeStatus.Replace("'", "''") & "', " &
             "'" & actionId & "', " &
             "'" & planId.Replace("'", "''") & "', " &
             (If(String.IsNullOrEmpty(detailId), "NULL", "'" & detailId.Replace("'", "''") & "'")) & ")"

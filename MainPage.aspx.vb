@@ -1395,11 +1395,17 @@ Partial Class MainPage
             "StateID: " & StateID)
 
         Dim DT As New DataTable
-        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & DropDownList1.SelectedItem.Value & "' and  STATUS_ID = '" & StateID & "' and ACTION_ID = '" & ActionID & "'")
+        ' The action is identified by its ID alone (it may be placed in many statuses);
+        ' where it leads comes from the placement that applies to this unit
+        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & DropDownList1.SelectedItem.Value.Replace("'", "''") & "' and ACTION_ID = '" & If(ActionID, "").Replace("'", "''") & "'")
 
         If DT.Rows.Count = 0 Then Exit Sub
 
-        Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
+        Dim Placement As WorkflowAction = FindActionPlacement(StateID, GetNodeSubStatus(NodeId), ActionID)
+        If Placement Is Nothing Then Exit Sub        ' not available here / not for this user
+
+        Dim ToStatusId As String = Placement.ToStatusId
+        Dim ToSubStateIdTarget As String = Placement.ToSubStateId
         Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
 
         ' If the action is configured with PRE_EXECUTION = "Confirmation", the status
@@ -1414,8 +1420,7 @@ Partial Class MainPage
 
                 If String.Equals(PreExecution, "Confirmation", StringComparison.OrdinalIgnoreCase) Then
                     Dim ConfirmationText As String = Convert.ToString(DT.Rows(0)("CONFIRMATION_TEXT"))
-                    ShowConfirmationThenApply(NodeId, ToStatusId, ConfirmationText,
-                                              Convert.ToString(DT.Rows(0)("TO_SUBSTATE_ID")))
+                    ShowConfirmationThenApply(NodeId, ToStatusId, ConfirmationText, ToSubStateIdTarget)
                     Exit Sub
                 ElseIf DT.Rows(0)("NEED_DIALOGUE") = "1" Then
 
@@ -1557,11 +1562,7 @@ Partial Class MainPage
         Dim match As DataRow = actionsTable.AsEnumerable().
         FirstOrDefault(Function(r) String.Equals(Convert.ToString(r("ACTION_ID")).Trim(),
                                                    If(ActionID, "").Trim(),
-                                                   StringComparison.OrdinalIgnoreCase) _
-                              AndAlso
-                              String.Equals(Convert.ToString(r("STATUS_ID")).Trim(),
-                                                   If(StateID, "").Trim(),
-                                                   StringComparison.OrdinalIgnoreCase))
+                                                   StringComparison.OrdinalIgnoreCase))   ' title is the same in every placement
 
         If match Is Nothing Then Return ""
         Return Convert.ToString(match("ACTION_TITLE"))
@@ -1599,49 +1600,74 @@ Partial Class MainPage
         Dim actionsTable As DataTable = Nothing
 
         If Not _projectActionsCache.TryGetValue(cacheKey, actionsTable) Then
-            ' Not fetched yet this request - load every (STATE_ID, ACTION_ID) this
-            ' user is permitted for this project in one round-trip, then filter
-            ' in memory per row/state below instead of re-querying per row.
+            ' Not fetched yet this request - load every placement this user may use
+            ' in this project in one round-trip, then filter in memory per row below.
             actionsTable = LoadAvailableActionsForProject(lcProjectID, UserID)
             _projectActionsCache(cacheKey) = actionsTable
         End If
 
         Dim Actions As New List(Of WorkflowAction)
 
-        ' An action shows on a row when:
-        '   - its STATUS_ID is the row's STATE_ID (matched on the ID, not the name), and
-        '   - its SUBSTATE_ID is empty (action for the whole status, e.g. "Show History"
-        '     on every Sold unit) or equals the row's SUBSTATE_ID.
-        ' Whole-status actions come first. NormalizeStateId ignores leading zeros.
+        ' A placement fits the row when:
+        '   - its STATUS_ID is '*' or the row's STATE_ID, and
+        '   - its SUBSTATE_ID is '*' or the row's SUBSTATE_ID (a row without a
+        '     sub-status only gets '*' placements).
+        ' If an action fits in several ways (e.g. "all of Sold" and "Sold 2048"), the
+        ' most specific placement wins - its target is the one that applies here:
+        '   exact sub-status (2)  >  whole status (1)  >  all statuses (0)
         Dim targetStateId As String = NormalizeStateId(StateId)
         Dim unitHasSubState As Boolean = (If(SubStateId, "").Trim() <> "")
         Dim targetSubStateId As String = NormalizeStateId(If(SubStateId, "").Trim())
 
-        Dim matchingRows = actionsTable.AsEnumerable().
-            Where(Function(r)
-                      If Not String.Equals(NormalizeStateId(Convert.ToString(r("STATUS_ID"))),
-                                           targetStateId, StringComparison.OrdinalIgnoreCase) Then Return False
+        Dim Specificity = Function(r As DataRow) As Integer
+                              If Convert.ToString(r("STATUS_ID")).Trim() = "*" Then Return 0
+                              If Convert.ToString(r("SUBSTATE_ID")).Trim() = "*" Then Return 1
+                              Return 2
+                          End Function
 
-                      Dim actionSub As String = Convert.ToString(r("SUBSTATE_ID")).Trim()
-                      If actionSub = "" Then Return True
-                      ' NormalizeStateId("") is "0", so a unit with no sub-status must not
-                      ' match a sub-status "0000" action - check it separately
+        Dim fitting = actionsTable.AsEnumerable().
+            Where(Function(r)
+                      Dim pStatus As String = Convert.ToString(r("STATUS_ID")).Trim()
+                      If pStatus <> "*" AndAlso
+                         Not String.Equals(NormalizeStateId(pStatus), targetStateId, StringComparison.OrdinalIgnoreCase) Then Return False
+
+                      Dim pSub As String = Convert.ToString(r("SUBSTATE_ID")).Trim()
+                      If pSub = "" OrElse pSub = "*" Then Return True
+                      ' NormalizeStateId("") is "0" - a row without a sub-status must not
+                      ' match a sub-status "0000" placement
                       If Not unitHasSubState Then Return False
-                      Return String.Equals(NormalizeStateId(actionSub), targetSubStateId,
-                                           StringComparison.OrdinalIgnoreCase)
-                  End Function).
-            OrderBy(Function(r) If(Convert.ToString(r("SUBSTATE_ID")).Trim() = "", 0, 1)).
+                      Return String.Equals(NormalizeStateId(pSub), targetSubStateId, StringComparison.OrdinalIgnoreCase)
+                  End Function)
+
+        ' One placement per action (the most specific), then menu order:
+        ' whole-status actions, sub-status actions, all-status actions (e.g. Show History)
+        Dim chosen = fitting.
+            GroupBy(Function(r) Convert.ToString(r("ACTION_ID")).Trim()).
+            Select(Function(g) g.OrderByDescending(Function(r) Specificity(r)).First()).
+            OrderBy(Function(r)
+                        Select Case Specificity(r)
+                            Case 1 : Return 0
+                            Case 2 : Return 1
+                            Case Else : Return 2
+                        End Select
+                    End Function).
+            ThenBy(Function(r) Convert.ToInt32(r("PL_SORT"))).
             ThenBy(Function(r) Convert.ToString(r("ACTION_ID")))
 
-        For Each DR As DataRow In matchingRows
+        ' StateId     = the row's real status (never '*')
+        ' SubStateId / PlacementStatusId / PlacementSubStateId = the placement's ('*' = all)
+        ' ToStatusId / ToSubStateId = the target from THIS placement
+        For Each DR As DataRow In chosen
             Actions.Add(New WorkflowAction With {
                 .Text = DR("ACTION_TITLE").ToString(),
                 .CommandName = DR("ACTION_TITLE").ToString(),
                 .CommandArgument = RequestID,
                 .ProjectId = DR("PROJECT_ID").ToString(),
                 .ActionId = DR("ACTION_ID").ToString(),
-                .StateId = DR("STATUS_ID").ToString(),
+                .StateId = StateId,
                 .SubStateId = DR("SUBSTATE_ID").ToString(),
+                .PlacementStatusId = DR("STATUS_ID").ToString(),
+                .PlacementSubStateId = DR("SUBSTATE_ID").ToString(),
                 .Icon = DR("ICON").ToString(),
                 .StatusSubtitle = DR("STATUS_SUBTITLE").ToString(),
                 .ToStatusId = DR("TO_STATUS_ID").ToString(),
@@ -1673,23 +1699,62 @@ Partial Class MainPage
     End Function
 
     ''' <summary>
-    ''' Loads every action the given user is allowed to perform on the given project,
-    ''' across all STATE_IDs, mirroring the role-based + user-override permission
-    ''' model.
+    ''' The placement of ActionId that applies to a unit in StateId / SubStateId for the
+    ''' current user (same rules as GetAvailableActions), or Nothing if the action isn't
+    ''' available there for this user. Its ToStatusId / ToSubStateId are the target to use.
+    ''' </summary>
+    Private Function FindActionPlacement(StateId As String, SubStateId As String, ActionId As String) As WorkflowAction
+        Return GetAvailableActions("", StateId, SubStateId).
+            FirstOrDefault(Function(a) String.Equals(If(a.ActionId, "").Trim(), If(ActionId, "").Trim(),
+                                                     StringComparison.OrdinalIgnoreCase))
+    End Function
+
+    ''' <summary>The unit's current SubStatus value ("" if none / no SubStatus attribute).</summary>
+    Private Function GetNodeSubStatus(NodeId As String) As String
+        Dim safeNodeId As String = If(NodeId, "").Trim().Replace("'", "''")
+        If safeNodeId = "" Then Return ""
+
+        Dim NodeDT As DataTable = GetDataTable(EBDB,
+            "SELECT PROJECT_ID, NODE_TYPE_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & safeNodeId & "'")
+        If NodeDT Is Nothing OrElse NodeDT.Rows.Count = 0 Then Return ""
+
+        Dim SubOrder As String = GetSubStatusAttributeDisplayOrder(Convert.ToString(NodeDT.Rows(0)("PROJECT_ID")),
+                                                                   Convert.ToString(NodeDT.Rows(0)("NODE_TYPE_ID")))
+        If SubOrder = "" Then Return ""
+
+        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT VALUE_TEXT FROM UNITSHUB_NODE_ATTRIBUTE_VALUE WHERE NODE_ID = '" & safeNodeId & "' " &
+            "AND TO_NUMBER(DISPLAY_ORDER) = " & CInt(SubOrder))).Trim()
+    End Function
+
+    ''' <summary>
+    ''' Every action PLACEMENT this user may use in this project, with the action's own
+    ''' settings - one round-trip, cached per request in _projectActionsCache and then
+    ''' filtered per grid row by GetAvailableActions.
+    '''   UNITSHUB_ACTION_PLACEMENTS  where an action is valid: STATUS_ID / SUBSTATE_ID
+    '''                               ('*' = all), and the target from there
+    '''                               (TO_STATUS_ID / TO_SUBSTATE_ID)
+    '''   UNITSHUB_ACTIONS            what the action is (title, type, dialogue, icon ...)
+    '''   UNITSHUB_PRJ_STS_ACTN_USRS  who may use it in that place: a right for the same
+    '''                               status / sub-status, or for '*'
+    ''' Column names are kept as before (STATUS_ID, SUBSTATE_ID, TO_STATUS_ID ...) but now
+    ''' describe the placement, not the action row.
     ''' </summary>
     Private Function LoadAvailableActionsForProject(ByVal ProjectID As String, ByVal UserID As String) As DataTable
         Dim safeProjectID As String = If(ProjectID, "").Replace("'", "''")
         Dim safeUserID As String = If(UserID, "").Replace("'", "''")
 
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + "Select  "
-        SQL = SQL + vbCrLf + "         U.PROJECT_ID,  "
-        SQL = SQL + vbCrLf + "         U.STATUS_ID, "
-        SQL = SQL + vbCrLf + "         U.ACTION_ID, "
+        SQL = SQL + vbCrLf + "Select "
+        SQL = SQL + vbCrLf + "         P.PROJECT_ID, "
+        SQL = SQL + vbCrLf + "         P.STATUS_ID, "
+        SQL = SQL + vbCrLf + "         NVL(P.SUBSTATE_ID, '*') as SUBSTATE_ID, "
+        SQL = SQL + vbCrLf + "         P.TO_STATUS_ID, "
+        SQL = SQL + vbCrLf + "         P.TO_SUBSTATE_ID, "
+        SQL = SQL + vbCrLf + "         NVL(P.SORT_ORDER, 0) as PL_SORT, "
+        SQL = SQL + vbCrLf + "         A.ACTION_ID, "
         SQL = SQL + vbCrLf + "         PS.STATUS as STATUS_NAME, "
         SQL = SQL + vbCrLf + "         NVL(SS.SUBTITLE, PS.SUBTITLE) as STATUS_SUBTITLE, "
-        SQL = SQL + vbCrLf + "         A.SUBSTATE_ID, "
-        SQL = SQL + vbCrLf + "         A.TO_SUBSTATE_ID, "
         SQL = SQL + vbCrLf + "         A.IS_ACTIVE, "
         SQL = SQL + vbCrLf + "         A.ACTION_TITLE, "
         SQL = SQL + vbCrLf + "         A.ACTION_TYPE, "
@@ -1700,7 +1765,6 @@ Partial Class MainPage
         SQL = SQL + vbCrLf + "         A.RECEIVE_PARAMETERS_MODE, "
         SQL = SQL + vbCrLf + "         A.NEED_PAYMENT, "
         SQL = SQL + vbCrLf + "         A.PAYMENT_PLAN_ID, "
-        SQL = SQL + vbCrLf + "         A.TO_STATUS_ID, "
         SQL = SQL + vbCrLf + "         A.SCRIPT_TEXT, "
         SQL = SQL + vbCrLf + "         A.PRE_EXECUTION, "
         SQL = SQL + vbCrLf + "         A.CONFIRMATION_TEXT, "
@@ -1714,28 +1778,35 @@ Partial Class MainPage
         SQL = SQL + vbCrLf + "         A.NEED_DIALOGUE, "
         SQL = SQL + vbCrLf + "         A.DIALOGUE_TEXT "
         SQL = SQL + vbCrLf + "from "
-        SQL = SQL + vbCrLf + "         UNITSHUB_PRJ_STS_ACTN_USRS U "
+        SQL = SQL + vbCrLf + "         UNITSHUB_ACTION_PLACEMENTS P "
         SQL = SQL + vbCrLf + "inner join "
-        SQL = SQL + vbCrLf + "         UNITSHUB_ACTIONS A  "
+        SQL = SQL + vbCrLf + "         UNITSHUB_ACTIONS A "
         SQL = SQL + vbCrLf + "on "
-        SQL = SQL + vbCrLf + "         U.PROJECT_ID = A.PROJECT_ID "
-        SQL = SQL + vbCrLf + "         and U.STATUS_ID = A.STATUS_ID "
-        SQL = SQL + vbCrLf + "         and A.ACTION_ID = U.ACTION_ID "
-        SQL = SQL + vbCrLf + "inner join "
+        SQL = SQL + vbCrLf + "         A.PROJECT_ID = P.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         and A.ACTION_ID = P.ACTION_ID "
+        SQL = SQL + vbCrLf + "left join "
         SQL = SQL + vbCrLf + "         UNITSHUB_PROJECTSTATUS PS "
         SQL = SQL + vbCrLf + "on "
-        SQL = SQL + vbCrLf + "         PS.STATE_ID = U.STATUS_ID "
-        SQL = SQL + vbCrLf + "         and PS.PROJECT_ID = U.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         PS.PROJECT_ID = P.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         and PS.STATE_ID = P.STATUS_ID "
         SQL = SQL + vbCrLf + "left join "
         SQL = SQL + vbCrLf + "         UNITSHUB_PROJECTSUBSTATUS SS "
         SQL = SQL + vbCrLf + "on "
-        SQL = SQL + vbCrLf + "         SS.PROJECT_ID = A.PROJECT_ID "
-        SQL = SQL + vbCrLf + "         and SS.STATE_ID = A.STATUS_ID "
-        SQL = SQL + vbCrLf + "         and SS.SUBSTATE_ID = A.SUBSTATE_ID "
+        SQL = SQL + vbCrLf + "         SS.PROJECT_ID = P.PROJECT_ID "
+        SQL = SQL + vbCrLf + "         and SS.STATE_ID = P.STATUS_ID "
+        SQL = SQL + vbCrLf + "         and SS.SUBSTATE_ID = P.SUBSTATE_ID "
         SQL = SQL + vbCrLf + "where "
-        SQL = SQL + vbCrLf + "         U.PROJECT_ID = '" & ProjectID & "' "
-        SQL = SQL + vbCrLf + "         and "
-        SQL = SQL + vbCrLf + "         U.USER_ID='" & UserID & "' "
+        SQL = SQL + vbCrLf + "         P.PROJECT_ID = '" & safeProjectID & "' "
+        SQL = SQL + vbCrLf + "         and NVL(P.IS_ACTIVE, 'Y') = 'Y' "
+        ' The user needs a right for this placement - or for every placement ('*')
+        SQL = SQL + vbCrLf + "         and exists ( "
+        SQL = SQL + vbCrLf + "             select 1 from UNITSHUB_PRJ_STS_ACTN_USRS U "
+        SQL = SQL + vbCrLf + "             where U.PROJECT_ID = P.PROJECT_ID "
+        SQL = SQL + vbCrLf + "               and U.ACTION_ID  = P.ACTION_ID "
+        SQL = SQL + vbCrLf + "               and U.USER_ID    = '" & safeUserID & "' "
+        SQL = SQL + vbCrLf + "               and U.STATUS_ID in (P.STATUS_ID, '*') "
+        SQL = SQL + vbCrLf + "               and NVL(U.SUBSTATE_ID, '*') in (NVL(P.SUBSTATE_ID, '*'), '*') "
+        SQL = SQL + vbCrLf + "         ) "
         Return GetDataTable(EBDB, SQL)
     End Function
 
@@ -1822,6 +1893,11 @@ Partial Class MainPage
             l.Attributes.Add("NodeID", NodeId)
             l.Attributes.Add("PaymentPlan", PaymentPlan)
             l.Attributes.Add("SubStateId", UnitSubStateId)
+            ' Placement this link comes from, and where it leads from here
+            l.Attributes.Add("PlacementStatusId", oneAction.PlacementStatusId)
+            l.Attributes.Add("PlacementSubStateId", oneAction.PlacementSubStateId)
+            l.Attributes.Add("ToStatusId", oneAction.ToStatusId)
+            l.Attributes.Add("ToSubStateId", oneAction.ToSubStateId)
 
             If oneAction.ConfirmationText.ToString <> "" Then
 
@@ -1878,15 +1954,24 @@ Partial Class MainPage
         Dim PaymentPlan As String = L.Attributes("PaymentPlan")
 
         Dim DT As New DataTable
-        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & ProjectId & "' and  STATUS_ID = '" & StateId & "' and ACTION_ID = '" & ActionId & "'")
+        ' The action is identified by its ID alone (it may be placed in many statuses)
+        DT = GetDataTable(EBDB_CS, "Select * from UNITSHUB_ACTIONS where PROJECT_ID= '" & If(ProjectId, "").Replace("'", "''") & "' and ACTION_ID = '" & If(ActionId, "").Replace("'", "''") & "'")
 
         If DT.Rows.Count = 0 Then Exit Sub
         Dim ContactId As String = ""
         Dim Comments As String = ""
         Dim ACCOUNT As String = ""
-        Dim ToStatusId As String = Convert.ToString(DT.Rows(0)("TO_STATUS_ID"))
-        Dim ToSubStateId As String = Convert.ToString(DT.Rows(0)("TO_SUBSTATE_ID"))   ' "" = none
         Dim SubStateId As String = L.Attributes("SubStateId")                          ' unit's current sub-status
+
+        ' Where the unit goes comes from the placement that applies to it (checked again
+        ' here, so a stale page can't use an action the user no longer has there)
+        Dim Placement As WorkflowAction = FindActionPlacement(StateId, SubStateId, ActionId)
+        If Placement Is Nothing Then
+            loadData()
+            Exit Sub
+        End If
+        Dim ToStatusId As String = Placement.ToStatusId
+        Dim ToSubStateId As String = Placement.ToSubStateId                             ' "" = none
         Dim PreExecution As String = Convert.ToString(DT.Rows(0)("PRE_EXECUTION"))
 
 
@@ -2193,8 +2278,10 @@ Public Class WorkflowAction
     Public Property CssClass As String = "menuItem"
     Public Property StatusSubtitle As String
     Public Property ToStatusId As String
-    Public Property SubStateId As String        ' action's sub-status ("" = whole status)
-    Public Property ToSubStateId As String      ' sub-status the action moves the unit to
+    Public Property SubStateId As String        ' placement's sub-status ('*' = every sub-status)
+    Public Property ToSubStateId As String      ' sub-status the unit moves to (from this placement)
+    Public Property PlacementStatusId As String     ' placement's status ('*' = every status)
+    Public Property PlacementSubStateId As String   ' placement's sub-status ('*' = every sub-status)
     Public Property PreExecution As String
     Public Property ActionType As String
     Public Property ConfirmationText As String

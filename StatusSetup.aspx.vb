@@ -16,10 +16,8 @@ Imports System.Collections.Generic
 '''   UNITSHUB_ACTION_PLACEMENTS  where it's valid ('*' = all) and its target from there
 '''   UNITSHUB_PRJ_STS_ACTN_USRS  who may use it in each placement ('*' = all placements)
 ''' </summary>
-Partial Class ProjectStatusAndAction
+Partial Class StatusSetup
     Inherits System.Web.UI.Page
-
-    Dim encryNdecry As New EncryDecry
 
     ' ------------------------------------------------------------------
     ' Selection
@@ -38,9 +36,19 @@ Partial Class ProjectStatusAndAction
         End Set
     End Property
 
+    ''' <summary>Placement whose users are being edited: "ACTION_ID|STATUS_ID|SUBSTATE_ID".</summary>
+    Private Property UsersPlacementKey As String
+        Get
+            Return Convert.ToString(ViewState("UsersPlacementKey"))
+        End Get
+        Set(value As String)
+            ViewState("UsersPlacementKey") = value
+        End Set
+    End Property
+
     Private ReadOnly Property ProjectId As String
         Get
-            Return Convert.ToString(ddlProjectName.SelectedValue)
+            Return Convert.ToString(ddlProject.SelectedValue)
         End Get
     End Property
 
@@ -74,8 +82,8 @@ Partial Class ProjectStatusAndAction
         If Not IsPostBack Then
             LoadProjects()
             Dim requested As String = Convert.ToString(Request("ProjectID"))
-            If requested <> "" AndAlso ddlProjectName.Items.FindByValue(requested) IsNot Nothing Then
-                ddlProjectName.SelectedValue = requested
+            If requested <> "" AndAlso ddlProject.Items.FindByValue(requested) IsNot Nothing Then
+                ddlProject.SelectedValue = requested
             End If
         End If
     End Sub
@@ -90,23 +98,19 @@ Partial Class ProjectStatusAndAction
         BindTree()
         BindDetail()
         BindActions()
+        If pnlUsers.Visible Then BindUsers()
         RegisterPopups()
-    End Sub
-
-    ''' <summary>Closes this popup and reloads its parent (as before).</summary>
-    Protected Sub btnClose_Click(ByVal sender As Object, ByVal e As EventArgs)
-        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
 
     Private Sub LoadProjects()
         Dim DT As DataTable = GetDataTable(EBDB, "SELECT PROJECT_ID, PROJECT_NAME_EN FROM UNITSHUB_PROJECTS ORDER BY PROJECT_NAME_EN")
-        ddlProjectName.DataSource = DT
-        ddlProjectName.DataTextField = "PROJECT_NAME_EN"
-        ddlProjectName.DataValueField = "PROJECT_ID"
-        ddlProjectName.DataBind()
+        ddlProject.DataSource = DT
+        ddlProject.DataTextField = "PROJECT_NAME_EN"
+        ddlProject.DataValueField = "PROJECT_ID"
+        ddlProject.DataBind()
     End Sub
 
-    Protected Sub ddlProjectName_SelectedIndexChanged(sender As Object, e As EventArgs)
+    Protected Sub ddlProject_SelectedIndexChanged(sender As Object, e As EventArgs)
         SelKey = "ALL"
         HidePanels()
     End Sub
@@ -115,6 +119,7 @@ Partial Class ProjectStatusAndAction
         pnlEdit.Visible = False
         pnlAddSub.Visible = False
         pnlPlace.Visible = False
+        pnlUsers.Visible = False
     End Sub
 
     Private Sub ShowMessage(Text As String, IsOk As Boolean)
@@ -239,18 +244,14 @@ Partial Class ProjectStatusAndAction
         Dim isAll As Boolean = (SelKind = "ALL")
         Dim isSub As Boolean = (SelKind = "SS")
 
-        Dim isStatus As Boolean = (SelKind = "S")
         btnUp.Visible = isSub
         btnDown.Visible = isSub
-        btnEdit.Visible = isSub                ' sub-status: edited here
-        btnEditStatus.Visible = isStatus       ' status: AddProjectStatus popup, as before
-        btnAddStateUp.Visible = isStatus AndAlso SelStatus <> "0000"
-        btnAddStateDown.Visible = isStatus AndAlso SelStatus <> "9216"
+        btnEdit.Visible = Not isAll
         pnlPreview.Visible = Not isAll
         btnShowAddSub.Enabled = Not isAll
 
         If isAll Then
-            litCrumb.Text = Server.HtmlEncode(ddlProjectName.SelectedItem.Text)
+            litCrumb.Text = Server.HtmlEncode(ddlProject.SelectedItem.Text)
             litTitle.Text = "All statuses"
             Exit Sub
         End If
@@ -284,19 +285,23 @@ Partial Class ProjectStatusAndAction
         divPreviewSub.Style("color") = pick("SUBTITLE_FG_COLOR", "#1e293b")
     End Sub
 
-    ''' <summary>Opens the inline editor for the selected sub-status (subtitle and colours).</summary>
     Protected Sub btnEdit_Click(sender As Object, e As EventArgs)
         HidePanels()
-        If SelKind <> "SS" Then Exit Sub
         Dim st As DataRow = StatusRow(SelStatus)
-        Dim sb As DataRow = SubRow(SelStatus, SelSub)
-        If sb Is Nothing Then Exit Sub
+        If st Is Nothing Then Exit Sub
 
-        txtEditSubtitle.Text = Col(sb, "SUBTITLE")
-        txtEditStatusBg.Text = ToColor(Col(sb, "STATUS_BG_COLOR"), ToColor(Col(st, "STATUS_BG_COLOR"), "#e2e8f0"))
-        txtEditStatusFg.Text = ToColor(Col(sb, "STATUS_FG_COLOR"), ToColor(Col(st, "STATUS_FG_COLOR"), "#1e293b"))
-        txtEditSubBg.Text = ToColor(Col(sb, "SUBTITLE_BG_COLOR"), ToColor(Col(st, "SUBTITLE_BG_COLOR"), "#ffffff"))
-        txtEditSubFg.Text = ToColor(Col(sb, "SUBTITLE_FG_COLOR"), ToColor(Col(st, "SUBTITLE_FG_COLOR"), "#1e293b"))
+        Dim isSub As Boolean = (SelKind = "SS")
+        Dim sb As DataRow = If(isSub, SubRow(SelStatus, SelSub), Nothing)
+        Dim src As DataRow = If(isSub, sb, st)
+
+        lblEditStatusName.Visible = Not isSub
+        txtEditStatus.Visible = Not isSub
+        txtEditStatus.Text = Col(st, "STATUS")
+        txtEditSubtitle.Text = Col(src, "SUBTITLE")
+        txtEditStatusBg.Text = ToColor(Col(src, "STATUS_BG_COLOR"), ToColor(Col(st, "STATUS_BG_COLOR"), "#e2e8f0"))
+        txtEditStatusFg.Text = ToColor(Col(src, "STATUS_FG_COLOR"), ToColor(Col(st, "STATUS_FG_COLOR"), "#1e293b"))
+        txtEditSubBg.Text = ToColor(Col(src, "SUBTITLE_BG_COLOR"), ToColor(Col(st, "SUBTITLE_BG_COLOR"), "#ffffff"))
+        txtEditSubFg.Text = ToColor(Col(src, "SUBTITLE_FG_COLOR"), ToColor(Col(st, "SUBTITLE_FG_COLOR"), "#1e293b"))
         pnlEdit.Visible = True
     End Sub
 
@@ -317,6 +322,17 @@ Partial Class ProjectStatusAndAction
                      "SUBTITLE_BG_COLOR = " & Q(txtEditSubBg.Text) & ", SUBTITLE_FG_COLOR = " & Q(txtEditSubFg.Text) & " " &
                      "WHERE PROJECT_ID = " & Q(ProjectId) & " AND STATE_ID = " & Q(SelStatus) & " AND SUBSTATE_ID = " & Q(SelSub))
                 ShowMessage("Sub-status saved.", True)
+            ElseIf SelKind = "S" Then
+                If txtEditStatus.Text.Trim() = "" Then
+                    ShowMessage("Enter a status name.", False)
+                    Exit Sub
+                End If
+                Exec("UPDATE UNITSHUB_PROJECTSTATUS SET " &
+                     "STATUS = " & Q(txtEditStatus.Text.Trim()) & ", SUBTITLE = " & QOrNull(txtEditSubtitle.Text.Trim()) & ", " &
+                     "STATUS_BG_COLOR = " & Q(txtEditStatusBg.Text) & ", STATUS_FG_COLOR = " & Q(txtEditStatusFg.Text) & ", " &
+                     "SUBTITLE_BG_COLOR = " & Q(txtEditSubBg.Text) & ", SUBTITLE_FG_COLOR = " & Q(txtEditSubFg.Text) & " " &
+                     "WHERE PROJECT_ID = " & Q(ProjectId) & " AND STATE_ID = " & Q(SelStatus))
+                ShowMessage("Status saved.", True)
             End If
             pnlEdit.Visible = False
         Catch ex As Exception
@@ -513,15 +529,14 @@ Partial Class ProjectStatusAndAction
 
             ' Users who may use it here: rights for this placement or for '*'
             Dim users As DataTable = GetDataTable(EBDB,
-                "SELECT DISTINCT U.USER_ID, NVL(US.FULL_NAME, U.USER_ID) AS USER_NAME " &
-                "FROM UNITSHUB_PRJ_STS_ACTN_USRS U LEFT JOIN UNITSHUB_USERS US ON US.USER_ID = U.USER_ID " &
-                "WHERE U.PROJECT_ID = " & Q(ProjectId) & " AND U.ACTION_ID = " & Q(Col(r, "ACTION_ID")) & " " &
-                "AND U.STATUS_ID IN (" & Q(pst) & ", '*') AND NVL(U.SUBSTATE_ID, '*') IN (" & Q(psb) & ", '*') ORDER BY 2")
+                "SELECT DISTINCT USER_ID FROM UNITSHUB_PRJ_STS_ACTN_USRS " &
+                "WHERE PROJECT_ID = " & Q(ProjectId) & " AND ACTION_ID = " & Q(Col(r, "ACTION_ID")) & " " &
+                "AND STATUS_ID IN (" & Q(pst) & ", '*') AND NVL(SUBSTATE_ID, '*') IN (" & Q(psb) & ", '*') ORDER BY USER_ID")
             Dim chips As New System.Text.StringBuilder()
             Dim n As Integer = 0
             For Each u As DataRow In users.Rows
                 n += 1
-                If n <= 3 Then chips.Append("<span class=""chip"">" & Server.HtmlEncode(Col(u, "USER_NAME")) & "</span>")
+                If n <= 3 Then chips.Append("<span class=""chip"">" & Server.HtmlEncode(Col(u, "USER_ID")) & "</span>")
             Next
             If n > 3 Then chips.Append("<span class=""chip"">+" & (n - 3).ToString() & "</span>")
             If n = 0 Then chips.Append("<span class=""chip"">No users</span>")
@@ -547,25 +562,6 @@ Partial Class ProjectStatusAndAction
         Dim btnRemove As Button = CType(e.Item.FindControl("btnRemove"), Button)
         btnRemove.Visible = CBool(r("IsExactlyHere"))
 
-        ' Users picker (same list popup as before), ticked = rights for exactly this placement
-        Dim btnUsers As Button = CType(e.Item.FindControl("btnUsers"), Button)
-        Dim MemberListParameters As New clsListProperties
-        With MemberListParameters
-            .ItemsSQL = "Select USER_ID as ID, FULL_NAME as Name from UNITSHUB_USERS order by Name"
-            .CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_PRJ_STS_ACTN_USRS where PROJECT_ID = " & Q(ProjectId) &
-                               " and ACTION_ID = " & Q(Convert.ToString(r("ACTION_ID"))) &
-                               " and STATUS_ID = " & Q(Convert.ToString(r("STATUS_ID"))) &
-                               " and NVL(SUBSTATE_ID, '*') = " & Q(Convert.ToString(r("SUBSTATE_ID")))
-            .FormTitle = "Users of " & Convert.ToString(r("ACTION_TITLE")) & " in " & PlaceName(Convert.ToString(r("STATUS_ID")), Convert.ToString(r("SUBSTATE_ID")))
-            .ColumnHideAndShow = "YN"
-            .EditableColumns = "NN"
-            .ColumnsWidth = New Double() {1, 3}
-            .HoverableList = "Y"
-        End With
-        VendorPopupHelper.RegisterVendorPopup(Me, btnUsers,
-            "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)),
-            400, 600, PopupPlacement.Center, "Select Adj", VendorPopupHelper.PopupDisplayMode.FrameOnly)
-
         Dim btnEditAction As Button = CType(e.Item.FindControl("btnEditAction"), Button)
         VendorPopupHelper.RegisterVendorPopup(Me, btnEditAction,
             "ActionAddEdit.aspx?ProjectID=" & Server.UrlEncode(ProjectId) &
@@ -581,6 +577,11 @@ Partial Class ProjectStatusAndAction
         Dim actionId As String = parts(0), pst As String = parts(1), psb As String = parts(2)
 
         Select Case e.CommandName
+            Case "Users"
+                HidePanels()
+                UsersPlacementKey = Convert.ToString(e.CommandArgument)
+                pnlUsers.Visible = True
+
             Case "Remove"
                 Try
                     Exec("DELETE FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
@@ -725,38 +726,76 @@ Partial Class ProjectStatusAndAction
     End Sub
 
     ' ------------------------------------------------------------------
-    ' Users of one placement (AddMultipleItemsFromList picker)
+    ' Users of one placement
     ' ------------------------------------------------------------------
 
-    ''' <summary>
-    ''' Runs when the users picker closes after Save. Replaces the rights for exactly this
-    ''' placement (action + status + sub-status) with the ticked users. Wider rights ('*')
-    ''' are left alone.
-    ''' </summary>
-    Protected Sub btnUsers_Click(sender As Object, e As EventArgs)
-        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
-            TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedItems"),
-                    List(Of Dictionary(Of String, Object)))
-        If selectedItems Is Nothing Then Exit Sub    ' closed without saving
-
-        Dim parts() As String = Convert.ToString(CType(sender, Button).CommandArgument).Split("|"c)
-        If parts.Length < 3 Then Exit Sub
+    Private Sub BindUsers()
+        Dim parts() As String = UsersPlacementKey.Split("|"c)
+        If parts.Length < 3 Then
+            pnlUsers.Visible = False
+            Exit Sub
+        End If
         Dim actionId As String = parts(0), pst As String = parts(1), psb As String = parts(2)
 
+        Dim title As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+            "SELECT ACTION_TITLE FROM UNITSHUB_ACTIONS WHERE PROJECT_ID = " & Q(ProjectId) & " AND ACTION_ID = " & Q(actionId)))
+        litUsersFor.Text = Server.HtmlEncode("Users of """ & title & """ in " & PlaceName(pst, psb))
+
+        ' Rights for exactly this placement (editable here)
+        rptUsers.DataSource = GetDataTable(EBDB,
+            "SELECT DISTINCT USER_ID FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
+            " AND ACTION_ID = " & Q(actionId) & " AND STATUS_ID = " & Q(pst) & " AND NVL(SUBSTATE_ID, '*') = " & Q(psb) & " ORDER BY USER_ID")
+        rptUsers.DataBind()
+
+        ' Rights given for all places ('*'), shown for information
+        Dim inherited As DataTable = GetDataTable(EBDB,
+            "SELECT DISTINCT USER_ID FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
+            " AND ACTION_ID = " & Q(actionId) & " AND (STATUS_ID = '*' OR NVL(SUBSTATE_ID, '*') = '*') " &
+            " AND NOT (STATUS_ID = " & Q(pst) & " AND NVL(SUBSTATE_ID, '*') = " & Q(psb) & ") ORDER BY USER_ID")
+        Dim names As New List(Of String)
+        For Each r As DataRow In inherited.Rows
+            names.Add(Col(r, "USER_ID"))
+        Next
+        litInheritedUsers.Text = If(names.Count = 0, "",
+            Server.HtmlEncode("Also allowed through a wider right: " & String.Join(", ", names)))
+    End Sub
+
+    Protected Sub btnAddUser_Click(sender As Object, e As EventArgs)
+        Dim parts() As String = UsersPlacementKey.Split("|"c)
+        Dim userId As String = txtAddUser.Text.Trim()
+        If parts.Length < 3 OrElse userId = "" Then
+            ShowMessage("Enter a user ID.", False)
+            Exit Sub
+        End If
+
+        Try
+            Exec("INSERT INTO UNITSHUB_PRJ_STS_ACTN_USRS (PROJECT_ID, STATUS_ID, SUBSTATE_ID, ACTION_ID, USER_ID) " &
+                 "SELECT " & Q(ProjectId) & ", " & Q(parts(1)) & ", " & Q(parts(2)) & ", " & Q(parts(0)) & ", " & Q(userId) & " FROM DUAL " &
+                 "WHERE NOT EXISTS (SELECT 1 FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
+                 " AND ACTION_ID = " & Q(parts(0)) & " AND USER_ID = " & Q(userId) &
+                 " AND STATUS_ID = " & Q(parts(1)) & " AND NVL(SUBSTATE_ID, '*') = " & Q(parts(2)) & ")")
+            txtAddUser.Text = ""
+        Catch ex As Exception
+            ShowMessage("Couldn't add the user: " & ex.Message, False)
+        End Try
+    End Sub
+
+    Protected Sub rptUsers_ItemCommand(source As Object, e As RepeaterCommandEventArgs)
+        If e.CommandName <> "RemoveUser" Then Exit Sub
+        Dim parts() As String = UsersPlacementKey.Split("|"c)
+        If parts.Length < 3 Then Exit Sub
         Try
             Exec("DELETE FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
-                 " AND ACTION_ID = " & Q(actionId) & " AND STATUS_ID = " & Q(pst) & " AND NVL(SUBSTATE_ID, '*') = " & Q(psb))
-
-            For Each item As Dictionary(Of String, Object) In selectedItems
-                Dim userId As String = If(item.ContainsKey("ID"), Convert.ToString(item("ID")).Trim(), "")
-                If userId = "" Then Continue For
-                Exec("INSERT INTO UNITSHUB_PRJ_STS_ACTN_USRS (PROJECT_ID, STATUS_ID, SUBSTATE_ID, ACTION_ID, USER_ID) VALUES (" &
-                     Q(ProjectId) & ", " & Q(pst) & ", " & Q(psb) & ", " & Q(actionId) & ", " & Q(userId) & ")")
-            Next
-            ShowMessage("Users saved for " & PlaceName(pst, psb) & ".", True)
+                 " AND ACTION_ID = " & Q(parts(0)) & " AND USER_ID = " & Q(Convert.ToString(e.CommandArgument)) &
+                 " AND STATUS_ID = " & Q(parts(1)) & " AND NVL(SUBSTATE_ID, '*') = " & Q(parts(2)))
         Catch ex As Exception
-            ShowMessage("Couldn't save the users: " & ex.Message, False)
+            ShowMessage("Couldn't remove the user: " & ex.Message, False)
         End Try
+    End Sub
+
+    Protected Sub btnUsersClose_Click(sender As Object, e As EventArgs)
+        pnlUsers.Visible = False
+        UsersPlacementKey = ""
     End Sub
 
     ' ------------------------------------------------------------------
@@ -786,25 +825,6 @@ Partial Class ProjectStatusAndAction
             "ActionAddEdit.aspx?ProjectID=" & Server.UrlEncode(ProjectId) &
             "&StatusID=" & Server.UrlEncode(SelStatus) & "&SUBSTATEID=" & Server.UrlEncode(SelSub) & "&Mode=New",
             1100, 900, PopupPlacement.Center, "", VendorPopupHelper.PopupDisplayMode.Standard)
-
-        RegisterStatusPopups()
-    End Sub
-
-    ''' <summary>Status buttons: Edit and Add state ▲/▼ open AddProjectStatus, as on the old page.</summary>
-    Private Sub RegisterStatusPopups()
-        If SelKind <> "S" Then Exit Sub
-        Dim baseUrl As String = "AddProjectStatus.aspx?ProjectID=" & Server.UrlEncode(ProjectId) & "&StatusID=" & Server.UrlEncode(SelStatus)
-
-        VendorPopupHelper.RegisterVendorPopup(Me, btnEditStatus, baseUrl & "&MODE=EDIT", 1000, 0,
-                                              PopupPlacement.Center, "", VendorPopupHelper.PopupDisplayMode.Standard)
-        If btnAddStateUp.Visible Then
-            VendorPopupHelper.RegisterVendorPopup(Me, btnAddStateUp, baseUrl & "&MODE=NEW&Dir=Asc", 1000, 0,
-                                                  PopupPlacement.Center, "", VendorPopupHelper.PopupDisplayMode.Standard)
-        End If
-        If btnAddStateDown.Visible Then
-            VendorPopupHelper.RegisterVendorPopup(Me, btnAddStateDown, baseUrl & "&MODE=NEW&Dir=Desc", 1000, 0,
-                                                  PopupPlacement.Center, "", VendorPopupHelper.PopupDisplayMode.Standard)
-        End If
     End Sub
 
     Protected Sub btnNewAction_Click(sender As Object, e As EventArgs)

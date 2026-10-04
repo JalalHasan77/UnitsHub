@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ProjectStatusAndAction.aspx.vb" Inherits="ProjectStatusAndAction" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
+﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="StatusSetup.aspx.vb" Inherits="StatusSetup" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
 
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -169,10 +169,7 @@
 
         <div class="topbar">
             <h1>Statuses and actions</h1>
-            <div style="display:flex;gap:10px;align-items:center">
-                <asp:DropDownList ID="ddlProjectName" runat="server" AutoPostBack="true" OnSelectedIndexChanged="ddlProjectName_SelectedIndexChanged" />
-                <asp:Button ID="btnClose" runat="server" Text="Close" CssClass="btn small" OnClick="btnClose_Click" CausesValidation="false" />
-            </div>
+            <asp:DropDownList ID="ddlProject" runat="server" AutoPostBack="true" OnSelectedIndexChanged="ddlProject_SelectedIndexChanged" />
         </div>
 
         <div style="padding-top:12px">
@@ -209,9 +206,6 @@
                             <div class="title"><asp:Literal ID="litTitle" runat="server" /></div>
                         </div>
                         <div class="head-tools">
-                            <asp:Button ID="btnAddStateUp" runat="server" Text="Add state ▲" CssClass="btn small" CausesValidation="false" />
-                            <asp:Button ID="btnAddStateDown" runat="server" Text="Add state ▼" CssClass="btn small" CausesValidation="false" />
-                            <asp:Button ID="btnEditStatus" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false" />
                             <asp:Button ID="btnUp" runat="server" Text="▲" CssClass="btn small" ToolTip="Move up" CausesValidation="false" OnClick="btnUp_Click" />
                             <asp:Button ID="btnDown" runat="server" Text="▼" CssClass="btn small" ToolTip="Move down" CausesValidation="false" OnClick="btnDown_Click" />
                             <asp:Button ID="btnEdit" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false" OnClick="btnEdit_Click" />
@@ -221,6 +215,8 @@
                     <!-- Edit status / sub-status -->
                     <asp:Panel ID="pnlEdit" runat="server" CssClass="panel" Visible="false">
                         <div class="form-grid">
+                            <asp:Label ID="lblEditStatusName" runat="server" Text="Status name" AssociatedControlID="txtEditStatus" />
+                            <asp:TextBox ID="txtEditStatus" runat="server" CssClass="inp" />
                             <span>Subtitle</span>
                             <asp:TextBox ID="txtEditSubtitle" runat="server" CssClass="inp" />
                             <span>Colours</span>
@@ -310,8 +306,8 @@
                                 <span><span class='<%# "tag " & Eval("TagClass") %>'><%# Server.HtmlEncode(Eval("TagText").ToString()) %></span></span>
                                 <span><%# Eval("UsersHtml") %></span>
                                 <span class="row-tools">
-                                    <asp:Button ID="btnUsers" runat="server" Text="Users" CssClass="btn small"
-                                        CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" OnClick="btnUsers_Click" />
+                                    <asp:Button ID="btnUsers" runat="server" Text="Users" CssClass="btn small" CommandName="Users"
+                                        CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" />
                                     <asp:Button ID="btnEditAction" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false"
                                         CommandName="EditAction" CommandArgument='<%# Eval("PlacementKey") %>' />
                                     <asp:Button ID="btnRemove" runat="server" Text="Remove from here" CssClass="btn small danger" CommandName="Remove"
@@ -323,6 +319,27 @@
                     </asp:Repeater>
                     <asp:Label ID="lblNoActions" runat="server" CssClass="empty" Text="No actions here yet. Place an existing action or create a new one." Visible="false" />
 
+                    <!-- Users of one placement -->
+                    <asp:Panel ID="pnlUsers" runat="server" CssClass="panel" Visible="false">
+                        <p class="sec-label"><asp:Literal ID="litUsersFor" runat="server" /></p>
+                        <asp:Repeater ID="rptUsers" runat="server" OnItemCommand="rptUsers_ItemCommand">
+                            <ItemTemplate>
+                                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--line)">
+                                    <span><%# Server.HtmlEncode(Eval("USER_ID").ToString()) %></span>
+                                    <asp:Button ID="btnRemoveUser" runat="server" Text="Remove" CssClass="btn small danger"
+                                        CommandName="RemoveUser" CommandArgument='<%# Eval("USER_ID") %>' CausesValidation="false" />
+                                </div>
+                            </ItemTemplate>
+                        </asp:Repeater>
+                        <p class="hint"><asp:Literal ID="litInheritedUsers" runat="server" /></p>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <asp:TextBox ID="txtAddUser" runat="server" CssClass="inp" placeholder="User ID, e.g. 2271" />
+                            <asp:Button ID="btnAddUser" runat="server" Text="Add user" CssClass="btn small primary" OnClick="btnAddUser_Click" />
+                        </div>
+                        <div class="panel-actions">
+                            <asp:Button ID="btnUsersClose" runat="server" Text="Done" CssClass="btn small" CausesValidation="false" OnClick="btnUsersClose_Click" />
+                        </div>
+                    </asp:Panel>
                 </div>
             </div>
         </div>

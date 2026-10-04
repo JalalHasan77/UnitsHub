@@ -741,6 +741,8 @@
                                             <asp:Label ID="lblPackageTitle" runat="server" Font-Names="Arial" Font-Size="20pt" ForeColor="Black" Text="Action Control" Font-Bold="True"></asp:Label>
                                             <asp:Label ID="lblProjectID" runat="server" CssClass="field-hint" >001</asp:Label>
                                             <asp:Label ID="lblSTATUSID" runat="server" CssClass="field-hint" >0000</asp:Label>
+                                            <asp:Label ID="lblSUBSTATEID" runat="server" CssClass="field-hint" >*</asp:Label>
+                                            <div><asp:Label ID="lblPlacement" runat="server" CssClass="field-hint" Text="" /></div>
                                             <asp:Label ID="lblActionID" runat="server" Text="Label" Visible="false"></asp:Label>
                                             <asp:Label ID="lblMode" runat="server" Text="Label" Visible="false"></asp:Label>
                                         </td>
@@ -849,7 +851,14 @@
                                                                 <div class="form-row">
                                                                     <div class="form-label">To Status</div>
                                                                     <div class="form-control-cell">
-                                                                        <asp:DropDownList ID="ddlToStatus" runat="server" CssClass="ddl-input" />
+                                                                        <div class="ddl-pair">
+                                                                            <asp:DropDownList ID="ddlToStatus" runat="server" CssClass="ddl-input"
+                                                                                AutoPostBack="true" OnSelectedIndexChanged="ddlToStatus_SelectedIndexChanged" />
+                                                                            <asp:DropDownList ID="ddlToSubStatus" runat="server" CssClass="ddl-input">
+                                                                                <asp:ListItem Text="No sub-status" Value="" />
+                                                                            </asp:DropDownList>
+                                                                        </div>
+                                                                        <div class="field-hint">Where the unit goes when this action is used from the place shown above.</div>
                                                                     </div>
                                                                 </div>
 
