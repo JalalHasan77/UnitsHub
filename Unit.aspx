@@ -606,6 +606,60 @@ html, body, form {
         }
 
         .tab-toolbar-left { display: flex; align-items: center; gap: 10px; }
+
+        /* Comments toolbar: title and "add" button together on the far left */
+        .tab-toolbar.tab-toolbar-start { justify-content: flex-start; gap: 10px; }
+
+        /* ---------- Comments: one 3-row box per comment ---------- */
+        .comment-list { display: flex; flex-direction: column; gap: 14px; }
+
+        .comment-card {
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .comment-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 14px;
+        }
+
+        .comment-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            color: var(--ink);
+        }
+
+        .comment-table tr:last-child td { border-bottom: none; }
+
+        /* Row 1: who and when */
+        .comment-table .comment-head td {
+            background: #1a1464;
+            color: #ffffff;
+            font-size: 13px;
+        }
+        .comment-head .lbl { font-weight: 700; }
+
+        /* Row 2: the comment itself, line breaks kept */
+        .comment-table .comment-body td {
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+
+        /* Row 3: attachments side by side, separated by commas */
+        .comment-table .comment-files td {
+            background: #f8fafc;
+            font-size: 13px;
+            word-break: break-word;
+        }
+        .comment-files .lbl { font-weight: 700; margin-right: 6px; }
+        .comment-files .none { color: var(--muted); }
         .tab-toolbar-label { font-size: 13px; font-weight: 600; color: var(--ink); }
 
         .tab-ddl {
@@ -1013,24 +1067,50 @@ html, body, form {
 
                             <%-- ---------- Comments ---------- --%>
                             <asp:View ID="viewComments" runat="server">
-                                <div class="grid-wrap">
-                                    <asp:GridView ID="gvComments"
+                                <%-- Toolbar: title and "Add Comment" button on the far left (button opens AddComment) --%>
+                                <div class="tab-toolbar tab-toolbar-start">
+                                    <span class="tab-toolbar-label">Comments</span>
+                                    <asp:ImageButton ID="btnAddComment"
                                         runat="server"
-                                        AutoGenerateColumns="False"
-                                        CssClass="pay-grid history-grid"
-                                        GridLines="None"
-                                        ShowHeaderWhenEmpty="True"
-                                        EmptyDataText="No comments for this unit or its customer yet.">
-                                        <EmptyDataRowStyle CssClass="empty" />
-                                        <Columns>
-                                            <asp:BoundField DataField="WHEN_TEXT" HeaderText="Date &amp; time" HtmlEncode="False" ItemStyle-CssClass="when" />
-                                            <asp:BoundField DataField="ABOUT_HTML" HeaderText="About" HtmlEncode="False" />
-                                            <asp:BoundField DataField="COMMENT_TEXT" HeaderText="Comment" ItemStyle-CssClass="summary" />
-                                            <asp:BoundField DataField="FILES_HTML" HeaderText="Files" HtmlEncode="False" />
-                                            <asp:BoundField DataField="CREATED_BY_NAME" HeaderText="By" />
-                                        </Columns>
-                                    </asp:GridView>
+                                        CssClass="add-btn"
+                                        CausesValidation="false"
+                                        ToolTip="Add Comment"
+                                        AlternateText="Add Comment"
+                                        OnClick="btnAddComment_Click"
+                                        ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='12' y1='5' x2='12' y2='19'/&gt;&lt;line x1='5' y1='12' x2='19' y2='12'/&gt;&lt;/svg&gt;" />
                                 </div>
+
+                                <%-- One box per comment, three rows:
+                                       1. Comment by: name, ID(user id), On: date and time
+                                       2. Comment text
+                                       3. Attachments as links side by side, separated by ", " --%>
+                                <div class="comment-list">
+                                    <asp:Repeater ID="rptComments" runat="server" OnItemDataBound="rptComments_ItemDataBound">
+                                        <ItemTemplate>
+                                            <div class="comment-card">
+                                                <table class="comment-table">
+                                                    <tr class="comment-head">
+                                                        <td><asp:Literal ID="litCommentHead" runat="server" /></td>
+                                                    </tr>
+                                                    <tr class="comment-body">
+                                                        <td><asp:Literal ID="litCommentText" runat="server" /></td>
+                                                    </tr>
+                                                    <tr class="comment-files">
+                                                        <td>
+                                                            <span class="lbl">Attachments:</span>
+                                                            <asp:Repeater ID="rptCommentFiles" runat="server" OnItemDataBound="rptCommentFiles_ItemDataBound">
+                                                                <ItemTemplate><asp:LinkButton ID="lnkCommentFile" runat="server" CssClass="file-link" CausesValidation="false" /></ItemTemplate>
+                                                                <SeparatorTemplate>, </SeparatorTemplate>
+                                                            </asp:Repeater>
+                                                            <asp:Label ID="lblNoFiles" runat="server" CssClass="none" Text="None" Visible="false" />
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </div>
+                                        </ItemTemplate>
+                                    </asp:Repeater>
+                                </div>
+                                <asp:Label ID="lblNoComments" runat="server" CssClass="tab-note" Text="No comments for this unit or its customer yet." Visible="false" />
                                 <asp:Label ID="lblCommentsNote" runat="server" CssClass="tab-note" Visible="false" />
                             </asp:View>
 

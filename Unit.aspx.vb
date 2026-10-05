@@ -26,8 +26,9 @@ Partial Class Unit
             Dim ContactId As String = GetUnitContactId(NodeId)
             UnitContactId = ContactId
             LoadDocCategories(NodeId)
-            BindComments(NodeId, ContactId)
             BindHistory()
+            ' Comments are bound in Page_PreRender (every request), like the attachments,
+            ' so each attachment link keeps its viewer popup after postbacks
         End If
 
     End Sub
@@ -255,6 +256,9 @@ Partial Class Unit
         ' file link and its viewer popup always exist
         BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
 
+        ' Comments: also rebuilt on every request, for the same reason (attachment links)
+        BindComments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
+
         Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
         If projectId = "" Then projectId = Convert.ToString(lblProjectId.Text).Trim()
 
@@ -271,6 +275,30 @@ Partial Class Unit
                                               "",
                                               VendorPopupHelper.PopupDisplayMode.FrameOnly,
                                               returnKey:=OpenActionPopupReturnKey)
+
+        ' "Add Comment" (Comments tab) opens AddComment for this unit, its project and its
+        ' current customer - no category, comments don't have one
+        Dim CommentUrl As String = "AddComment.aspx?NodeID=" & Server.UrlEncode(Convert.ToString(lblPID.Text).Trim()) &
+                                   "&ProjectId=" & Server.UrlEncode(projectId) &
+                                   "&ContactId=" & Server.UrlEncode(UnitContactId)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              btnAddComment,
+                                              CommentUrl,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
+    End Sub
+
+    ''' <summary>
+    ''' Runs when the AddComment popup closes: reloads the Comments tab so a new comment
+    ''' shows straight away, and keeps that tab selected.
+    ''' </summary>
+    Protected Sub btnAddComment_Click(sender As Object, e As ImageClickEventArgs)
+        ' The list itself is rebuilt in Page_PreRender
+        mvUnitTabs.ActiveViewIndex = 1
     End Sub
 
     ''' <summary>
@@ -485,20 +513,34 @@ Partial Class Unit
                                               returnKey:=OpenActionPopupReturnKey)
     End Sub
 
+    ''' <summary>Files of the comments being shown, by COMMENT_ID; filled by BindComments.</summary>
+    Private _commentFiles As Dictionary(Of String, List(Of DataRow))
+
     ''' <summary>
-    ''' Comments tab: comments about this unit or its current customer, newest first, with
-    ''' their own files (UNITSHUB_ATTACHMENTS whose COMMENT_ID is set) and who wrote them.
+    ''' Comments tab: comments about this unit or its current customer, newest first. Each
+    ''' comment is a box of three rows (see rptComments in the markup):
+    '''   1. Comment by: user name, ID(user id), On: yyyy MMM,dd HH:mm (Bahrain time)
+    '''   2. The comment text
+    '''   3. Its files (UNITSHUB_ATTACHMENTS whose COMMENT_ID is set) as links side by side,
+    '''      separated by commas; each opens the file in the DisplayInvoice viewer.
+    ''' Bound on EVERY request from Page_PreRender, so the links and their popups are always
+    ''' there after postbacks.
     ''' </summary>
     Private Sub BindComments(NodeId As String, ContactId As String)
+        lblCommentsNote.Visible = False
+        lblNoComments.Visible = False
+        _commentFiles = New Dictionary(Of String, List(Of DataRow))
+
         If NodeId = "" Then
-            gvComments.DataSource = Nothing
-            gvComments.DataBind()
+            rptComments.DataSource = Nothing
+            rptComments.DataBind()
+            lblNoComments.Visible = True
             Exit Sub
         End If
 
         Try
             Dim SQL As String = ""
-            SQL = SQL + vbCrLf + " SELECT c.COMMENT_ID, c.NODE_ID, c.CONTACT_ID, c.COMMENT_TEXT, c.CREATED_AT, "
+            SQL = SQL + vbCrLf + " SELECT c.COMMENT_ID, c.NODE_ID, c.CONTACT_ID, c.COMMENT_TEXT, c.CREATED_AT, c.CREATED_BY, "
             SQL = SQL + vbCrLf + "        NVL(u.FULL_NAME, c.CREATED_BY) AS CREATED_BY_NAME "
             SQL = SQL + vbCrLf + " FROM   UNITSHUB_COMMENTS c "
             SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_USERS u ON u.USER_ID = c.CREATED_BY "
@@ -507,43 +549,91 @@ Partial Class Unit
 
             Dim DT As DataTable = GetDataTable(EBDB, SQL)
             If DT Is Nothing Then DT = New DataTable()
-            DT.Columns.Add("WHEN_TEXT", GetType(String))
-            DT.Columns.Add("ABOUT_HTML", GetType(String))
-            DT.Columns.Add("FILES_HTML", GetType(String))
 
-            ' Files of all these comments in one query
-            Dim filesByComment As New Dictionary(Of String, List(Of String))
+            ' Files of all these comments in one query, grouped by comment
             If DT.Rows.Count > 0 Then
                 Dim filesDT As DataTable = GetDataTable(EBDB,
-                    "SELECT a.COMMENT_ID, a.FILE_NAME FROM UNITSHUB_ATTACHMENTS a " &
+                    "SELECT a.COMMENT_ID, a.ATTACHMENT_ID, a.FILE_NAME FROM UNITSHUB_ATTACHMENTS a " &
                     "JOIN UNITSHUB_COMMENTS c ON c.COMMENT_ID = a.COMMENT_ID " &
                     "WHERE a.IS_ACTIVE = 'Y' AND c.IS_ACTIVE = 'Y' AND " & UnitOrCustomerFilter("c", NodeId, ContactId) &
                     " ORDER BY a.COMMENT_ID, a.SORT_ORDER, a.ATTACHMENT_ID")
                 If filesDT IsNot Nothing Then
                     For Each f As DataRow In filesDT.Rows
                         Dim key As String = Convert.ToString(f("COMMENT_ID"))
-                        If Not filesByComment.ContainsKey(key) Then filesByComment(key) = New List(Of String)
-                        filesByComment(key).Add("<span class=""file-chip"">" & Server.HtmlEncode(Convert.ToString(f("FILE_NAME"))) & "</span>")
+                        If Not _commentFiles.ContainsKey(key) Then _commentFiles(key) = New List(Of DataRow)
+                        _commentFiles(key).Add(f)
                     Next
                 End If
             End If
 
-            For Each r As DataRow In DT.Rows
-                r("WHEN_TEXT") = FormatUnixTime(Convert.ToString(r("CREATED_AT")))
-                r("ABOUT_HTML") = AboutHtml(r("NODE_ID"), r("CONTACT_ID"))
-                Dim key As String = Convert.ToString(r("COMMENT_ID"))
-                r("FILES_HTML") = If(filesByComment.ContainsKey(key), String.Join("", filesByComment(key)), "")
-            Next
-
-            gvComments.DataSource = DT
-            gvComments.DataBind()
+            rptComments.DataSource = DT
+            rptComments.DataBind()
+            lblNoComments.Visible = (DT.Rows.Count = 0)
         Catch ex As Exception
-            gvComments.DataSource = Nothing
-            gvComments.DataBind()
+            rptComments.DataSource = Nothing
+            rptComments.DataBind()
             lblCommentsNote.Text = Server.HtmlEncode("Comments can't be shown: " & ex.Message)
             lblCommentsNote.Visible = True
         End Try
     End Sub
+
+    ''' <summary>One comment box: header row, text row, and its files in the third row.</summary>
+    Protected Sub rptComments_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
+
+        Dim litHead As Literal = CType(e.Item.FindControl("litCommentHead"), Literal)
+        Dim litText As Literal = CType(e.Item.FindControl("litCommentText"), Literal)
+        Dim rptFiles As Repeater = CType(e.Item.FindControl("rptCommentFiles"), Repeater)
+        Dim lblNoFiles As Label = CType(e.Item.FindControl("lblNoFiles"), Label)
+
+        ' Row 1: Comment by: <name>, ID(<user id>), On: <yyyy MMM,dd HH:mm>
+        Dim userName As String = Convert.ToString(r("CREATED_BY_NAME")).Trim()
+        Dim userId As String = Convert.ToString(r("CREATED_BY")).Trim()
+        litHead.Text = "<span class=""lbl"">Comment by:</span> " & Server.HtmlEncode(userName) &
+                       ", ID(" & Server.HtmlEncode(userId) & ")" &
+                       ", <span class=""lbl"">On:</span> " & Server.HtmlEncode(FormatCommentTime(Convert.ToString(r("CREATED_AT"))))
+
+        ' Row 2: the comment text (line breaks are kept by the CSS)
+        litText.Text = Server.HtmlEncode(Convert.ToString(r("COMMENT_TEXT")))
+
+        ' Row 3: its files, or "None"
+        Dim key As String = Convert.ToString(r("COMMENT_ID"))
+        Dim files As List(Of DataRow) = Nothing
+        If _commentFiles IsNot Nothing Then _commentFiles.TryGetValue(key, files)
+        If files IsNot Nothing AndAlso files.Count > 0 Then
+            rptFiles.DataSource = files
+            rptFiles.DataBind()
+            lblNoFiles.Visible = False
+        Else
+            rptFiles.DataSource = Nothing
+            rptFiles.DataBind()
+            lblNoFiles.Visible = True
+        End If
+    End Sub
+
+    ''' <summary>One attachment of a comment: a link that opens the file in the DisplayInvoice viewer.</summary>
+    Protected Sub rptCommentFiles_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim f As DataRow = CType(e.Item.DataItem, DataRow)
+        Dim lnk As LinkButton = CType(e.Item.FindControl("lnkCommentFile"), LinkButton)
+        Dim fileName As String = Convert.ToString(f("FILE_NAME")).Trim()
+
+        lnk.Text = Server.HtmlEncode(fileName)
+        lnk.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnk, Convert.ToString(f("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>
+    ''' Comment time (Unix seconds, UTC) in Bahrain time as "yyyy MMM,dd HH:mm",
+    ''' e.g. "2026 Oct,05 14:30"; shown as stored if it isn't a number.
+    ''' </summary>
+    Private Function FormatCommentTime(Value As String) As String
+        Dim seconds As Long
+        If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Return If(Value, "")
+        Dim bahrain As DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToOffset(TimeSpan.FromHours(3))
+        Return bahrain.ToString("yyyy MMM,dd HH:mm", CultureInfo.InvariantCulture)
+    End Function
 
     ''' <summary>Unix seconds (UTC) as Bahrain date (yyyy-MM-dd) and time (HH:mm); both "" if not a number.</summary>
     Private Sub SplitUnixTime(Value As String, ByRef DateText As String, ByRef TimeText As String)
