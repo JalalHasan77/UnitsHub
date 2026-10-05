@@ -620,6 +620,92 @@ html, body, form {
             font-size: 13px;
         }
 
+        /* List | Icons switch */
+        .view-toggle {
+            display: inline-flex;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .view-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 31px;
+            padding: 0 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .view-btn + .view-btn { border-left: 1.5px solid #e2e8f0; }
+        .view-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+        .view-btn:hover { color: #1a1464; background: #f1f4fb; }
+        .view-btn.active { background: #1a1464; color: #ffffff; }
+
+        /* Icons view: one tile per file */
+        .file-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+
+        .file-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 14px 10px 12px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            text-align: center;
+        }
+
+        .file-tile:hover { border-color: #1a1464; }
+        a.file-tile { text-decoration: none; cursor: pointer; }
+
+        .file-link {
+            color: #1a1464;
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        .file-link:hover { color: #3b82f6; }
+
+        .file-icon {
+            position: relative;
+            width: 44px;
+            height: 54px;
+            border-radius: 4px 14px 4px 4px;
+            background: #94a3b8;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 54px;
+            letter-spacing: .03em;
+        }
+
+        .file-icon.pdf { background: #dc2626; }
+        .file-icon.img { background: #16a34a; }
+        .file-icon.doc { background: #2563eb; }
+        .file-icon.xls { background: #15803d; }
+
+        .file-tile .name {
+            max-width: 100%;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink);
+            word-break: break-word;
+        }
+
+        .file-tile .doc { font-size: 11px; color: var(--muted); }
+
         .add-btn {
             width: 34px;
             height: 34px;
@@ -678,6 +764,7 @@ html, body, form {
         .history-grid tr:nth-child(even) td { background: #ffffff; }
         .history-grid tr:nth-child(odd) td { background: #f1f4fb; }
         .history-grid .when { white-space: nowrap; color: var(--muted); }
+        .history-grid .seq { width: 50px; color: var(--muted); }
         .history-grid .when .d { display: block; color: var(--ink); font-weight: 600; }
         .history-grid .when .t { display: block; font-size: 11px; }
         .history-grid .action { min-width: 130px; }
@@ -865,6 +952,14 @@ html, body, form {
                                         <asp:Label ID="lblDisplayAttachments" runat="server" Text="Display Attachments" AssociatedControlID="ddlDocCategory" CssClass="tab-toolbar-label" />
                                         <asp:DropDownList ID="ddlDocCategory" runat="server" CssClass="tab-ddl" AutoPostBack="true"
                                             OnSelectedIndexChanged="ddlDocCategory_SelectedIndexChanged" />
+
+                                        <%-- List / Icons switch for the attachments below --%>
+                                        <div class="view-toggle" role="group" aria-label="Attachments view">
+                                            <asp:LinkButton ID="lnkViewList" runat="server" CssClass="view-btn active" ToolTip="Show as list"
+                                                CausesValidation="false" OnClick="lnkViewList_Click"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>List</span></asp:LinkButton>
+                                            <asp:LinkButton ID="lnkViewIcons" runat="server" CssClass="view-btn" ToolTip="Show as icons"
+                                                CausesValidation="false" OnClick="lnkViewIcons_Click"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Icons</span></asp:LinkButton>
+                                        </div>
                                     </div>
                                     <asp:ImageButton ID="btnAddAttachment"
                                         runat="server"
@@ -876,6 +971,44 @@ html, body, form {
                                         ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='12' y1='5' x2='12' y2='19'/&gt;&lt;line x1='5' y1='12' x2='19' y2='12'/&gt;&lt;/svg&gt;" />
                                 </div>
                                 <asp:Literal ID="litAttachments" runat="server" />
+
+                                <%-- One block per category; inside it either the list (grid) or the icons (tiles).
+                                     Each file is a link that opens it in the DisplayInvoice viewer. --%>
+                                <asp:Repeater ID="rptAttachCategories" runat="server" OnItemDataBound="rptAttachCategories_ItemDataBound">
+                                    <ItemTemplate>
+                                        <div class="doc-category"><asp:Literal ID="litCategory" runat="server" /></div>
+
+                                        <asp:Panel ID="pnlList" runat="server" CssClass="grid-wrap">
+                                            <asp:GridView ID="gvAttachFiles" runat="server"
+                                                AutoGenerateColumns="False"
+                                                CssClass="pay-grid history-grid"
+                                                GridLines="None"
+                                                OnRowDataBound="gvAttachFiles_RowDataBound">
+                                                <Columns>
+                                                    <asp:BoundField DataField="SEQ_NO" HeaderText="Seq" ItemStyle-CssClass="seq" />
+                                                    <asp:BoundField DataField="DATE_TEXT" HeaderText="Date" ItemStyle-CssClass="when" />
+                                                    <asp:BoundField DataField="TIME_TEXT" HeaderText="Time" ItemStyle-CssClass="when" />
+                                                    <asp:BoundField DataField="ADDED_BY" HeaderText="Added By" />
+                                                    <asp:TemplateField HeaderText="Document">
+                                                        <ItemTemplate>
+                                                            <asp:LinkButton ID="lnkFile" runat="server" CssClass="file-link" CausesValidation="false" />
+                                                        </ItemTemplate>
+                                                    </asp:TemplateField>
+                                                </Columns>
+                                            </asp:GridView>
+                                        </asp:Panel>
+
+                                        <asp:Panel ID="pnlIcons" runat="server" CssClass="file-tiles">
+                                            <asp:Repeater ID="rptTiles" runat="server" OnItemDataBound="rptTiles_ItemDataBound">
+                                                <ItemTemplate>
+                                                    <asp:LinkButton ID="lnkTile" runat="server" CssClass="file-tile" CausesValidation="false">
+                                                        <asp:Literal ID="litTile" runat="server" />
+                                                    </asp:LinkButton>
+                                                </ItemTemplate>
+                                            </asp:Repeater>
+                                        </asp:Panel>
+                                    </ItemTemplate>
+                                </asp:Repeater>
                             </asp:View>
 
                             <%-- ---------- Comments ---------- --%>

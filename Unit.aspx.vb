@@ -26,7 +26,6 @@ Partial Class Unit
             Dim ContactId As String = GetUnitContactId(NodeId)
             UnitContactId = ContactId
             LoadDocCategories(NodeId)
-            BindAttachments(NodeId, ContactId)
             BindComments(NodeId, ContactId)
             BindHistory()
         End If
@@ -240,7 +239,6 @@ Partial Class Unit
 
     ''' <summary>Shows only the chosen category's documents ("All" = every category).</summary>
     Protected Sub ddlDocCategory_SelectedIndexChanged(sender As Object, e As EventArgs)
-        BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
         mvUnitTabs.ActiveViewIndex = 0
     End Sub
 
@@ -253,6 +251,10 @@ Partial Class Unit
     ''' current category.
     ''' </summary>
     Protected Sub Page_PreRender(sender As Object, e As EventArgs) Handles Me.PreRender
+        ' Attachments: rebuilt on every request (after any filter / view change), so each
+        ' file link and its viewer popup always exist
+        BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
+
         Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
         If projectId = "" Then projectId = Convert.ToString(lblProjectId.Text).Trim()
 
@@ -276,88 +278,211 @@ Partial Class Unit
     ''' added there shows straight away, and keeps that tab selected.
     ''' </summary>
     Protected Sub btnAddAttachment_Click(sender As Object, e As ImageClickEventArgs)
-        BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
+        mvUnitTabs.ActiveViewIndex = 0
+    End Sub
+
+    ''' <summary>How attachments are shown: "list" (default) or "icons". Kept across postbacks.</summary>
+    Private Property AttachView As String
+        Get
+            Dim v As String = Convert.ToString(ViewState("AttachView"))
+            Return If(v = "", "list", v)
+        End Get
+        Set(value As String)
+            ViewState("AttachView") = value
+        End Set
+    End Property
+
+    Protected Sub lnkViewList_Click(sender As Object, e As EventArgs)
+        SetAttachView("list")
+    End Sub
+
+    Protected Sub lnkViewIcons_Click(sender As Object, e As EventArgs)
+        SetAttachView("icons")
+    End Sub
+
+    ''' <summary>Switches List / Icons, marks the active button and redraws the attachments.</summary>
+    Private Sub SetAttachView(View As String)
+        AttachView = View
+        lnkViewList.CssClass = "view-btn" & If(View = "list", " active", "")
+        lnkViewIcons.CssClass = "view-btn" & If(View = "icons", " active", "")
         mvUnitTabs.ActiveViewIndex = 0
     End Sub
 
     ''' <summary>
-    ''' Attachments tab: documents about this unit or its current customer, grouped by
-    ''' category (UNITSHUB_DOC_CATEGORIES), each with its files (UNITSHUB_ATTACHMENTS whose
-    ''' DOCUMENT_ID is set). Comment files are not listed here - they're in Comments.
+    ''' Attachments tab: files of the documents about this unit or its current customer,
+    ''' grouped by category (rptAttachCategories). Inside each category, the List view shows
+    ''' a grid (Seq | Date | Time | Added By | Document) and the Icons view shows tiles. In
+    ''' both, each file is a link that opens it in the DisplayInvoice viewer (see
+    ''' RegisterFilePopup). Bound on EVERY request from Page_PreRender, so the links and their
+    ''' popups are always there after postbacks.
     ''' </summary>
     Private Sub BindAttachments(NodeId As String, ContactId As String)
+        litAttachments.Text = ""
+        _attachFiles = Nothing
+
         If NodeId = "" Then
             litAttachments.Text = "<span class=""tab-note"">No unit was given.</span>"
+            BindAttachCategories(Nothing)
             Exit Sub
         End If
 
         Try
             Dim SQL As String = ""
-            SQL = SQL + vbCrLf + " SELECT c.TITLE AS CATEGORY, d.DOCUMENT_ID, d.TITLE, d.DOC_DATE, d.EXPIRY_DATE, "
-            SQL = SQL + vbCrLf + "        d.NODE_ID, d.CONTACT_ID, a.FILE_NAME "
+            SQL = SQL + vbCrLf + " SELECT c.CATEGORY_ID, c.TITLE AS CATEGORY, NVL(c.SORT_ORDER, 0) AS CAT_SORT, "
+            SQL = SQL + vbCrLf + "        d.DOCUMENT_ID, d.TITLE, d.NODE_ID, d.CONTACT_ID, "
+            SQL = SQL + vbCrLf + "        a.ATTACHMENT_ID, a.FILE_NAME, a.CREATED_AT AS FILE_CREATED_AT, "
+            SQL = SQL + vbCrLf + "        NVL(u.FULL_NAME, a.CREATED_BY) AS ADDED_BY "
             SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOCUMENTS d "
             SQL = SQL + vbCrLf + " JOIN   UNITSHUB_DOC_CATEGORIES c ON c.CATEGORY_ID = d.CATEGORY_ID "
-            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_ATTACHMENTS a "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTACHMENTS a "
             SQL = SQL + vbCrLf + "        ON a.DOCUMENT_ID = d.DOCUMENT_ID AND a.IS_ACTIVE = 'Y' "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_USERS u ON u.USER_ID = a.CREATED_BY "
             SQL = SQL + vbCrLf + " WHERE  d.IS_ACTIVE = 'Y' AND " & UnitOrCustomerFilter("d", NodeId, ContactId)
             ' "Display Attachments" filter ("All" = no filter)
             If ddlDocCategory.SelectedValue <> "" Then
                 SQL = SQL + vbCrLf + "   AND  d.CATEGORY_ID = '" & ddlDocCategory.SelectedValue.Replace("'", "''") & "' "
             End If
-            SQL = SQL + vbCrLf + " ORDER BY c.SORT_ORDER, c.TITLE, d.TITLE, d.DOCUMENT_ID, a.SORT_ORDER, a.ATTACHMENT_ID "
+            SQL = SQL + vbCrLf + " ORDER BY NVL(c.SORT_ORDER, 0), c.TITLE, a.CREATED_AT, a.ATTACHMENT_ID "
 
             Dim DT As DataTable = GetDataTable(EBDB, SQL)
             If DT Is Nothing OrElse DT.Rows.Count = 0 Then
                 litAttachments.Text = If(ddlDocCategory.SelectedValue = "",
-                    "<span class=""tab-note"">No documents for this unit or its customer yet.</span>",
+                    "<span class=""tab-note"">No files for this unit or its customer yet.</span>",
                     "<span class=""tab-note"">No " & Server.HtmlEncode(ddlDocCategory.SelectedItem.Text) & " for this unit or its customer.</span>")
+                BindAttachCategories(Nothing)
                 Exit Sub
             End If
 
-            ' One table per category, one row per document, its files as chips
-            Dim html As New System.Text.StringBuilder()
-            Dim currentCategory As String = Nothing
-            Dim currentDoc As String = Nothing
-            Dim files As New List(Of String)
-            Dim docRow As DataRow = Nothing
-
-            Dim flushDoc = Sub()
-                               If docRow Is Nothing Then Return
-                               html.Append("<tr><td>" & Server.HtmlEncode(Convert.ToString(docRow("TITLE"))) & "</td>")
-                               html.Append("<td>" & AboutHtml(docRow("NODE_ID"), docRow("CONTACT_ID")) & "</td>")
-                               html.Append("<td>" & FormatDateValue(docRow("DOC_DATE")) & "</td>")
-                               html.Append("<td>" & FormatDateValue(docRow("EXPIRY_DATE")) & "</td>")
-                               html.Append("<td>" & If(files.Count = 0, "<span class=""tab-note"" style=""padding:0"">No files</span>", String.Join("", files)) & "</td></tr>")
-                               files.Clear()
-                           End Sub
-
+            ' Per-file display columns
+            DT.Columns.Add("SEQ_NO", GetType(Integer))
+            DT.Columns.Add("DATE_TEXT", GetType(String))
+            DT.Columns.Add("TIME_TEXT", GetType(String))
+            Dim seq As Integer = 0
+            Dim lastCategory As String = Nothing
             For Each r As DataRow In DT.Rows
-                Dim category As String = Convert.ToString(r("CATEGORY"))
-                Dim docId As String = Convert.ToString(r("DOCUMENT_ID"))
-
-                If docId <> currentDoc Then
-                    flushDoc()
-                    docRow = r
-                    currentDoc = docId
-                End If
-
-                If category <> currentCategory Then
-                    If currentCategory IsNot Nothing Then html.Append("</table></div>")
-                    html.Append("<div class=""doc-category"">" & Server.HtmlEncode(category) & "</div>")
-                    html.Append("<div class=""grid-wrap""><table class=""pay-grid history-grid""><tr><th>Document</th><th>About</th><th>Date</th><th>Expiry</th><th>Files</th></tr>")
-                    currentCategory = category
-                End If
-
-                Dim fileName As String = Convert.ToString(r("FILE_NAME")).Trim()
-                If fileName <> "" Then files.Add("<span class=""file-chip"">" & Server.HtmlEncode(fileName) & "</span>")
+                Dim cat As String = Convert.ToString(r("CATEGORY_ID"))
+                If cat <> lastCategory Then seq = 0 : lastCategory = cat
+                seq += 1
+                r("SEQ_NO") = seq
+                Dim d As String = "", t As String = ""
+                SplitUnixTime(Convert.ToString(r("FILE_CREATED_AT")), d, t)
+                r("DATE_TEXT") = d
+                r("TIME_TEXT") = t
             Next
-            flushDoc()
-            html.Append("</table></div>")
 
-            litAttachments.Text = html.ToString()
+            _attachFiles = DT
+            BindAttachCategories(DT)
         Catch ex As Exception
             litAttachments.Text = "<span class=""tab-note"">Attachments can't be shown: " & Server.HtmlEncode(ex.Message) & "</span>"
+            BindAttachCategories(Nothing)
         End Try
+    End Sub
+
+    ' Files of the current bind, used by the nested category binding below
+    Private _attachFiles As DataTable
+
+    ''' <summary>Binds one block per category (in the order the files came back).</summary>
+    Private Sub BindAttachCategories(Files As DataTable)
+        Dim cats As New DataTable()
+        cats.Columns.Add("CATEGORY_ID", GetType(String))
+        cats.Columns.Add("CATEGORY", GetType(String))
+        If Files IsNot Nothing Then
+            Dim seen As New List(Of String)
+            For Each r As DataRow In Files.Rows
+                Dim id As String = Convert.ToString(r("CATEGORY_ID"))
+                If Not seen.Contains(id) Then
+                    seen.Add(id)
+                    cats.Rows.Add(id, Convert.ToString(r("CATEGORY")))
+                End If
+            Next
+        End If
+        rptAttachCategories.DataSource = cats
+        rptAttachCategories.DataBind()
+    End Sub
+
+    ''' <summary>Fills one category block: its heading, and its files as a grid or as tiles.</summary>
+    Protected Sub rptAttachCategories_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim cat As DataRowView = CType(e.Item.DataItem, DataRowView)
+        Dim categoryId As String = Convert.ToString(cat("CATEGORY_ID"))
+
+        CType(e.Item.FindControl("litCategory"), Literal).Text = Server.HtmlEncode(Convert.ToString(cat("CATEGORY")))
+
+        Dim files As DataTable = _attachFiles.Clone()
+        For Each r As DataRow In _attachFiles.Rows
+            If Convert.ToString(r("CATEGORY_ID")) = categoryId Then files.ImportRow(r)
+        Next
+
+        Dim showIcons As Boolean = (AttachView = "icons")
+        Dim pnlList As Panel = CType(e.Item.FindControl("pnlList"), Panel)
+        Dim pnlIcons As Panel = CType(e.Item.FindControl("pnlIcons"), Panel)
+        pnlList.Visible = Not showIcons
+        pnlIcons.Visible = showIcons
+
+        If showIcons Then
+            Dim rptTiles As Repeater = CType(e.Item.FindControl("rptTiles"), Repeater)
+            rptTiles.DataSource = files
+            rptTiles.DataBind()
+        Else
+            Dim gv As GridView = CType(e.Item.FindControl("gvAttachFiles"), GridView)
+            gv.DataSource = files
+            gv.DataBind()
+        End If
+    End Sub
+
+    ''' <summary>List view: the Document cell is a link that opens the file.</summary>
+    Protected Sub gvAttachFiles_RowDataBound(sender As Object, e As GridViewRowEventArgs)
+        If e.Row.RowType <> DataControlRowType.DataRow Then Exit Sub
+        Dim r As DataRowView = CType(e.Row.DataItem, DataRowView)
+        Dim lnkFile As LinkButton = CType(e.Row.FindControl("lnkFile"), LinkButton)
+        Dim fileName As String = Convert.ToString(r("FILE_NAME"))
+
+        lnkFile.Text = Server.HtmlEncode(fileName)
+        lnkFile.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnkFile, Convert.ToString(r("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>Icons view: the whole tile is a link that opens the file.</summary>
+    Protected Sub rptTiles_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
+        Dim lnkTile As LinkButton = CType(e.Item.FindControl("lnkTile"), LinkButton)
+        Dim litTile As Literal = CType(e.Item.FindControl("litTile"), Literal)
+
+        Dim fileName As String = Convert.ToString(r("FILE_NAME")).Trim()
+        Dim ext As String = Path.GetExtension(fileName).TrimStart("."c).ToLowerInvariant()
+        Dim iconClass As String
+        Select Case ext
+            Case "pdf" : iconClass = "pdf"
+            Case "jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff" : iconClass = "img"
+            Case "doc", "docx" : iconClass = "doc"
+            Case "xls", "xlsx" : iconClass = "xls"
+            Case Else : iconClass = ""
+        End Select
+
+        litTile.Text = "<span class=""file-icon " & iconClass & """>" & Server.HtmlEncode(If(ext = "", "-", ext.ToUpperInvariant())) & "</span>" &
+                       "<span class=""name"">" & Server.HtmlEncode(fileName) & "</span>" &
+                       "<span class=""doc"">" & Server.HtmlEncode(Convert.ToString(r("ADDED_BY")) & " · " & Convert.ToString(r("DATE_TEXT"))) & "</span>" &
+                       AboutHtml(r("NODE_ID"), r("CONTACT_ID"))
+        lnkTile.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnkTile, Convert.ToString(r("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>
+    ''' Opens a stored file in the DisplayInvoice viewer - the same popup used for invoices.
+    ''' The viewer looks the file up by its ATTACHMENT_ID.
+    ''' </summary>
+    Private Sub RegisterFilePopup(Link As LinkButton, AttachmentId As String)
+        Dim Url As String = "DisplayInvoice.aspx?AttachmentId=" & Server.UrlEncode(AttachmentId)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              Link,
+                                              Url,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
     End Sub
 
     ''' <summary>
@@ -418,6 +543,17 @@ Partial Class Unit
             lblCommentsNote.Text = Server.HtmlEncode("Comments can't be shown: " & ex.Message)
             lblCommentsNote.Visible = True
         End Try
+    End Sub
+
+    ''' <summary>Unix seconds (UTC) as Bahrain date (yyyy-MM-dd) and time (HH:mm); both "" if not a number.</summary>
+    Private Sub SplitUnixTime(Value As String, ByRef DateText As String, ByRef TimeText As String)
+        DateText = ""
+        TimeText = ""
+        Dim seconds As Long
+        If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Exit Sub
+        Dim bahrain As DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToOffset(TimeSpan.FromHours(3))
+        DateText = bahrain.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        TimeText = bahrain.ToString("HH:mm", CultureInfo.InvariantCulture)
     End Sub
 
     ''' <summary>A DATE (or date text) as yyyy-MM-dd; "" when empty.</summary>
