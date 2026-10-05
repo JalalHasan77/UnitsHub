@@ -554,6 +554,16 @@
         display: inline-block;
     white-space: nowrap;
 }
+/* Reference column: link that opens the Unit page */
+.refLink {
+    color: #1a1464;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.refLink:hover { color: #3b82f6; }
 </style>
  
 
@@ -858,6 +868,16 @@
             </ItemTemplate>
             <ItemStyle Width="106px" HorizontalAlign="Center" />
             <HeaderStyle Width="106px" HorizontalAlign="Center" />
+        </asp:TemplateField>
+        <%-- Reference: always the first column after Status. A link that opens the Unit page
+             (text and popup are set in WireReferenceLinks, MainPage.aspx.vb). The auto-generated
+             "Reference" column is hidden so the value isn't shown twice. --%>
+        <asp:TemplateField HeaderText="Reference">
+            <ItemTemplate>
+                <asp:LinkButton ID="lnkReference" runat="server" CssClass="refLink" CausesValidation="False" />
+            </ItemTemplate>
+            <ItemStyle HorizontalAlign="Center" Wrap="False" />
+            <HeaderStyle HorizontalAlign="Center" />
         </asp:TemplateField>
     </Columns>
     <EditRowStyle BackColor="#999999" HorizontalAlign="Center" />

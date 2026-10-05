@@ -14,8 +14,6 @@ Partial Class Unit
         If Not Page.IsPostBack Then
             lblPID.Text = Request("NodeID")
             lblPRJID.Text = Request("ProjectId")
-            lblSTATEID.Text = Request("STATEID")
-            lblActionID.Text = Request("ActionId")
 
             LoadProject()
             LoadAttributes()
@@ -788,6 +786,7 @@ Partial Class Unit
     ''' DATENTIME is a Unix timestamp in seconds (UTC). Shown in Bahrain time (UTC+3) on two
     ''' lines - date above (yyyy-MM-dd), time below (HH:mm) - or as stored if it isn't a number.
     ''' </summary>
+    ''' 
     Private Function FormatUnixTime(Value As String) As String
         Dim seconds As Long
         If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Return Server.HtmlEncode(If(Value, ""))
