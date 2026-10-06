@@ -140,6 +140,15 @@
 
         .txt-input::placeholder { color: #a0aec0; }
 
+        /* ReadOnly mode (?mode=ReadOnly): fields shown but locked */
+        .txt-input[readonly], .ddl-input:disabled {
+            background: #f8fafc;
+            color: var(--ink, #1e293b);
+            cursor: default;
+            opacity: 1;
+        }
+        .txt-input[readonly]:focus { box-shadow: none; }
+
         .txt-input:focus, .ddl-input:focus {
             outline: none;
             border-color: var(--brand-2);

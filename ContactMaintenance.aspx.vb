@@ -189,6 +189,7 @@ Partial Class ContactMaintenance
     End Sub
 
     Protected Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
+        If IsReadOnlyMode Then Return   ' nothing can be saved in ReadOnly mode
         Try
             If Not Page.IsValid Then
                 Return
@@ -199,7 +200,7 @@ Partial Class ContactMaintenance
             lblMessage.Text = "Contact details saved successfully."
             lblMessage.Visible = True
 
-            If lblIsDialogue.Text <> "yes" Then Exit Sub
+            If lblIsDialogue.Text.ToLower <> "yes".ToLower Then Exit Sub
 
 
             'Dim RowValues As New Dictionary(Of String, Object)
@@ -376,6 +377,53 @@ Partial Class ContactMaintenance
         End If
     End Sub
 
+    ' ==================================================================
+    ' ReadOnly mode (?mode=ReadOnly, e.g. opened from the customer name on Unit.aspx)
+    ' ==================================================================
+
+    ''' <summary>True when the page was opened with mode=ReadOnly (any letter case).</summary>
+    Private ReadOnly Property IsReadOnlyMode As Boolean
+        Get
+            Return String.Equals(Convert.ToString(lblMode.Text).Trim(), "ReadOnly", StringComparison.OrdinalIgnoreCase)
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' ReadOnly mode: every field on General, Contact Details and Address is locked, the
+    ''' buttons that change data (Save, Load, Cal, Calculate, check, import) are hidden, and
+    ''' the calendars can't open. Tabs, the attachment filter / List-Icons switch and the
+    ''' file links, and adding attachments / comments ("+") still work. Runs on every request.
+    ''' </summary>
+    Private Sub ApplyReadOnlyMode()
+        If Not IsReadOnlyMode Then Exit Sub
+
+        LockFields(Panel1)   ' General
+        LockFields(Panel2)   ' Contact Details
+        LockFields(Panel3)   ' Address
+
+        btnSave.Visible = False
+        btnLoad.Visible = False
+    End Sub
+
+    ''' <summary>Locks every input under Parent (searched all the way down).</summary>
+    Private Sub LockFields(Parent As Control)
+        For Each c As Control In Parent.Controls
+            If TypeOf c Is TextBox Then
+                CType(c, TextBox).ReadOnly = True
+            ElseIf TypeOf c Is ListControl Then          ' DropDownList, CheckBoxList, RadioButtonList
+                CType(c, ListControl).Enabled = False
+            ElseIf TypeOf c Is CheckBox Then             ' CheckBox and RadioButton
+                CType(c, CheckBox).Enabled = False
+            ElseIf TypeOf c Is Button OrElse TypeOf c Is ImageButton Then
+                c.Visible = False                         ' Cal / Calculate / check / import
+            ElseIf TypeOf c Is System.Web.UI.WebControls.Calendar Then   ' full name: Imports System.Globalization also has a Calendar
+                c.Visible = False
+            End If
+
+            If c.HasControls() Then LockFields(c)
+        Next
+    End Sub
+
     Private Sub ContactMaintenance_Load(sender As Object, e As EventArgs) Handles Me.Load
         If Not Page.IsPostBack Then
 
@@ -391,9 +439,9 @@ Partial Class ContactMaintenance
                 lblIsDialogue.Text = Request("isDialogue")
             End If
 
-            lblID.Text = "000324"
-            lblMode.Text = "Edit"
-            lblIsDialogue.Text = "No"
+            'lblID.Text = "000324"
+            'lblMode.Text = "Edit"
+            'lblIsDialogue.Text = "No"
 
             ' "Display Attachments" filter of the Attachments tab
             LoadDocCategories()
@@ -484,9 +532,13 @@ Partial Class ContactMaintenance
     Protected Sub Page_PreRender(sender As Object, e As EventArgs) Handles Me.PreRender
         Dim ContactId As String = CurrentContactId
 
+        ApplyReadOnlyMode()
+
         BindAttachments(ContactId)
         BindComments(ContactId)
 
+        ' "+" buttons: for a saved contact, also in ReadOnly mode (only the contact's own
+        ' fields are locked there; attachments and comments can still be added)
         btnAddAttachment.Visible = (ContactId <> "")
         btnAddComment.Visible = (ContactId <> "")
         If ContactId = "" Then Exit Sub

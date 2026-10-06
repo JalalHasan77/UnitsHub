@@ -26,6 +26,7 @@ Partial Class Unit
             Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
             Dim ContactId As String = GetUnitContactId(NodeId)
             UnitContactId = ContactId
+            LoadCustomer(ContactId)
             LoadDocCategories(NodeId)
             BindHistory()
             ' Comments are bound in Page_PreRender (every request), like the attachments,
@@ -183,6 +184,47 @@ Partial Class Unit
         Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
     End Function
 
+    ''' <summary>
+    ''' CUSTOMER box under UNIT DETAILS: the unit's current customer (UNITSHUB_CONTACTS.ID =
+    ''' the CONTACT_ID found by GetUnitContactId). Shows Full Name (NAME), National ID/CPR
+    ''' (NATIONALID), Mobile 1 (MOBILE) and Mobile 2 (BUSINESSPHONE, the field ContactMaintenance
+    ''' saves "Mobile 2" in) - Mobile 2 only when it has a number.
+    ''' </summary>
+    Private Sub LoadCustomer(ContactId As String)
+        phCustomer.Visible = False
+        lblNoCustomer.Visible = False
+
+        If ContactId = "" Then
+            lblNoCustomer.Visible = True
+            Exit Sub
+        End If
+
+        Try
+            Dim DT As DataTable = GetDataTable(EBDB,
+                "SELECT NAME, NATIONALID, MOBILE, BUSINESSPHONE FROM UNITSHUB_CONTACTS " &
+                "WHERE ID = '" & ContactId.Replace("'", "''") & "'")
+            If DT Is Nothing OrElse DT.Rows.Count = 0 Then
+                lblNoCustomer.Text = "The linked customer (" & Server.HtmlEncode(ContactId) & ") wasn't found."
+                lblNoCustomer.Visible = True
+                Exit Sub
+            End If
+
+            Dim r As DataRow = DT.Rows(0)
+            lnkCustomerName.Text = Server.HtmlEncode(Convert.ToString(r("NAME")).Trim())
+            lblCustomerNationalId.Text = Server.HtmlEncode(Convert.ToString(r("NATIONALID")).Trim())
+            lblCustomerMobile1.Text = Server.HtmlEncode(Convert.ToString(r("MOBILE")).Trim())
+
+            Dim mobile2 As String = Convert.ToString(r("BUSINESSPHONE")).Trim()
+            lblCustomerMobile2.Text = Server.HtmlEncode(mobile2)
+            phCustomerMobile2.Visible = (mobile2 <> "")
+
+            phCustomer.Visible = True
+        Catch ex As Exception
+            lblNoCustomer.Text = Server.HtmlEncode("Customer can't be shown: " & ex.Message)
+            lblNoCustomer.Visible = True
+        End Try
+    End Sub
+
     ''' <summary>"WHERE" part for items about this unit, or about its current customer.</summary>
     Private Function UnitOrCustomerFilter(Alias_ As String, NodeId As String, ContactId As String) As String
         Dim f As String = Alias_ & ".NODE_ID = '" & NodeId.Trim().Replace("'", "''") & "'"
@@ -251,6 +293,19 @@ Partial Class Unit
     ''' current category.
     ''' </summary>
     Protected Sub Page_PreRender(sender As Object, e As EventArgs) Handles Me.PreRender
+        ' Customer name opens the customer in ContactMaintenance (read-only). Registered on
+        ' every request so the link keeps its popup after postbacks.
+        If UnitContactId <> "" AndAlso phCustomer.Visible Then
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                  lnkCustomerName,
+                                  "ContactMaintenance.aspx?&ID=" & Server.UrlEncode(UnitContactId) & "&mode=ReadOnly&isDialogue=yes&",
+                                  950,
+                                  750,
+                                  PopupPlacement.Center,
+                                  "Select Adj",
+                                  VendorPopupHelper.PopupDisplayMode.FrameOnly)
+        End If
+
         ' Attachments: rebuilt on every request (after any filter / view change), so each
         ' file link and its viewer popup always exist
         BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)

@@ -153,22 +153,50 @@ Partial Class MainPage
         dt.Columns.Add("TYPE")
         dt.Columns.Add("INDX")
         dt.Columns.Add("PARENT")
+        ' Optional, for links that open through VendorPopupHelper instead of openMenuLink:
+        '   POPUP = "Y", POPUPTITLE = the popup's title, RETURNKEY = the popup's return key ("" = none)
+        dt.Columns.Add("POPUP")
+        dt.Columns.Add("POPUPTITLE")
+        dt.Columns.Add("RETURNKEY")
 
-        dt.Rows.Add("EMAIL TODAY", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
-        dt.Rows.Add("ADMIN", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
-        dt.Rows.Add("Events Control", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
-        dt.Rows.Add("Charts and Statistics", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
-        dt.Rows.Add("Dashboard", "frmDashboard.aspx", 800, 550, "Y", "ADM,FCD,ALL", "LINK", "4.1", "4")
-        dt.Rows.Add("Reminder Today", "frmEmailToday.aspx", 800, 550, "Y", "ADM", "LINK", "1.1", "1")
-        dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
-        dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")
-        dt.Rows.Add("Uploadees Control", "frmUploadees.aspx", 800, 550, "Y", "ADM", "LINK", "2.3", "2")
-        dt.Rows.Add("Start Today Event", "frmTodaysEvent.aspx", 800, 550, "Y", "ADM", "LINK", "1.2", "1")
-        dt.Rows.Add("Requested-By-Me OnGoing", "frmStateActionsUsersPackages.aspx", 800, 550, "Y", "ADM,FCD", "LINK", "3.1", "3")
-        dt.Rows.Add("Requested-From-Me OnGoing", "frmStateActionsUsersPackagesRequestedFromMe.aspx", 800, 550, "Y", "ADM", "LINK", "3.2", "3")
-        dt.Rows.Add("Upcoming Events", "frmUpcomingsAuthorities.aspx", 800, 550, "Y", "ADM", "LINK", "3.3", "3")
-        dt.Rows.Add("User Management", "frmUsers.aspx", 800, 550, "Y", "ADM,ALL", "LINK", "2.4", "2")
-        dt.Rows.Add("Vacations Control", "frmVacations.aspx", 800, 550, "Y", "ADM", "LINK", "2.5", "2")
+        'dt.Rows.Add("EMAIL TODAY", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
+        dt.Rows.Add("CUSTOMER", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
+        'dt.Rows.Add("ADMIN", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
+        'dt.Rows.Add("Events Control", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
+        'dt.Rows.Add("Charts and Statistics", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
+        Dim MemberListParameters As New clsListProperties
+        With MemberListParameters
+            .ItemsSQL = "Select ID, NAME, NATIONALID from UNITSHUB_CONTACTS "
+            .CheckedItemsSQL = ""
+            .FormTitle = "Select Customer"
+            .ColumnHideAndShow = "YNN"
+            .EditableColumns = "NNN"
+            .ColumnsWidth = New Double() {3, 1}
+            .HoverableList = "Y"
+        End With
+        Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
+        ' "Maintain A Customer" = pick an existing customer from the list
+        dt.Rows.Add("Maintain A Customer",
+                    "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
+                    400, 500, "Y", "ADM", "LINK", "1.1", "1",
+                    "Y", "Select Adj", "SelectedCustomer")
+        ' "Add New Customer" = empty ContactMaintenance form for a new customer
+        dt.Rows.Add("Add New Customer",
+                    "ContactMaintenance.aspx?mode=New&isDialogue=Yes",
+                    950, 750, "Y", "ADM", "LINK", "1.2", "1",
+                    "Y", "", "")
+
+        'dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
+        'dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")
+        'dt.Rows.Add("Uploadees Control", "frmUploadees.aspx", 800, 550, "Y", "ADM", "LINK", "2.3", "2")
+        'dt.Rows.Add("User Management", "frmUsers.aspx", 800, 550, "Y", "ADM,ALL", "LINK", "2.4", "2")
+        'dt.Rows.Add("Vacations Control", "frmVacations.aspx", 800, 550, "Y", "ADM", "LINK", "2.5", "2")
+
+        'dt.Rows.Add("Requested-By-Me OnGoing", "frmStateActionsUsersPackages.aspx", 800, 550, "Y", "ADM,FCD", "LINK", "3.1", "3")
+        'dt.Rows.Add("Requested-From-Me OnGoing", "frmStateActionsUsersPackagesRequestedFromMe.aspx", 800, 550, "Y", "ADM", "LINK", "3.2", "3")
+        'dt.Rows.Add("Upcoming Events", "frmUpcomingsAuthorities.aspx", 800, 550, "Y", "ADM", "LINK", "3.3", "3")
+
+        'dt.Rows.Add("Dashboard", "frmDashboard.aspx", 800, 550, "Y", "ADM,FCD,ALL", "LINK", "4.1", "4")
 
         Dim currentRole As String = GetCurrentUserRole()
 
@@ -202,10 +230,18 @@ Partial Class MainPage
                 Dim width As Integer = childRow.Field(Of Integer)("WIDTH")
                 Dim height As Integer = childRow.Field(Of Integer)("HEIGHT")
 
-                sb.Append("<a class=""sideMenuItem"" href=""javascript:void(0);"" onclick=""openMenuLink('") _
-                  .Append(Server.HtmlEncode(url)).Append("', ").Append(width).Append(", ").Append(height).Append("); return false;"">") _
-                  .Append(Server.HtmlEncode(childRow.Field(Of String)("TITLE"))) _
-                  .Append("</a>")
+                If String.Equals(childRow.Field(Of String)("POPUP"), "Y", StringComparison.OrdinalIgnoreCase) Then
+                    ' VendorPopupHelper needs a server control: flush the HTML so far, then add
+                    ' a LinkButton (same look) and register its popup
+                    phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
+                    sb.Clear()
+                    AddSideMenuPopupLink(childRow, url, width, height)
+                Else
+                    sb.Append("<a class=""sideMenuItem"" href=""javascript:void(0);"" onclick=""openMenuLink('") _
+                      .Append(Server.HtmlEncode(url)).Append("', ").Append(width).Append(", ").Append(height).Append("); return false;"">") _
+                      .Append(Server.HtmlEncode(childRow.Field(Of String)("TITLE"))) _
+                      .Append("</a>")
+                End If
             Next
 
             sb.Append("</div>")
@@ -213,6 +249,106 @@ Partial Class MainPage
         Next
 
         phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
+    End Sub
+
+    ''' <summary>
+    ''' One side-menu link that opens through VendorPopupHelper (POPUP = "Y"). Added on every
+    ''' request from Page_Load (PopulateSideMenu), with a fixed ID per INDX, so it exists for
+    ''' its popup and for the postback when the popup returns.
+    ''' </summary>
+    Private Sub AddSideMenuPopupLink(Row As DataRow, Url As String, Width As Integer, Height As Integer)
+        Dim lnk As New LinkButton()
+        lnk.ID = "lnkSideMenu_" & Convert.ToString(Row("INDX")).Replace(".", "_")
+        lnk.CssClass = "sideMenuItem"
+        lnk.CausesValidation = False
+        lnk.Text = Server.HtmlEncode(Convert.ToString(Row("TITLE")))
+        phSideMenu.Controls.Add(lnk)
+
+        ' When the customer list closes with a choice, VendorPopupHelper posts back to this
+        ' link: open the chosen customer in ContactMaintenance
+        If String.Equals(Convert.ToString(Row("RETURNKEY")), SelectedCustomerReturnKey, StringComparison.OrdinalIgnoreCase) Then
+            AddHandler lnk.Click, AddressOf SelectCustomerLink_Click
+        End If
+
+        Dim popupTitle As String = Convert.ToString(Row("POPUPTITLE"))
+        Dim returnKey As String = Convert.ToString(Row("RETURNKEY"))
+
+        If returnKey <> "" Then
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                          lnk,
+                                          Url,
+                                          Width,
+                                          Height,
+                                          PopupPlacement.Center,
+                                          popupTitle,
+                                          VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                          returnKey)
+        Else
+            VendorPopupHelper.RegisterVendorPopup(Me,
+                                          lnk,
+                                          Url,
+                                          Width,
+                                          Height,
+                                          PopupPlacement.Center,
+                                          popupTitle,
+                                          VendorPopupHelper.PopupDisplayMode.FrameOnly)
+        End If
+    End Sub
+
+    Private Const SelectedCustomerReturnKey As String = "SelectedCustomer"
+
+    ''' <summary>
+    ''' "Maintain A Customer": runs when SelectOneItemFromListMultiColumns closes with a
+    ''' customer chosen. Reads the chosen row (returned under "SelectedCustomer") and opens
+    ''' ContactMaintenance.aspx?mode=Edit&amp;ID=&lt;ID&gt;&amp;isDialogue=Yes for it.
+    ''' Nothing happens if the list was closed without a choice.
+    ''' </summary>
+    Private Sub SelectCustomerLink_Click(sender As Object, e As EventArgs)
+        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
+            TryCast(VendorPopupHelper.GetPopupReturnValue(Me, SelectedCustomerReturnKey),
+                    List(Of Dictionary(Of String, Object)))
+        If selectedItems Is Nothing OrElse selectedItems.Count = 0 Then Exit Sub
+
+        ' The list's first column is ID (ItemsSQL: Select ID, NAME, NATIONALID ...)
+        Dim item As Dictionary(Of String, Object) = selectedItems(0)
+        Dim contactId As String = ""
+        If item.ContainsKey("ID") Then
+            contactId = Convert.ToString(item("ID")).Trim()
+        ElseIf item.Count > 0 Then
+            contactId = Convert.ToString(item.Values.First()).Trim()
+        End If
+        If contactId = "" Then Exit Sub
+
+        OpenContactMaintenance(contactId)
+    End Sub
+
+    ''' <summary>
+    ''' Opens ContactMaintenance for a customer, in Edit mode, as a popup. VendorPopupHelper
+    ''' only opens popups from a click, so a hidden link is registered with the URL and then
+    ''' clicked by a startup script (after the helper's own script has wired it up).
+    ''' </summary>
+    Private Sub OpenContactMaintenance(ContactId As String)
+        Dim lnkOpen As New LinkButton()
+        lnkOpen.ID = "lnkOpenSelectedCustomer"
+        lnkOpen.CausesValidation = False
+        lnkOpen.Style("display") = "none"
+        phSideMenu.Controls.Add(lnkOpen)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                      lnkOpen,
+                                      "ContactMaintenance.aspx?mode=Edit&ID=" & Server.UrlEncode(ContactId) & "&isDialogue=Yes",
+                                      950,
+                                      750,
+                                      PopupPlacement.Center,
+                                      "",
+                                      VendorPopupHelper.PopupDisplayMode.FrameOnly)
+
+        Dim script As String =
+            "setTimeout(function () {" &
+            "  var l = document.getElementById('" & lnkOpen.ClientID & "');" &
+            "  if (l) { l.click(); }" &
+            "}, 100);"
+        ClientScript.RegisterStartupScript(Me.GetType(), "OpenSelectedCustomer", script, True)
     End Sub
 
     ''' <summary>

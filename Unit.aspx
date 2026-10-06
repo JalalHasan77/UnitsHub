@@ -450,7 +450,8 @@ html, body, form {
             margin: 0 0 20px 0;
             padding: 8px 16px 14px 16px;
             border: 1px solid #a0a0a0;
-            border-radius: 2px;
+            border-radius: 12px;
+            background: #ffffff;
         }
 
         .customer-box legend {
@@ -557,6 +558,16 @@ html, body, form {
 
         .hint-empty { display: block; color: var(--muted); padding: 10px 0 2px; }
         .customer-box + .customer-box { margin-top: 4px; }
+
+        /* Customer name: opens ContactMaintenance (read-only) in a popup */
+        .customer-link {
+            color: #1a1464;
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        .customer-link:hover { color: #3b82f6; }
 
 
         /* ---------- Tabs under UNIT DETAILS (same structure as ContactMaintenance) ---------- */
@@ -971,6 +982,26 @@ html, body, form {
                         </ul>
                     </div>
                     <asp:Label ID="lblNoAttributes" runat="server" CssClass="hint-empty" Text="No details found for this unit." Visible="false" />
+                </fieldset>
+
+                <%-- The unit's current customer (latest UNITSHUB_CUSTOMERPROPERTIES row) --%>
+                <fieldset class="customer-box">
+                    <legend>CUSTOMER</legend>
+                    <asp:PlaceHolder ID="phCustomer" runat="server" Visible="false">
+                        <div class="kv-columns">
+                            <ul class="kv-col">
+                                <li><strong><span>Full Name</span><span>:</span></strong> <asp:LinkButton ID="lnkCustomerName" runat="server" CssClass="customer-link" CausesValidation="false" ToolTip="Open customer details" /></li>
+                                <li><strong><span>National ID/CPR</span><span>:</span></strong> <asp:Label ID="lblCustomerNationalId" runat="server" Text="" /></li>
+                            </ul>
+                            <ul class="kv-col">
+                                <li><strong><span>Mobile 1</span><span>:</span></strong> <asp:Label ID="lblCustomerMobile1" runat="server" Text="" /></li>
+                                <asp:PlaceHolder ID="phCustomerMobile2" runat="server" Visible="false">
+                                    <li><strong><span>Mobile 2</span><span>:</span></strong> <asp:Label ID="lblCustomerMobile2" runat="server" Text="" /></li>
+                                </asp:PlaceHolder>
+                            </ul>
+                        </div>
+                    </asp:PlaceHolder>
+                    <asp:Label ID="lblNoCustomer" runat="server" CssClass="hint-empty" Text="No customer is linked to this unit." Visible="false" />
                 </fieldset>
 
                 <%-- ===================== Tabs: Attachments | Comments | History =====================
