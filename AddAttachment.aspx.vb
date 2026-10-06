@@ -32,6 +32,7 @@ Partial Class AddAttachment
             lblPID.Text = Convert.ToString(Request("NodeID"))
             lblPRJID.Text = Convert.ToString(Request("ProjectId"))
             lblCID.Text = Convert.ToString(Request("ContactId"))
+            Entity = Convert.ToString(Request("Entity")).Trim()   ' "Unit" or "Customer"
 
             LoadAttachmentTypes()
 
@@ -45,25 +46,50 @@ Partial Class AddAttachment
         End If
     End Sub
 
+    ''' <summary>Entity the opener sent (?Entity=Unit / Customer); kept for postbacks.</summary>
+    Private Property Entity As String
+        Get
+            Return Convert.ToString(ViewState("Entity"))
+        End Get
+        Set(value As String)
+            ViewState("Entity") = value
+        End Set
+    End Property
+
     ''' <summary>
-    ''' "Attachment Type": active categories for this unit's project (its own and the
-    ''' ones for every project), in SORT_ORDER, after "-- Select --".
+    ''' "Attachment Type": after "-- Select --", the active categories linked to the entity
+    ''' the opener sent (?Entity=), in SORT_ORDER. If no Entity was sent (an older caller),
+    ''' falls back to the previous list: this unit's project's categories.
     ''' </summary>
     Private Sub LoadAttachmentTypes()
         ddlAttachmentType.Items.Clear()
         ddlAttachmentType.Items.Add(New ListItem("-- Select --", ""))
 
-        Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
-        If projectId = "" AndAlso Convert.ToString(lblPID.Text).Trim() <> "" Then
-            projectId = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
-                "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & lblPID.Text.Trim().Replace("'", "''") & "'")).Trim()
-        End If
-
         Try
-            Dim DT As DataTable = GetDataTable(EBDB,
-                "SELECT CATEGORY_ID, TITLE FROM UNITSHUB_DOC_CATEGORIES " &
-                "WHERE IS_ACTIVE = 'Y' AND (PROJECT_ID IS NULL OR PROJECT_ID = '" & projectId.Replace("'", "''") & "') " &
-                "ORDER BY SORT_ORDER, TITLE")
+            Dim DT As DataTable
+            If Entity <> "" Then
+                ' Categories linked to this entity (UNITSHUB_DOC2ENTITY), compared upper-case
+                Dim SQL As String = ""
+                SQL = SQL + vbCrLf + " SELECT DISTINCT DC.CATEGORY_ID, DC.TITLE, DC.SORT_ORDER "
+                SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOC_CATEGORIES DC "
+                SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_DOC2ENTITY DOC ON DC.CATEGORY_ID = DOC.CATEGORY_ID "
+                SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ENTITIES ENT ON DOC.ENTITY_ID = ENT.ENTITY_ID "
+                SQL = SQL + vbCrLf + " WHERE  UPPER(ENT.ENTITY_NAME) = '" & Entity.ToUpperInvariant().Replace("'", "''") & "' "
+                SQL = SQL + vbCrLf + "   AND  DC.IS_ACTIVE = 'Y' "
+                SQL = SQL + vbCrLf + " ORDER BY DC.SORT_ORDER, DC.TITLE "
+                DT = GetDataTable(EBDB, SQL)
+            Else
+                Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
+                If projectId = "" AndAlso Convert.ToString(lblPID.Text).Trim() <> "" Then
+                    projectId = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+                        "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & lblPID.Text.Trim().Replace("'", "''") & "'")).Trim()
+                End If
+                DT = GetDataTable(EBDB,
+                    "SELECT CATEGORY_ID, TITLE FROM UNITSHUB_DOC_CATEGORIES " &
+                    "WHERE IS_ACTIVE = 'Y' AND (PROJECT_ID IS NULL OR PROJECT_ID = '" & projectId.Replace("'", "''") & "') " &
+                    "ORDER BY SORT_ORDER, TITLE")
+            End If
+
             If DT IsNot Nothing Then
                 For Each r As DataRow In DT.Rows
                     ddlAttachmentType.Items.Add(New ListItem(Convert.ToString(r("TITLE")), Convert.ToString(r("CATEGORY_ID"))))
@@ -289,11 +315,11 @@ Partial Class AddAttachment
                     If Convert.ToString(r("CategoryId")) = categoryId Then categoryTitle = Convert.ToString(r("CategoryTitle")) : Exit For
                 Next
 
-                ' What the document is about, from the category's APPLIES_TO
+                ' What the document is about, from the entities the category is linked to
+                ' (UNITSHUB_DOC2ENTITY) - see GetCategoryAppliesTo
                 Dim docNode As String = nodeId
                 Dim docContact As String = contactId
-                Dim appliesTo As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
-                    "SELECT APPLIES_TO FROM UNITSHUB_DOC_CATEGORIES WHERE CATEGORY_ID = " & Q(categoryId))).Trim().ToUpperInvariant()
+                Dim appliesTo As String = GetCategoryAppliesTo(categoryId)
                 If appliesTo = "UNIT" AndAlso nodeId <> "" Then docContact = ""
                 If appliesTo = "CUSTOMER" AndAlso contactId <> "" Then docNode = ""
 
@@ -427,6 +453,36 @@ Partial Class AddAttachment
     End Function
 
     ''' <summary>A name part with only letters, digits and "-" ("X" if empty), so it's safe in a file name.</summary>
+    ''' <summary>
+    ''' What a category's documents are about, from the entities it is linked to in
+    ''' UNITSHUB_DOC2ENTITY (replaces UNITSHUB_DOC_CATEGORIES.APPLIES_TO):
+    '''   linked to Unit only      -> "UNIT"     (document saved with the unit only)
+    '''   linked to Customer only  -> "CUSTOMER" (document saved with the customer only)
+    '''   linked to both           -> "BOTH"     (document keeps unit and customer)
+    '''   linked to neither        -> ""         (same as BOTH)
+    ''' </summary>
+    Private Function GetCategoryAppliesTo(CategoryId As String) As String
+        Dim forUnit As Boolean = CategoryLinkedToEntity(CategoryId, "Unit")
+        Dim forCustomer As Boolean = CategoryLinkedToEntity(CategoryId, "Customer")
+        If forUnit AndAlso forCustomer Then Return "BOTH"
+        If forUnit Then Return "UNIT"
+        If forCustomer Then Return "CUSTOMER"
+        Return ""
+    End Function
+
+    ''' <summary>True if the category is linked to the entity (UNITSHUB_DOC2ENTITY), compared upper-case.</summary>
+    Private Function CategoryLinkedToEntity(CategoryId As String, EntityName As String) As Boolean
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT DC.CATEGORY_ID "
+        SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOC_CATEGORIES DC "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_DOC2ENTITY DOC ON DC.CATEGORY_ID = DOC.CATEGORY_ID "
+        SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ENTITIES ENT ON DOC.ENTITY_ID = ENT.ENTITY_ID "
+        SQL = SQL + vbCrLf + " WHERE  UPPER(ENT.ENTITY_NAME) = '" & EntityName.ToUpperInvariant().Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + "   AND  DC.CATEGORY_ID = " & Q(CategoryId)
+        Dim DT As DataTable = GetDataTable(EBDB, SQL)
+        Return DT IsNot Nothing AndAlso DT.Rows.Count > 0
+    End Function
+
     Private Function SafeNamePart(Value As String) As String
         Dim v As String = System.Text.RegularExpressions.Regex.Replace(If(Value, "").Trim(), "[^A-Za-z0-9-]", "")
         Return If(v = "", "X", v)

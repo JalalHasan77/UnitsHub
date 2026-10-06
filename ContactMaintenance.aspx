@@ -420,6 +420,191 @@
 
 #menuContainer{float: left;}
 
+/* =====================================================================
+   Attachments / Comments tabs (same look as Unit.aspx)
+   ===================================================================== */
+.tab-note { display: block; color: var(--muted, #64748b); padding: 8px 2px; }
+
+/* Toolbar above a tab's content */
+.tab-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 14px 0 12px 0;
+}
+.tab-toolbar.tab-toolbar-start { justify-content: flex-start; gap: 10px; }
+.tab-toolbar-left { display: flex; align-items: center; gap: 10px; }
+.tab-toolbar-label { font-size: 13px; font-weight: 600; color: var(--ink, #1e293b); }
+
+.tab-ddl {
+    min-width: 220px;
+    height: 34px;
+    padding: 0 10px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    color: var(--ink, #1e293b);
+    font: inherit;
+    font-size: 13px;
+}
+
+/* List | Icons switch */
+.view-toggle {
+    display: inline-flex;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #ffffff;
+}
+.view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 31px;
+    padding: 0 12px;
+    color: var(--muted, #64748b);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+.view-btn + .view-btn { border-left: 1.5px solid #e2e8f0; }
+.view-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.view-btn:hover { color: #1a1464; background: #f1f4fb; }
+.view-btn.active { background: #1a1464; color: #ffffff; }
+
+/* Round "+" button */
+.add-btn {
+    width: 34px;
+    height: 34px;
+    padding: 7px;
+    border-radius: 50%;
+    background: #1a1464;
+    cursor: pointer;
+}
+.add-btn:hover, .add-btn:focus-visible { background: #2a2390; outline: none; }
+
+/* Category heading */
+.doc-category {
+    margin: 14px 0 6px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a1464;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+/* List view grid */
+.grid-wrap {
+    overflow-x: auto;
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 9px;
+    background: #ffffff;
+}
+.pay-grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pay-grid th {
+    padding: 10px 12px;
+    border-bottom: none;
+    background: #1a1464;
+    color: #ffffff;
+    font-weight: 700;
+    text-align: left;
+    white-space: nowrap;
+}
+.pay-grid td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    color: var(--ink, #1e293b);
+    text-align: left;
+    vertical-align: top;
+}
+.pay-grid tr:last-child td { border-bottom: none; }
+.pay-grid tr:nth-child(even) td { background: #ffffff; }
+.pay-grid tr:nth-child(odd) td { background: #f1f4fb; }
+.pay-grid .seq { width: 50px; color: var(--muted, #64748b); }
+.pay-grid .when { white-space: nowrap; color: var(--muted, #64748b); }
+
+/* File link (list view and comments) */
+.file-link {
+    color: #1a1464;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.file-link:hover { color: #3b82f6; }
+
+/* Icons view: one tile per file */
+.file-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 4px;
+}
+.file-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 10px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+    text-align: center;
+}
+.file-tile:hover { border-color: #1a1464; }
+a.file-tile { text-decoration: none; cursor: pointer; }
+.file-icon {
+    position: relative;
+    width: 44px;
+    height: 54px;
+    border-radius: 4px 14px 4px 4px;
+    background: #94a3b8;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 54px;
+    letter-spacing: .03em;
+}
+.file-icon.pdf { background: #dc2626; }
+.file-icon.img { background: #16a34a; }
+.file-icon.doc { background: #2563eb; }
+.file-icon.xls { background: #15803d; }
+.file-tile .name {
+    max-width: 100%;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink, #1e293b);
+    word-break: break-word;
+}
+.file-tile .doc { font-size: 11px; color: var(--muted, #64748b); }
+
+/* Comments: one 3-row box per comment */
+.comment-list { display: flex; flex-direction: column; gap: 14px; }
+.comment-card {
+    border: 1.5px solid var(--border, #e2e8f0);
+    border-radius: 9px;
+    overflow: hidden;
+    background: #ffffff;
+}
+.comment-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+.comment-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    text-align: left;
+    vertical-align: top;
+    color: var(--ink, #1e293b);
+    white-space: normal;
+}
+.comment-table tr:last-child td { border-bottom: none; }
+.comment-table .comment-head td { background: #1a1464; color: #ffffff; font-size: 13px; }
+.comment-head .lbl { font-weight: 700; }
+.comment-table .comment-body td { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.comment-table .comment-files td { background: #f8fafc; font-size: 13px; word-break: break-word; }
+.comment-files .lbl { font-weight: 700; margin-right: 6px; }
+.comment-files .none { color: var(--muted, #64748b); }
+
+
 
         </style>
     <script type="text/javascript">
@@ -512,8 +697,9 @@
                                                 <Items>
                                                     <asp:MenuItem Text="General" Value="General"></asp:MenuItem>
                                                     <asp:MenuItem Text="Contact Details" Value="Contact"></asp:MenuItem>
+                                                    <asp:MenuItem Text="Attachments" Value="Attachments"></asp:MenuItem>
+                                                    <asp:MenuItem Text="Comments" Value="Comments"></asp:MenuItem>
                                                     <asp:MenuItem Text="Address" Value="Address"></asp:MenuItem>
-                                                    <asp:MenuItem Text="Documents" Value="Documents"></asp:MenuItem>
                                                 </Items>
                                                 <StaticHoverStyle BackColor="#000099" BorderColor="#000099" BorderWidth="1px" CssClass="itemCell" ForeColor="#F2F2F2" Height="50px" />
                                                 <StaticMenuItemStyle BorderWidth="1px" CssClass="itemCell" Height="50px" HorizontalPadding="0px" ItemSpacing="0px" VerticalPadding="0px" BackColor="#F2F2F2"/>
@@ -717,6 +903,124 @@
                                                             </asp:Panel>
 
                                                         </asp:View>
+                                                        <%-- ---------- Attachments (same as Unit.aspx, for this contact) ---------- --%>
+                                                        <asp:View ID="viewAttachments" runat="server">
+                                                            <asp:Panel ID="pnlAttachmentsTab" runat="server" BackColor="White" Width="100%">
+                                                                <%-- Toolbar: category filter + List/Icons on the left, "add attachment" on the right --%>
+                                                                <div class="tab-toolbar">
+                                                                    <div class="tab-toolbar-left">
+                                                                        <asp:Label ID="lblDisplayAttachments" runat="server" Text="Display Attachments" AssociatedControlID="ddlDocCategory" CssClass="tab-toolbar-label" />
+                                                                        <asp:DropDownList ID="ddlDocCategory" runat="server" CssClass="tab-ddl" AutoPostBack="true"
+                                                                            OnSelectedIndexChanged="ddlDocCategory_SelectedIndexChanged" />
+                                                                        <div class="view-toggle" role="group" aria-label="Attachments view">
+                                                                            <asp:LinkButton ID="lnkViewList" runat="server" CssClass="view-btn active" ToolTip="Show as list"
+                                                                                CausesValidation="false" OnClick="lnkViewList_Click"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>List</span></asp:LinkButton>
+                                                                            <asp:LinkButton ID="lnkViewIcons" runat="server" CssClass="view-btn" ToolTip="Show as icons"
+                                                                                CausesValidation="false" OnClick="lnkViewIcons_Click"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Icons</span></asp:LinkButton>
+                                                                        </div>
+                                                                    </div>
+                                                                    <asp:ImageButton ID="btnAddAttachment"
+                                                                        runat="server"
+                                                                        CssClass="add-btn"
+                                                                        CausesValidation="false"
+                                                                        ToolTip="Add a new attachment"
+                                                                        AlternateText="Add attachment"
+                                                                        OnClick="btnAddAttachment_Click"
+                                                                        ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='12' y1='5' x2='12' y2='19'/&gt;&lt;line x1='5' y1='12' x2='19' y2='12'/&gt;&lt;/svg&gt;" />
+                                                                </div>
+                                                                <asp:Literal ID="litAttachments" runat="server" />
+
+                                                                <%-- One block per category; inside it either the list (grid) or the icons (tiles).
+                                                                     Each file is a link that opens it in the DisplayInvoice viewer. --%>
+                                                                <asp:Repeater ID="rptAttachCategories" runat="server" OnItemDataBound="rptAttachCategories_ItemDataBound">
+                                                                    <ItemTemplate>
+                                                                        <div class="doc-category"><asp:Literal ID="litCategory" runat="server" /></div>
+
+                                                                        <asp:Panel ID="pnlList" runat="server" CssClass="grid-wrap">
+                                                                            <asp:GridView ID="gvAttachFiles" runat="server"
+                                                                                AutoGenerateColumns="False"
+                                                                                CssClass="pay-grid"
+                                                                                GridLines="None"
+                                                                                OnRowDataBound="gvAttachFiles_RowDataBound">
+                                                                                <Columns>
+                                                                                    <asp:BoundField DataField="SEQ_NO" HeaderText="Seq" ItemStyle-CssClass="seq" />
+                                                                                    <asp:BoundField DataField="DATE_TEXT" HeaderText="Date" ItemStyle-CssClass="when" />
+                                                                                    <asp:BoundField DataField="TIME_TEXT" HeaderText="Time" ItemStyle-CssClass="when" />
+                                                                                    <asp:BoundField DataField="ADDED_BY" HeaderText="Added By" />
+                                                                                    <asp:TemplateField HeaderText="Document">
+                                                                                        <ItemTemplate>
+                                                                                            <asp:LinkButton ID="lnkFile" runat="server" CssClass="file-link" CausesValidation="false" />
+                                                                                        </ItemTemplate>
+                                                                                    </asp:TemplateField>
+                                                                                </Columns>
+                                                                            </asp:GridView>
+                                                                        </asp:Panel>
+
+                                                                        <asp:Panel ID="pnlIcons" runat="server" CssClass="file-tiles">
+                                                                            <asp:Repeater ID="rptTiles" runat="server" OnItemDataBound="rptTiles_ItemDataBound">
+                                                                                <ItemTemplate>
+                                                                                    <asp:LinkButton ID="lnkTile" runat="server" CssClass="file-tile" CausesValidation="false">
+                                                                                        <asp:Literal ID="litTile" runat="server" />
+                                                                                    </asp:LinkButton>
+                                                                                </ItemTemplate>
+                                                                            </asp:Repeater>
+                                                                        </asp:Panel>
+                                                                    </ItemTemplate>
+                                                                </asp:Repeater>
+                                                            </asp:Panel>
+                                                        </asp:View>
+
+                                                        <%-- ---------- Comments (same as Unit.aspx, for this contact) ---------- --%>
+                                                        <asp:View ID="viewComments" runat="server">
+                                                            <asp:Panel ID="pnlCommentsTab" runat="server" BackColor="White" Width="100%">
+                                                                <%-- Toolbar: title and "Add Comment" button on the far left (button opens AddComment) --%>
+                                                                <div class="tab-toolbar tab-toolbar-start">
+                                                                    <span class="tab-toolbar-label">Comments</span>
+                                                                    <asp:ImageButton ID="btnAddComment"
+                                                                        runat="server"
+                                                                        CssClass="add-btn"
+                                                                        CausesValidation="false"
+                                                                        ToolTip="Add Comment"
+                                                                        AlternateText="Add Comment"
+                                                                        OnClick="btnAddComment_Click"
+                                                                        ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='12' y1='5' x2='12' y2='19'/&gt;&lt;line x1='5' y1='12' x2='19' y2='12'/&gt;&lt;/svg&gt;" />
+                                                                </div>
+
+                                                                <%-- One box per comment, three rows:
+                                                                       1. Comment by: name, ID(user id), On: date and time
+                                                                       2. Comment text
+                                                                       3. Attachments as links side by side, separated by ", " --%>
+                                                                <div class="comment-list">
+                                                                    <asp:Repeater ID="rptComments" runat="server" OnItemDataBound="rptComments_ItemDataBound">
+                                                                        <ItemTemplate>
+                                                                            <div class="comment-card">
+                                                                                <table class="comment-table">
+                                                                                    <tr class="comment-head">
+                                                                                        <td><asp:Literal ID="litCommentHead" runat="server" /></td>
+                                                                                    </tr>
+                                                                                    <tr class="comment-body">
+                                                                                        <td><asp:Literal ID="litCommentText" runat="server" /></td>
+                                                                                    </tr>
+                                                                                    <tr class="comment-files">
+                                                                                        <td>
+                                                                                            <span class="lbl">Attachments:</span>
+                                                                                            <asp:Repeater ID="rptCommentFiles" runat="server" OnItemDataBound="rptCommentFiles_ItemDataBound">
+                                                                                                <ItemTemplate><asp:LinkButton ID="lnkCommentFile" runat="server" CssClass="file-link" CausesValidation="false" /></ItemTemplate>
+                                                                                                <SeparatorTemplate>, </SeparatorTemplate>
+                                                                                            </asp:Repeater>
+                                                                                            <asp:Label ID="lblNoFiles" runat="server" CssClass="none" Text="None" Visible="false" />
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                </table>
+                                                                            </div>
+                                                                        </ItemTemplate>
+                                                                    </asp:Repeater>
+                                                                </div>
+                                                                <asp:Label ID="lblNoComments" runat="server" CssClass="tab-note" Text="No comments for this contact yet." Visible="false" />
+                                                                <asp:Label ID="lblCommentsNote" runat="server" CssClass="tab-note" Visible="false" />
+                                                            </asp:Panel>
+                                                        </asp:View>
+
                                                         <asp:View ID="View3" runat="server">
                                                             <asp:Panel ID="Panel3" runat="server" BackColor="White" Width="100%">
                                                                 <div class="tab-body-inner">
@@ -772,10 +1076,6 @@
                                                                     </div>
                                                                 </div>
                                                             </asp:Panel>
-                                                        </asp:View>
-                                                        <asp:View ID="View4" runat="server">
-                                                                <asp:Panel ID="Panel4" runat="server" BackColor="White" Height="300px" Width="100%">
-                                                                View 3</asp:Panel>
                                                         </asp:View>
                                                     </asp:MultiView>
 

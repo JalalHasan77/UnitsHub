@@ -8,6 +8,9 @@ Imports CrystalDecisions.CrystalReports.Engine
 
 Partial Class Unit
     Inherits System.Web.UI.Page
+
+    ''' <summary>Entity this page's documents belong to (UNITSHUB_ENTITIES.ENTITY_NAME); also sent to AddAttachment.</summary>
+    Private Const EntityName As String = "Unit"
     Private encryNdecry As New EncryDecry
 
     Private Sub AutoTransfer_Load(sender As Object, e As EventArgs) Handles Me.Load
@@ -206,33 +209,31 @@ Partial Class Unit
     End Property
 
     ''' <summary>
-    ''' Fills "Display Attachments" with "All" plus the active categories of
-    ''' UNITSHUB_DOC_CATEGORIES that apply to this unit's project (its own, and the ones
-    ''' with PROJECT_ID empty = every project), in SORT_ORDER.
+    ''' Fills "Display Attachments" with "All" plus the active categories linked to the
+    ''' "Unit" entity (EntityName) in UNITSHUB_DOC2ENTITY, in SORT_ORDER.
     ''' </summary>
     Private Sub LoadDocCategories(NodeId As String)
         ddlDocCategory.Items.Clear()
         ddlDocCategory.Items.Add(New ListItem("All", ""))
 
-        Dim projectId As String = ""
-        If NodeId <> "" Then
-            projectId = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
-                "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & NodeId.Replace("'", "''") & "'")).Trim()
-        End If
-        If projectId = "" Then projectId = Convert.ToString(lblPRJID.Text).Trim()
-
         Try
-            Dim DT As DataTable = GetDataTable(EBDB,
-                "SELECT CATEGORY_ID, TITLE FROM UNITSHUB_DOC_CATEGORIES " &
-                "WHERE IS_ACTIVE = 'Y' AND (PROJECT_ID IS NULL OR PROJECT_ID = '" & projectId.Replace("'", "''") & "') " &
-                "ORDER BY SORT_ORDER, TITLE")
+            ' Categories linked to this entity (UNITSHUB_DOC2ENTITY), compared upper-case
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT DISTINCT DC.CATEGORY_ID, DC.TITLE, DC.SORT_ORDER "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOC_CATEGORIES DC "
+            SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_DOC2ENTITY DOC ON DC.CATEGORY_ID = DOC.CATEGORY_ID "
+            SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ENTITIES ENT ON DOC.ENTITY_ID = ENT.ENTITY_ID "
+            SQL = SQL + vbCrLf + " WHERE  UPPER(ENT.ENTITY_NAME) = '" & EntityName.ToUpperInvariant().Replace("'", "''") & "' "
+            SQL = SQL + vbCrLf + "   AND  DC.IS_ACTIVE = 'Y' "
+            SQL = SQL + vbCrLf + " ORDER BY DC.SORT_ORDER, DC.TITLE "
+            Dim DT As DataTable = GetDataTable(EBDB, SQL)
             If DT IsNot Nothing Then
                 For Each r As DataRow In DT.Rows
                     ddlDocCategory.Items.Add(New ListItem(Convert.ToString(r("TITLE")), Convert.ToString(r("CATEGORY_ID"))))
                 Next
             End If
         Catch ex As Exception
-            ' Categories table not there yet - "All" only; the tab shows why below
+            ' Category tables not there yet - "All" only; the tab shows why below
         End Try
     End Sub
 
@@ -263,7 +264,8 @@ Partial Class Unit
         Dim Url As String = "AddAttachment.aspx?NodeID=" & Server.UrlEncode(Convert.ToString(lblPID.Text).Trim()) &
                             "&ProjectId=" & Server.UrlEncode(projectId) &
                             "&ContactId=" & Server.UrlEncode(UnitContactId) &
-                            "&CategoryId=" & Server.UrlEncode(ddlDocCategory.SelectedValue)
+                            "&CategoryId=" & Server.UrlEncode(ddlDocCategory.SelectedValue) &
+                            "&Entity=" & Server.UrlEncode(EntityName)
 
         VendorPopupHelper.RegisterVendorPopup(Me,
                                               btnAddAttachment,
