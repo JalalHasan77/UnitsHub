@@ -69,10 +69,15 @@ Partial Class Unit
         If NodeId <> "" Then
             Dim SQL As String = ""
             SQL = SQL + vbCrLf + " SELECT A.ATTRIBUTE_NAME, A.DISPLAY_ORDER, A.DATA_TYPE, V.VALUE_TEXT, N.PROJECT_ID, "
-            SQL = SQL + vbCrLf + "        PP.NAME AS PLAN_NAME "
+            SQL = SQL + vbCrLf + "        PP.NAME AS PLAN_NAME, "
+            ' Edit mode: which control to use, and the SQL that fills a list
+            SQL = SQL + vbCrLf + "        AP.CONTROL_WEHN_EDIT AS EDIT_CONTROL, AP.SQL AS EDIT_SQL "
             SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES N "
             SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES A "
             SQL = SQL + vbCrLf + "        ON A.PROJECT_ID = N.PROJECT_ID AND A.NODE_TYPE_ID = N.NODE_TYPE_ID "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_ATTRIBUTES_PROPERTIES AP "
+            SQL = SQL + vbCrLf + "        ON AP.PROJECT_ID = N.PROJECT_ID AND AP.NODE_TYPE_ID = N.NODE_TYPE_ID "
+            SQL = SQL + vbCrLf + "       AND TO_NUMBER(AP.DISPLAY_ORDER) = TO_NUMBER(A.DISPLAY_ORDER) "
             SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_NODE_ATTRIBUTE_VALUE V "
             SQL = SQL + vbCrLf + "        ON V.NODE_ID = N.NODE_ID AND TO_NUMBER(V.DISPLAY_ORDER) = TO_NUMBER(A.DISPLAY_ORDER) "
             ' Payment plan title for the payment-plan attribute ("PAYMENTPLAN" / "Payment Plan")
@@ -128,12 +133,18 @@ Partial Class Unit
             If i < leftCount Then leftDT.ImportRow(DT.Rows(i)) Else rightDT.ImportRow(DT.Rows(i))
         Next
 
+        _editProblems.Clear()
         rptAttributesLeft.DataSource = leftDT
         rptAttributesLeft.DataBind()
         rptAttributesRight.DataSource = rightDT
         rptAttributesRight.DataBind()
 
         lblNoAttributes.Visible = (DT.Rows.Count = 0)
+        If DT.Rows.Count = 0 Then DetailsEditMode = False
+        ApplyDetailsMode()
+        If DetailsEditMode AndAlso _editProblems.Count > 0 Then
+            ShowDetailsMessage("Note: " & String.Join("; ", _editProblems) & ".", False)
+        End If
 
         ' Title: "Unit <Reference>" when the unit has a Reference attribute
         For Each r As DataRow In DT.Rows
@@ -144,17 +155,274 @@ Partial Class Unit
         Next
     End Sub
 
-    ''' <summary>Fills one attribute line: name and value (HTML-encoded, "-" when empty).</summary>
+    ''' <summary>
+    ''' Fills one attribute line: name and value (HTML-encoded, "-" when empty). In Edit mode,
+    ''' an attribute with an edit control (CONTROL_WEHN_EDIT) shows that control holding the
+    ''' stored value instead; one without stays as text.
+    ''' </summary>
     Protected Sub rptAttributes_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
         If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
         Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
 
         Dim litName As Literal = CType(e.Item.FindControl("litName"), Literal)
         Dim litValue As Literal = CType(e.Item.FindControl("litValue"), Literal)
+        Dim txtEdit As TextBox = CType(e.Item.FindControl("txtEdit"), TextBox)
+        Dim ddlEdit As DropDownList = CType(e.Item.FindControl("ddlEdit"), DropDownList)
+        Dim chkEdit As CheckBox = CType(e.Item.FindControl("chkEdit"), CheckBox)
+        Dim hfOrder As HiddenField = CType(e.Item.FindControl("hfOrder"), HiddenField)
+        Dim hfControl As HiddenField = CType(e.Item.FindControl("hfControl"), HiddenField)
+        Dim hfOriginal As HiddenField = CType(e.Item.FindControl("hfOriginal"), HiddenField)
 
-        litName.Text = Server.HtmlEncode(Convert.ToString(r("ATTRIBUTE_NAME")).Trim())
+        Dim name As String = Convert.ToString(r("ATTRIBUTE_NAME")).Trim()
+        litName.Text = Server.HtmlEncode(name)
         Dim value As String = Convert.ToString(r("DISPLAY_VALUE")).Trim()
-        litValue.Text = If(value = "", "<span style=""color:var(--muted)"">-</span>", Server.HtmlEncode(value))
+        Dim storedValue As String = Convert.ToString(r("VALUE_TEXT")).Trim()
+        Dim valueHtml As String = If(value = "", "<span style=""color:var(--muted)"">-</span>", Server.HtmlEncode(value))
+
+        txtEdit.Visible = False
+        ddlEdit.Visible = False
+        chkEdit.Visible = False
+        hfOrder.Value = Convert.ToString(r("DISPLAY_ORDER")).Trim()
+        hfControl.Value = ""
+        hfOriginal.Value = ""
+
+        Dim kind As String = If(DetailsEditMode, EditKind(Convert.ToString(r("EDIT_CONTROL"))), "")
+        If kind = "" Then
+            ' Show mode, or an attribute that can't be edited
+            litValue.Text = If(DetailsEditMode, "<span class=""kv-readonly"">" & valueHtml & "</span>", valueHtml)
+            Exit Sub
+        End If
+
+        litValue.Text = ""
+        hfControl.Value = kind
+
+        Select Case kind
+            Case "DROPDOWN"
+                FillEditList(ddlEdit, Convert.ToString(r("EDIT_SQL")), storedValue, name, Convert.ToString(r("PROJECT_ID")).Trim())
+                ddlEdit.ToolTip = name
+                ddlEdit.Visible = True
+                hfOriginal.Value = ddlEdit.SelectedValue
+
+            Case "CHECKBOX"
+                Dim v As String = storedValue.ToUpperInvariant()
+                chkEdit.Checked = (v = "Y" OrElse v = "YES" OrElse v = "TRUE" OrElse v = "1")
+                chkEdit.ToolTip = name
+                chkEdit.Visible = True
+                hfOriginal.Value = If(chkEdit.Checked, "Y", "N")
+
+            Case Else
+                txtEdit.Text = storedValue
+                txtEdit.ToolTip = name
+                txtEdit.Attributes("aria-label") = name
+                Select Case kind
+                    Case "TEXTAREA"
+                        txtEdit.TextMode = TextBoxMode.MultiLine
+                        txtEdit.Rows = 3
+                    Case "DATE"
+                        ' Date picker only when the stored value is empty or yyyy-MM-dd (the
+                        ' format it uses); any other stored format stays a plain textbox
+                        If storedValue = "" OrElse System.Text.RegularExpressions.Regex.IsMatch(storedValue, "^\d{4}-\d{2}-\d{2}$") Then
+                            txtEdit.TextMode = TextBoxMode.Date
+                        End If
+                    Case "NUMBER"
+                        txtEdit.Attributes("inputmode") = "decimal"
+                End Select
+                txtEdit.Visible = True
+                hfOriginal.Value = storedValue
+        End Select
+    End Sub
+
+    ' ==================================================================
+    ' UNIT DETAILS: Edit mode
+    ' [Edit] turns every attribute that has an edit control (UNITSHUB_ATTRIBUTES_PROPERTIES.
+    ' CONTROL_WEHN_EDIT) into that control; lists are filled from the attribute's SQL.
+    ' Attributes with no control stay as text. [Save] writes the changed values to
+    ' UNITSHUB_NODE_ATTRIBUTE_VALUE, [Cancel] drops them; both return to show mode.
+    ' ==================================================================
+
+    ' Problems met while building the edit controls (e.g. a list SQL that fails)
+    Private _editProblems As New List(Of String)
+
+    Private Property DetailsEditMode As Boolean
+        Get
+            Return CBool(If(ViewState("DetailsEditMode"), False))
+        End Get
+        Set(value As Boolean)
+            ViewState("DetailsEditMode") = value
+        End Set
+    End Property
+
+    Protected Sub btnEditDetails_Click(sender As Object, e As EventArgs) Handles btnEditDetails.Click
+        DetailsEditMode = True
+        ShowDetailsMessage("", True)
+        LoadAttributes()
+    End Sub
+
+    Protected Sub btnCancelDetails_Click(sender As Object, e As EventArgs) Handles btnCancelDetails.Click
+        DetailsEditMode = False
+        ShowDetailsMessage("", True)
+        LoadAttributes()
+    End Sub
+
+    ''' <summary>
+    ''' Saves every edited value that changed, then returns to show mode. If a value is
+    ''' invalid (e.g. text in a number field), nothing is saved and the box stays in Edit.
+    ''' </summary>
+    Protected Sub btnSaveDetails_Click(sender As Object, e As EventArgs) Handles btnSaveDetails.Click
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        If NodeId = "" Then Exit Sub
+
+        ' 1. Collect the changes (order -> new value) and check them
+        Dim changes As New List(Of KeyValuePair(Of String, String))
+        Dim errors As New List(Of String)
+        For Each rpt As Repeater In {rptAttributesLeft, rptAttributesRight}
+            For Each item As RepeaterItem In rpt.Items
+                Dim kind As String = CType(item.FindControl("hfControl"), HiddenField).Value
+                If kind = "" Then Continue For
+
+                Dim newValue As String = ReadEditValue(item, kind)
+                Dim oldValue As String = CType(item.FindControl("hfOriginal"), HiddenField).Value
+                If newValue = oldValue Then Continue For
+
+                If kind = "NUMBER" AndAlso newValue <> "" Then
+                    Dim n As Decimal
+                    If Not Decimal.TryParse(newValue.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, n) Then
+                        errors.Add(Server.HtmlDecode(CType(item.FindControl("litName"), Literal).Text) & " must be a number")
+                        Continue For
+                    End If
+                End If
+
+                changes.Add(New KeyValuePair(Of String, String)(CType(item.FindControl("hfOrder"), HiddenField).Value, newValue))
+            Next
+        Next
+
+        If errors.Count > 0 Then
+            ShowDetailsMessage("Not saved: " & String.Join("; ", errors) & ".", False)
+            Exit Sub
+        End If
+
+        ' 2. Write them (update the value, or insert it if the unit had none)
+        Try
+            For Each c As KeyValuePair(Of String, String) In changes
+                SaveAttributeValue(NodeId, c.Key, c.Value)
+            Next
+        Catch ex As Exception
+            ShowDetailsMessage("Saving failed: " & ex.Message, False)
+            Exit Sub
+        End Try
+
+        DetailsEditMode = False
+        LoadAttributes()
+        ShowDetailsMessage(If(changes.Count = 0, "No changes to save.",
+                              changes.Count & If(changes.Count = 1, " value", " values") & " saved."), True)
+    End Sub
+
+    ''' <summary>The value an item's edit control holds now, as it will be stored.</summary>
+    Private Function ReadEditValue(item As RepeaterItem, Kind As String) As String
+        Select Case Kind
+            Case "DROPDOWN"
+                Return CType(item.FindControl("ddlEdit"), DropDownList).SelectedValue
+            Case "CHECKBOX"
+                Return If(CType(item.FindControl("chkEdit"), CheckBox).Checked, "Y", "N")
+            Case Else
+                Return CType(item.FindControl("txtEdit"), TextBox).Text.Trim()
+        End Select
+    End Function
+
+    ''' <summary>Writes one attribute value of the unit (same MERGE as AutoTransfer's SetNodeSubStatus).</summary>
+    Private Sub SaveAttributeValue(NodeId As String, DisplayOrder As String, Value As String)
+        Dim orderNumber As Integer
+        If Not Integer.TryParse(DisplayOrder, orderNumber) Then Exit Sub
+
+        Dim safeNodeId As String = NodeId.Replace("'", "''")
+        Dim safeOrder As String = orderNumber.ToString("000")
+        Dim safeValue As String = If(Value, "").Replace("'", "''")
+
+        Dim SQL As String =
+            "MERGE INTO UNITSHUB_NODE_ATTRIBUTE_VALUE v " &
+            "USING (SELECT '" & safeNodeId & "' AS NODE_ID, '" & safeOrder & "' AS DISPLAY_ORDER FROM DUAL) s " &
+            "ON (v.NODE_ID = s.NODE_ID AND TO_NUMBER(v.DISPLAY_ORDER) = TO_NUMBER(s.DISPLAY_ORDER)) " &
+            "WHEN MATCHED THEN UPDATE SET v.VALUE_TEXT = '" & safeValue & "' " &
+            "WHEN NOT MATCHED THEN INSERT (NODE_ID, DISPLAY_ORDER, VALUE_TEXT) " &
+            "VALUES (s.NODE_ID, s.DISPLAY_ORDER, '" & safeValue & "')"
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+    ''' <summary>
+    ''' Which control CONTROL_WEHN_EDIT asks for (any letter case):
+    '''   DROPDOWN  - contains DROP, DDL, COMBO, LIST or SELECT (filled from the SQL column)
+    '''   CHECKBOX  - contains CHECK or BOOL                    (stored Y / N)
+    '''   TEXTAREA  - contains AREA, MULTI or MEMO
+    '''   DATE      - contains DATE                             (date picker, yyyy-MM-dd)
+    '''   NUMBER    - contains NUM, INT or DEC                  (checked on Save)
+    '''   TEXT      - anything else that isn't empty
+    '''   ""        - empty: the attribute can't be edited
+    ''' </summary>
+    Private Function EditKind(ControlWhenEdit As String) As String
+        Dim c As String = If(ControlWhenEdit, "").Trim().ToUpperInvariant()
+        If c = "" Then Return ""
+        For Each k As String In {"DROP", "DDL", "COMBO", "LIST", "SELECT"}
+            If c.Contains(k) Then Return "DROPDOWN"
+        Next
+        If c.Contains("CHECK") OrElse c.Contains("BOOL") Then Return "CHECKBOX"
+        If c.Contains("AREA") OrElse c.Contains("MULTI") OrElse c.Contains("MEMO") Then Return "TEXTAREA"
+        If c.Contains("DATE") Then Return "DATE"
+        If c.Contains("NUM") OrElse c.Contains("INT") OrElse c.Contains("DEC") Then Return "NUMBER"
+        Return "TEXT"
+    End Function
+
+    ''' <summary>
+    ''' Fills a dropdown from the attribute's SQL: 1st column = value stored, 2nd column =
+    ''' text shown (the 1st again if there's only one). "&lt;ProjectId&gt;" and "&lt;NodeId&gt;"
+    ''' in the SQL are replaced by this unit's. The current value is kept even when the SQL
+    ''' doesn't return it, so opening Edit never changes a value by itself.
+    ''' </summary>
+    Private Sub FillEditList(ddl As DropDownList, ListSql As String, CurrentValue As String, AttributeName As String, ProjectId As String)
+        ddl.Items.Clear()
+        ddl.Items.Add(New ListItem("-", ""))
+
+        Dim sqlText As String = If(ListSql, "").Trim()
+        If sqlText <> "" Then
+            sqlText = sqlText.Replace("<ProjectId>", ProjectId.Replace("'", "''")) _
+                             .Replace("<NodeId>", Convert.ToString(lblPID.Text).Trim().Replace("'", "''"))
+            Try
+                Dim DT As DataTable = GetDataTable(EBDB, sqlText)
+                If DT IsNot Nothing AndAlso DT.Columns.Count > 0 Then
+                    Dim textCol As Integer = If(DT.Columns.Count > 1, 1, 0)
+                    For Each r As DataRow In DT.Rows
+                        Dim v As String = Convert.ToString(r(0)).Trim()
+                        If ddl.Items.FindByValue(v) Is Nothing Then
+                            ddl.Items.Add(New ListItem(Convert.ToString(r(textCol)).Trim(), v))
+                        End If
+                    Next
+                End If
+            Catch ex As Exception
+                _editProblems.Add("the list of " & AttributeName & " couldn't be loaded (" & ex.Message & ")")
+            End Try
+        Else
+            _editProblems.Add(AttributeName & " has no SQL for its list")
+        End If
+
+        If CurrentValue <> "" AndAlso ddl.Items.FindByValue(CurrentValue) Is Nothing Then
+            ddl.Items.Add(New ListItem(CurrentValue, CurrentValue))
+        End If
+        ddl.SelectedValue = CurrentValue
+    End Sub
+
+    ''' <summary>Shows Edit, or Save + Cancel, and outlines the box while editing.</summary>
+    Private Sub ApplyDetailsMode()
+        Dim hasDetails As Boolean = Not lblNoAttributes.Visible
+        btnEditDetails.Visible = hasDetails AndAlso Not DetailsEditMode
+        btnSaveDetails.Visible = DetailsEditMode
+        btnCancelDetails.Visible = DetailsEditMode
+        fsDetails.Attributes("class") = "customer-box details-box" & If(DetailsEditMode, " editing", "")
+    End Sub
+
+    Private Sub ShowDetailsMessage(Text As String, IsOk As Boolean)
+        lblDetailsMessage.Text = Server.HtmlEncode(Text)
+        lblDetailsMessage.CssClass = "details-msg " & If(IsOk, "ok", "err")
+        lblDetailsMessage.Visible = (Text <> "")
     End Sub
 
     ' ------------------------------------------------------------------

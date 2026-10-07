@@ -510,6 +510,62 @@ html, body, form {
             .kv-columns { grid-template-columns: 1fr; row-gap: 2px; }
         }
 
+        /* ---------- UNIT DETAILS: Edit / Save / Cancel on the top border, right corner ---------- */
+        .details-box { position: relative; }
+
+        .box-actions {
+            position: absolute;
+            top: -15px;
+            right: 16px;
+            display: flex;
+            gap: 6px;
+        }
+
+        .box-btn {
+            height: 28px;
+            padding: 0 14px;
+            border: 1.5px solid var(--brand-1);
+            border-radius: 7px;
+            background: #ffffff;
+            color: var(--brand-1);
+            font: inherit;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .box-btn:hover, .box-btn:focus-visible { background: #eef2ff; outline: none; }
+        .box-btn.primary { background: var(--brand-1); color: #ffffff; }
+        .box-btn.primary:hover, .box-btn.primary:focus-visible { background: #4338ca; }
+
+        /* Edit mode: the box is outlined in the brand colour */
+        .details-box.editing { border-color: var(--brand-1); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.10); }
+
+        .kv-val { min-width: 0; }
+
+        .kv-edit {
+            width: 100%;
+            max-width: 340px;
+            box-sizing: border-box;
+            min-height: 30px;
+            padding: 3px 8px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: var(--ink);
+            font: inherit;
+            font-size: 13.5px;
+        }
+        .kv-edit:focus { border-color: var(--brand-1); outline: none; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12); }
+        textarea.kv-edit { resize: vertical; }
+        .kv-edit-check input { width: 16px; height: 16px; vertical-align: middle; }
+
+        /* Fields with no edit control stay as text, slightly faded, while editing */
+        .kv-readonly { color: var(--muted); }
+
+        .details-msg { display: block; margin-top: 10px; font-size: 13px; }
+        .details-msg.ok { color: #047857; }
+        .details-msg.err { color: #dc2626; }
+
         /* ---------- Unit / amounts: two columns of label + box ---------- */
         .at-grid {
             display: grid;
@@ -966,26 +1022,53 @@ html, body, form {
                     </div>
                 </fieldset>
 
-                <fieldset class="customer-box">
+                <fieldset id="fsDetails" runat="server" class="customer-box details-box">
                     <legend>UNIT DETAILS</legend>
+                    <%-- Upper right corner: [Edit] in show mode, [Save][Cancel] in edit mode --%>
+                    <div class="box-actions">
+                        <asp:Button ID="btnEditDetails" runat="server" Text="Edit" CssClass="box-btn" CausesValidation="false" ToolTip="Edit the unit details" />
+                        <asp:Button ID="btnSaveDetails" runat="server" Text="Save" CssClass="box-btn primary" CausesValidation="false" Visible="false" />
+                        <asp:Button ID="btnCancelDetails" runat="server" Text="Cancel" CssClass="box-btn" CausesValidation="false" Visible="false" />
+                    </div>
                     <%-- Attributes split over two columns: first half left, second half right --%>
                     <div class="kv-columns">
                         <ul class="kv-col">
                             <asp:Repeater ID="rptAttributesLeft" runat="server" OnItemDataBound="rptAttributes_ItemDataBound">
                                 <ItemTemplate>
-                                    <li><strong><span><asp:Literal ID="litName" runat="server" /></span><span>:</span></strong> <asp:Literal ID="litValue" runat="server" /></li>
+                                    <li><strong><span><asp:Literal ID="litName" runat="server" /></span><span>:</span></strong>
+                                        <span class="kv-val">
+                                            <asp:Literal ID="litValue" runat="server" />
+                                            <asp:TextBox ID="txtEdit" runat="server" CssClass="kv-edit" Visible="false" />
+                                            <asp:DropDownList ID="ddlEdit" runat="server" CssClass="kv-edit" Visible="false" />
+                                            <asp:CheckBox ID="chkEdit" runat="server" CssClass="kv-edit-check" Visible="false" />
+                                            <asp:HiddenField ID="hfOrder" runat="server" />
+                                            <asp:HiddenField ID="hfControl" runat="server" />
+                                            <asp:HiddenField ID="hfOriginal" runat="server" />
+                                        </span>
+                                    </li>
                                 </ItemTemplate>
                             </asp:Repeater>
                         </ul>
                         <ul class="kv-col">
                             <asp:Repeater ID="rptAttributesRight" runat="server" OnItemDataBound="rptAttributes_ItemDataBound">
                                 <ItemTemplate>
-                                    <li><strong><span><asp:Literal ID="litName" runat="server" /></span><span>:</span></strong> <asp:Literal ID="litValue" runat="server" /></li>
+                                    <li><strong><span><asp:Literal ID="litName" runat="server" /></span><span>:</span></strong>
+                                        <span class="kv-val">
+                                            <asp:Literal ID="litValue" runat="server" />
+                                            <asp:TextBox ID="txtEdit" runat="server" CssClass="kv-edit" Visible="false" />
+                                            <asp:DropDownList ID="ddlEdit" runat="server" CssClass="kv-edit" Visible="false" />
+                                            <asp:CheckBox ID="chkEdit" runat="server" CssClass="kv-edit-check" Visible="false" />
+                                            <asp:HiddenField ID="hfOrder" runat="server" />
+                                            <asp:HiddenField ID="hfControl" runat="server" />
+                                            <asp:HiddenField ID="hfOriginal" runat="server" />
+                                        </span>
+                                    </li>
                                 </ItemTemplate>
                             </asp:Repeater>
                         </ul>
                     </div>
                     <asp:Label ID="lblNoAttributes" runat="server" CssClass="hint-empty" Text="No details found for this unit." Visible="false" />
+                    <asp:Label ID="lblDetailsMessage" runat="server" CssClass="details-msg" Visible="false" />
                 </fieldset>
 
                 <%-- The unit's current customer (latest UNITSHUB_CUSTOMERPROPERTIES row) --%>
