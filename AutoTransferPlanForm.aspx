@@ -31,6 +31,28 @@
         .page-header {
             background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
             padding: 22px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        /* [X] in the upper right corner of the header */
+        .close-btn {
+            flex: 0 0 auto;
+            width: 34px;
+            height: 34px;
+            padding: 7px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            cursor: pointer;
+            transition: background .15s ease;
+        }
+        .close-btn:hover,
+        .close-btn:focus-visible {
+            background: rgba(255, 255, 255, 0.22);
+            outline: none;
         }
 
         .page-title {
@@ -214,15 +236,102 @@
 
         .empty-hint { color: var(--muted); font-size: 13px; padding: 6px 0; }
 
+        /* ---------- Top panel: what to do (Add / Edit / Copy) ---------- */
+        /* Tinted indigo so it stands apart from the white boxes below */
+        .mode-card {
+            padding-bottom: 16px;
+            background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+            border: 1px solid #c7d2fe;
+            border-left: 5px solid var(--brand-1);
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.10);
+        }
+        .mode-card .section-label { color: #3730a3; }
+        .mode-card .field-label { color: #4338ca; font-weight: 600; }
+
+        .mode-options { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+        .mode-options input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+        .mode-options label {
+            display: inline-block;
+            padding: 9px 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            background: #ffffff;
+            color: var(--ink);
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .mode-options label:hover { border-color: var(--brand-1); }
+        .mode-options input[type="radio"]:checked + label {
+            background: var(--brand-1);
+            border-color: var(--brand-1);
+            color: #ffffff;
+        }
+        .mode-options input[type="radio"]:focus-visible + label { outline: 2px solid var(--brand-1); outline-offset: 2px; }
+
+        .mode-row {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+            gap: 10px;
+            align-items: end;
+            margin-top: 16px;
+        }
+        .mode-row > div { min-width: 0; }
+
+        .msg-error { display: block; margin-top: 10px; color: #dc2626; font-size: 13px; }
+
     </style>
 </head>
 <body>
     <form id="form1" runat="server">
         <div class="page-header">
             <h1 class="page-title"><asp:Label ID="lblFormTitle" runat="server" Text="Add Auto-Transfer Plan" /></h1>
+            <asp:ImageButton ID="imgClose"
+                runat="server"
+                CssClass="close-btn"
+                CausesValidation="false"
+                ToolTip="Close"
+                AlternateText="Close"
+                OnClick="imgClose_Click"
+                ImageUrl="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'&gt;&lt;line x1='18' y1='6' x2='6' y2='18'/&gt;&lt;line x1='6' y1='6' x2='18' y2='18'/&gt;&lt;/svg&gt;" />
         </div>
 
         <div class="content-wrapper">
+
+            <%-- ===== Top panel: Add new / Edit existing / Copy existing ===== --%>
+            <div class="content-card mode-card">
+                <div class="section-label">What do you want to do?</div>
+                <asp:RadioButtonList ID="rblMode" runat="server" CssClass="mode-options"
+                    RepeatDirection="Horizontal" RepeatLayout="Flow"
+                    AutoPostBack="true" CausesValidation="false"
+                    OnSelectedIndexChanged="rblMode_SelectedIndexChanged">
+                    <asp:ListItem Text="Add New AutoTransfer Plan" Value="New" Selected="True" />
+                    <asp:ListItem Text="Edit Existing Plan" Value="Edit" />
+                    <asp:ListItem Text="Copy Existing Plan" Value="Copy" />
+                </asp:RadioButtonList>
+
+                <%-- Edit / Copy: pick a plan; Copy also: new title + Copy button --%>
+                <asp:Panel ID="pnlPlanPicker" runat="server" CssClass="mode-row" Visible="false">
+                    <div>
+                        <span class="field-label">Existing plan</span>
+                        <asp:DropDownList ID="ddlExistingPlan" runat="server" CssClass="txt-input"
+                            AutoPostBack="true" CausesValidation="false"
+                            OnSelectedIndexChanged="ddlExistingPlan_SelectedIndexChanged" />
+                    </div>
+                    <asp:PlaceHolder ID="phCopy" runat="server" Visible="false">
+                        <div>
+                            <span class="field-label">Plan Title</span>
+                            <asp:TextBox ID="txtCopyTitle" runat="server" CssClass="txt-input" placeholder="Title of the new plan" />
+                        </div>
+                        <asp:Button ID="btnCopy" runat="server" Text="Copy" CssClass="btn btn-primary"
+                            CausesValidation="false" OnClick="btnCopy_Click" />
+                    </asp:PlaceHolder>
+                </asp:Panel>
+                <asp:Label ID="lblModeMessage" runat="server" CssClass="msg-error" Visible="false" />
+            </div>
+
+            <%-- The plan editor (hidden in Copy mode, and in Edit mode until a plan is picked) --%>
+            <asp:Panel ID="pnlEditor" runat="server">
 
             <div class="content-card">
                 <div class="section-label">Plan (entered once)</div>
@@ -326,6 +435,8 @@
                 </div>
                 <asp:Label ID="lblMessage" runat="server" CssClass="msg-success" />
             </div>
+
+            </asp:Panel>
 
         </div>
 

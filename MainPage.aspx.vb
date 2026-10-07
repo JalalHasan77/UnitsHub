@@ -161,7 +161,7 @@ Partial Class MainPage
 
         'dt.Rows.Add("EMAIL TODAY", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
         dt.Rows.Add("CUSTOMER", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
-        'dt.Rows.Add("ADMIN", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
+
         'dt.Rows.Add("Events Control", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
         'dt.Rows.Add("Charts and Statistics", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
         Dim MemberListParameters As New clsListProperties
@@ -185,6 +185,13 @@ Partial Class MainPage
                     "ContactMaintenance.aspx?mode=New&isDialogue=Yes",
                     950, 750, "Y", "ADM", "LINK", "1.2", "1",
                     "Y", "", "")
+
+        dt.Rows.Add("AUTOTRANSFER PLANS", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
+        dt.Rows.Add("Autotransfer Plans",
+                    "AutoTransferPlanForm.aspx",
+                    950, 0, "Y", "ADM", "LINK", "2.1", "2",
+                    "Y", "", "")
+
 
         'dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
         'dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")

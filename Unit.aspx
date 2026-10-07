@@ -25,7 +25,9 @@ html, body, form {
         body {
             margin: 0;
             padding: 0;
-            background: var(--bg);
+            /* Whole page: diagonal gradient from light grey (top-left) to white (bottom-right);
+               fixed, so it stays one smooth diagonal however long the page scrolls */
+            background: var(--bg) linear-gradient(135deg, #e3e7ed 0%, #ffffff 100%) fixed;
             color: var(--ink);
             font-family: Arial, 'Segoe UI', sans-serif;
                 min-height: 100vh;
@@ -87,6 +89,7 @@ html, body, form {
     border-radius: 0;
     box-shadow: none;
     padding: 28px 32px 30px;
+    background: transparent;   /* let the page gradient show through */
 }
         .page-title {
             margin: 0 0 28px 0;
@@ -451,7 +454,8 @@ html, body, form {
             padding: 8px 16px 14px 16px;
             border: 1px solid #a0a0a0;
             border-radius: 12px;
-            background: #ffffff;
+            /* Diagonal gradient: white at the top-left corner to light grey at the bottom-right */
+            background: #ffffff linear-gradient(135deg, #ffffff 0%, #e9edf2 100%);
         }
 
         .customer-box legend {

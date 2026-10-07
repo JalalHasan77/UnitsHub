@@ -71,17 +71,172 @@ Partial Class AutoTransferPlanForm
 
     Protected Sub Page_Load(ByVal sender As Object, ByVal e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
-            CurrentPlanId = "00001" 'Request.QueryString("PlanID")
+            LoadExistingPlans()
 
-            If Not String.IsNullOrEmpty(CurrentPlanId) Then
-                lblFormTitle.Text = "Edit Auto-Transfer Plan"
-                LoadPlanForEdit(CurrentPlanId)
+            ' Opened with ?PlanID=... -> straight into Edit for that plan; otherwise Add New
+            Dim qsPlanId As String = ""
+            Try
+                qsPlanId = Convert.ToString(Request.QueryString("PlanID")).Trim()
+            Catch ex As Exception
+                qsPlanId = ""
+            End Try
+
+            If qsPlanId <> "" AndAlso ddlExistingPlan.Items.FindByValue(qsPlanId) IsNot Nothing Then
+                rblMode.SelectedValue = "Edit"
+                ddlExistingPlan.SelectedValue = qsPlanId
+                OpenPlanForEdit(qsPlanId)
             Else
-                PlanDraft = New PlanDraftModel()
+                rblMode.SelectedValue = "New"
+                ResetEditor()
             End If
         End If
 
         ApplyGroupOrderFromHiddenField()
+    End Sub
+
+    ' ==================================================================
+    ' Top panel: Add New / Edit Existing / Copy Existing
+    ' ==================================================================
+
+    ' Set when a handler replaces the draft, so PreRender doesn't copy the OLD plan's
+    ' group dropdown / textbox values into the newly loaded one
+    Private _draftReplaced As Boolean = False
+
+    Private ReadOnly Property SelectedMode As String
+        Get
+            Dim mode As String = Convert.ToString(rblMode.SelectedValue)
+            Return If(mode = "", "New", mode)
+        End Get
+    End Property
+
+    ''' <summary>Fills "Existing plan" from UNITSHUB_AUTOTRANSFERPLAN.</summary>
+    Private Sub LoadExistingPlans()
+        ddlExistingPlan.Items.Clear()
+        ddlExistingPlan.Items.Add(New ListItem("-- Select a plan --", ""))
+
+        Dim DT As Data.DataTable = GetDataTable(EBDB, "SELECT PLAN_ID, NAME FROM UNITSHUB_AUTOTRANSFERPLAN ORDER BY PLAN_ID")
+        If DT IsNot Nothing Then
+            For Each r As Data.DataRow In DT.Rows
+                Dim id As String = Convert.ToString(r("PLAN_ID"))
+                ddlExistingPlan.Items.Add(New ListItem(Convert.ToString(r("NAME")) & " (" & id & ")", id))
+            Next
+        End If
+    End Sub
+
+    ''' <summary>Empty editor: a new plan, nothing loaded.</summary>
+    Private Sub ResetEditor()
+        CurrentPlanId = ""
+        PlanDraft = New PlanDraftModel()
+        txtPlanName.Text = ""
+        hdnGroupOrder.Value = ""
+        lblMessage.Text = ""
+        _draftReplaced = True
+    End Sub
+
+    ''' <summary>Loads a saved plan into the editor; Save will update it.</summary>
+    Private Sub OpenPlanForEdit(PlanId As String)
+        ResetEditor()
+        CurrentPlanId = PlanId
+        LoadPlanForEdit(PlanId)
+    End Sub
+
+    Protected Sub rblMode_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        ddlExistingPlan.SelectedIndex = 0
+        txtCopyTitle.Text = ""
+        lblModeMessage.Visible = False
+        ResetEditor()
+    End Sub
+
+    Protected Sub ddlExistingPlan_SelectedIndexChanged(ByVal sender As Object, ByVal e As EventArgs)
+        lblModeMessage.Visible = False
+        Dim planId As String = ddlExistingPlan.SelectedValue
+
+        If SelectedMode = "Edit" Then
+            If planId = "" Then ResetEditor() Else OpenPlanForEdit(planId)
+        ElseIf SelectedMode = "Copy" Then
+            ' Suggest a title for the copy
+            txtCopyTitle.Text = If(planId = "", "", "Copy of " & GetPlanName(planId))
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Copies the selected plan (its groups and detail rows) into a NEW plan named
+    ''' "Plan Title", saves it right away, then opens the copy in Edit mode.
+    ''' </summary>
+    Protected Sub btnCopy_Click(ByVal sender As Object, ByVal e As EventArgs)
+        Dim sourceId As String = ddlExistingPlan.SelectedValue
+        Dim newTitle As String = txtCopyTitle.Text.Trim()
+
+        If sourceId = "" Then
+            ShowModeMessage("Select the plan to copy.")
+            Return
+        End If
+        If newTitle = "" Then
+            ShowModeMessage("Enter the Plan Title of the new plan.")
+            Return
+        End If
+        If PlanNameExists(newTitle) Then
+            ShowModeMessage("A plan named '" & newTitle & "' already exists. Choose another title.")
+            Return
+        End If
+
+        Try
+            ' Read the source into the draft, then save it as a brand-new plan:
+            ' PersistPlan gives new PLAN_ID / GROUP_IDs / DETAIL_IDs, so the source is untouched
+            ResetEditor()
+            LoadPlanForEdit(sourceId)
+            txtPlanName.Text = newTitle
+            CurrentPlanId = ""
+            Dim newId As String = PersistPlan()
+
+            ' Show the copy, ready to edit
+            LoadExistingPlans()
+            rblMode.SelectedValue = "Edit"
+            ddlExistingPlan.SelectedValue = newId
+            txtCopyTitle.Text = ""
+            OpenPlanForEdit(newId)
+
+            lblMessage.CssClass = "msg-success"
+            lblMessage.Text = "Plan '" & Server.HtmlEncode(newTitle) & "' copied from '" &
+                              Server.HtmlEncode(GetPlanName(sourceId)) & "' (new ID " & newId & ")."
+        Catch ex As Exception
+            ShowModeMessage("The plan couldn't be copied: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ShowModeMessage(Text As String)
+        lblModeMessage.Text = Server.HtmlEncode(Text)
+        lblModeMessage.Visible = True
+    End Sub
+
+    Private Function GetPlanName(PlanId As String) As String
+        Dim DT As Data.DataTable = GetDataTable(EBDB,
+            "SELECT NAME FROM UNITSHUB_AUTOTRANSFERPLAN WHERE PLAN_ID = '" & PlanId.Replace("'", "''") & "'")
+        If DT Is Nothing OrElse DT.Rows.Count = 0 Then Return ""
+        Return Convert.ToString(DT.Rows(0)("NAME"))
+    End Function
+
+    Private Function PlanNameExists(Name As String) As Boolean
+        Dim DT As Data.DataTable = GetDataTable(EBDB,
+            "SELECT PLAN_ID FROM UNITSHUB_AUTOTRANSFERPLAN WHERE UPPER(TRIM(NAME)) = '" & Name.Trim().ToUpperInvariant().Replace("'", "''") & "'")
+        Return DT IsNot Nothing AndAlso DT.Rows.Count > 0
+    End Function
+
+    ''' <summary>
+    ''' Shows what the chosen option needs: the plan list for Edit / Copy, the title and
+    ''' Copy button for Copy, and the editor for Add New (or Edit once a plan is picked).
+    ''' </summary>
+    Private Sub ApplyModeUI()
+        Dim mode As String = SelectedMode
+        pnlPlanPicker.Visible = (mode = "Edit" OrElse mode = "Copy")
+        phCopy.Visible = (mode = "Copy")
+        pnlEditor.Visible = (mode = "New") OrElse (mode = "Edit" AndAlso CurrentPlanId <> "")
+
+        Select Case mode
+            Case "Edit" : lblFormTitle.Text = "Edit Auto-Transfer Plan"
+            Case "Copy" : lblFormTitle.Text = "Copy Auto-Transfer Plan"
+            Case Else : lblFormTitle.Text = "Add Auto-Transfer Plan"
+        End Select
     End Sub
 
     ''' <summary>
@@ -150,8 +305,9 @@ Partial Class AutoTransferPlanForm
     ''' textbox before an event handler gets a chance to read it via FindControl.
     ''' </summary>
     Protected Sub Page_PreRender(ByVal sender As Object, ByVal e As EventArgs) Handles Me.PreRender
-        If IsPostBack Then CaptureGroupHeaderValues()
+        If IsPostBack AndAlso Not _draftReplaced Then CaptureGroupHeaderValues()
         BindGroups()
+        ApplyModeUI()
     End Sub
 
     ''' <summary>
@@ -225,6 +381,15 @@ Partial Class AutoTransferPlanForm
 
         txtGroupLabel.Text = ""
         txtGroupTitle.Text = ""
+    End Sub
+
+    ''' <summary>
+    ''' [X]: drops the unsaved draft and closes the popup (same call ContactMaintenance's
+    ''' close button uses).
+    ''' </summary>
+    Protected Sub imgClose_Click(ByVal sender As Object, ByVal e As ImageClickEventArgs)
+        Session("AutoTransferPlanDraft") = Nothing
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
     End Sub
 
     Protected Sub btnCancel_Click(ByVal sender As Object, ByVal e As EventArgs)
@@ -395,6 +560,28 @@ Partial Class AutoTransferPlanForm
             Return
         End If
 
+        Dim wasNewPlan As Boolean = String.IsNullOrEmpty(CurrentPlanId)
+        Dim planName As String = txtPlanName.Text.Trim()
+        Dim planId As String = PersistPlan()
+
+        ' Re-open the saved plan in Edit mode (a new plan joins the "Existing plan" list
+        ' first), so further changes update it and the IDs shown are the saved ones
+        If wasNewPlan Then LoadExistingPlans()
+        rblMode.SelectedValue = "Edit"
+        ddlExistingPlan.SelectedValue = planId
+        OpenPlanForEdit(planId)
+
+        lblMessage.CssClass = "msg-success"
+        lblMessage.Text = "Plan '" & Server.HtmlEncode(planName) & "' " &
+            If(wasNewPlan, "saved", "updated") & " (ID " & planId & ")."
+    End Sub
+
+    ''' <summary>
+    ''' Writes the draft to the database and returns its PLAN_ID: a new plan (CurrentPlanId
+    ''' empty) is inserted, an existing one updated and its groups / details replaced.
+    ''' Used by Save and by Copy.
+    ''' </summary>
+    Private Function PersistPlan() As String
         Dim planId As String
         Dim wasNewPlan As Boolean = String.IsNullOrEmpty(CurrentPlanId)
 
@@ -428,12 +615,8 @@ Partial Class AutoTransferPlanForm
         InsertGroupsAndDetails(planId)
 
         CurrentPlanId = planId
-        Session("AutoTransferPlanDraft") = Nothing
-
-        lblMessage.CssClass = "msg-success"
-        lblMessage.Text = "Plan '" & txtPlanName.Text.Trim() & "' " &
-            If(wasNewPlan, "saved", "updated") & " (ID " & planId & ")."
-    End Sub
+        Return planId
+    End Function
 
     ''' <summary>Inserts every group and its detail rows from the current draft, for planId.</summary>
     Private Sub InsertGroupsAndDetails(ByVal planId As String)

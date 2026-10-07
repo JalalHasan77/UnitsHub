@@ -1193,6 +1193,8 @@ Partial Class AutoTransfer
         SQL = SQL + vbCrLf + " WHERE  n.PROJECT_ID   = '" & lblPRJID.Text & "' "
         SQL = SQL + vbCrLf + "   AND  n.NODE_TYPE_ID = '000' "
         SQL = SQL + vbCrLf + " GROUP BY n.PROJECT_ID, n.NODE_ID "
+        ' Several project nodes: take one that has a TITLE first (Rows(0) is used below)
+        SQL = SQL + vbCrLf + " ORDER BY MAX(CASE WHEN UPPER(a.ATTRIBUTE_NAME) = 'TITLE' THEN v.VALUE_TEXT END) NULLS LAST, n.NODE_ID "
         Dim dtProjectsCharges As New Data.DataTable
         dtProjectsCharges = GetDataTable(EBDB_CS, SQL)
 
@@ -1372,12 +1374,15 @@ Partial Class AutoTransfer
         IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory & "\Logs.txt", "I am Here 750")
         'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", vbCrLf & "Reached Here 748")
 
-        Dim folderPath As String = Server.MapPath(GetAppPath() & "\ReportsTemplate\" & DT.Rows(0)("Project").ToString)
+        ' ReportsTemplate\<project folder>. The folder name comes from InvoiceFolderForProject
+        ' (the same function ShowInVoices uses to open the PDF), not from the report's
+        ' "Project" value: that was empty whenever the first project-node row the invoice
+        ' query returned had no TITLE, and then the PDF went into ReportsTemplate itself.
+        Dim ProjectFolder As String = InvoiceFolderForProject(lblPRJID.Text)
+        Dim folderPath As String = Path.Combine(Server.MapPath("~/ReportsTemplate"), ProjectFolder)
         Dim FileName As String
-        'IO.File.AppendAllText("C:\IntraApps\TST\Links\Modules\Select_Ext\logs.txt", vbCrLf & folderPath)
-        If Not Directory.Exists(folderPath) Then
-            Directory.CreateDirectory(folderPath)
-        End If
+        Directory.CreateDirectory(folderPath)   ' does nothing if it's already there
+        IO.File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory & "\Logs.txt", vbCrLf & "Invoice folder: " & folderPath)
 
         DS.Tables.Add(DT)
         DS.DataSetName = "Invoices-01"
@@ -1394,13 +1399,13 @@ Partial Class AutoTransfer
         Dim CurrentUser As String = GetCurrentUserID()
 
 
-        FileName = folderPath & "\" & DT.Rows(0)("InvoiceNum").ToString & ".pdf"
-        p.ExportToDisk(CrystalDecisions.Shared.ExportFormatType.PortableDocFormat, FileName.Replace("\\", "\"))
+        FileName = Path.Combine(folderPath, DT.Rows(0)("InvoiceNum").ToString().Trim() & ".pdf")
+        p.ExportToDisk(CrystalDecisions.Shared.ExportFormatType.PortableDocFormat, FileName)
         p.Close()
 
         ' PDF is on disk: ReportsTemplate\<Project>\<InvoiceNum>.pdf - remember it and
         ' switch on Display Invoice / Re-Generate Invoice
-        ViewState("InvoiceProject") = DT.Rows(0)("Project").ToString
+        ViewState("InvoiceProject") = ProjectFolder
         ViewState("InvoiceNum") = DT.Rows(0)("InvoiceNum").ToString
         EnableInvoiceButtons()
     End Sub
@@ -1449,6 +1454,45 @@ Partial Class AutoTransfer
             ShowMessage("Re-generating the invoice failed: " & ex.Message, False)
         End Try
     End Sub
+
+    ''' <summary>
+    ''' Folder (under ReportsTemplate) for a project's invoice PDFs. AutoTransfer saves into it
+    ''' and ShowInVoices opens from it, so BOTH pages use this same function (keep the two
+    ''' copies identical). Name = the project's TITLE (attribute of its project node,
+    ''' NODE_TYPE_ID '000'), else PROJECT_NAME_EN, else the PROJECT_ID itself - never "" -
+    ''' with characters Windows doesn't allow in a folder name replaced by "_".
+    ''' </summary>
+    Private Function InvoiceFolderForProject(ProjectId As String) As String
+        Dim id As String = If(ProjectId, "").Trim()
+        If id = "" Then Return ""
+        Dim idSql As String = id.Replace("'", "''")
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT MAX(TRIM(v.VALUE_TEXT)) "
+        SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES n "
+        SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES a "
+        SQL = SQL + vbCrLf + "        ON a.PROJECT_ID = n.PROJECT_ID AND a.NODE_TYPE_ID = n.NODE_TYPE_ID "
+        SQL = SQL + vbCrLf + "       AND UPPER(a.ATTRIBUTE_NAME) = 'TITLE' "
+        SQL = SQL + vbCrLf + " JOIN   UNITSHUB_NODE_ATTRIBUTE_VALUE v "
+        SQL = SQL + vbCrLf + "        ON v.NODE_ID = n.NODE_ID AND TO_NUMBER(v.DISPLAY_ORDER) = TO_NUMBER(a.DISPLAY_ORDER) "
+        SQL = SQL + vbCrLf + " WHERE  n.PROJECT_ID = '" & idSql & "' "
+        SQL = SQL + vbCrLf + "   AND  n.NODE_TYPE_ID = '000' "
+        SQL = SQL + vbCrLf + "   AND  TRIM(v.VALUE_TEXT) IS NOT NULL "
+
+        Dim name As String = If(DB.RetreiveScalarSTRING(EBDB, SQL), "").Trim()
+        If name = "" Then
+            name = If(DB.RetreiveScalarSTRING(EBDB,
+                "SELECT PROJECT_NAME_EN FROM UNITSHUB_PROJECTS WHERE PROJECT_ID = '" & idSql & "'"), "").Trim()
+        End If
+        If name = "" Then name = id
+
+        ' A valid single folder name: no \ / : * ? " < > | and no trailing dots / spaces
+        For Each c As Char In Path.GetInvalidFileNameChars()
+            name = name.Replace(c, "_"c)
+        Next
+        name = name.Trim().TrimEnd("."c).Trim()
+        Return If(name = "", id, name)
+    End Function
 
     Function GetAppPath() As String
         Dim lcPath As String = HttpRuntime.AppDomainAppVirtualPath

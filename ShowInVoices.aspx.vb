@@ -124,36 +124,53 @@ Partial Class ShowInVoices
                                               returnKey:=OpenActionPopupReturnKey)
     End Sub
 
-    ''' <summary>
-    ''' Folder the invoice PDFs of this unit's project are saved in (ReportsTemplate\&lt;folder&gt;):
-    ''' AutoTransfer.GeneratePDF uses the project's TITLE (attribute of the project node,
-    ''' NODE_TYPE_ID '000'). Falls back to PROJECT_NAME_EN.
-    ''' </summary>
+    ''' <summary>Folder of this unit's project's invoice PDFs (see InvoiceFolderForProject).</summary>
     Private Function GetInvoiceProjectFolder(NodeId As String) As String
         Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
         If projectId = "" Then
-            projectId = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
-                "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & If(NodeId, "").Trim().Replace("'", "''") & "'")).Trim()
+            projectId = If(DB.RetreiveScalarSTRING(EBDB,
+                "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & If(NodeId, "").Trim().Replace("'", "''") & "'"), "").Trim()
         End If
-        If projectId = "" Then Return ""
+        Return InvoiceFolderForProject(projectId)
+    End Function
+
+    ''' <summary>
+    ''' Folder (under ReportsTemplate) for a project's invoice PDFs. AutoTransfer saves into it
+    ''' and ShowInVoices opens from it, so BOTH pages use this same function (keep the two
+    ''' copies identical). Name = the project's TITLE (attribute of its project node,
+    ''' NODE_TYPE_ID '000'), else PROJECT_NAME_EN, else the PROJECT_ID itself - never "" -
+    ''' with characters Windows doesn't allow in a folder name replaced by "_".
+    ''' </summary>
+    Private Function InvoiceFolderForProject(ProjectId As String) As String
+        Dim id As String = If(ProjectId, "").Trim()
+        If id = "" Then Return ""
+        Dim idSql As String = id.Replace("'", "''")
 
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT v.VALUE_TEXT "
+        SQL = SQL + vbCrLf + " SELECT MAX(TRIM(v.VALUE_TEXT)) "
         SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES n "
         SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES a "
         SQL = SQL + vbCrLf + "        ON a.PROJECT_ID = n.PROJECT_ID AND a.NODE_TYPE_ID = n.NODE_TYPE_ID "
         SQL = SQL + vbCrLf + "       AND UPPER(a.ATTRIBUTE_NAME) = 'TITLE' "
         SQL = SQL + vbCrLf + " JOIN   UNITSHUB_NODE_ATTRIBUTE_VALUE v "
         SQL = SQL + vbCrLf + "        ON v.NODE_ID = n.NODE_ID AND TO_NUMBER(v.DISPLAY_ORDER) = TO_NUMBER(a.DISPLAY_ORDER) "
-        SQL = SQL + vbCrLf + " WHERE  n.PROJECT_ID = '" & projectId.Replace("'", "''") & "' "
+        SQL = SQL + vbCrLf + " WHERE  n.PROJECT_ID = '" & idSql & "' "
         SQL = SQL + vbCrLf + "   AND  n.NODE_TYPE_ID = '000' "
-        SQL = SQL + vbCrLf + "   AND  ROWNUM = 1 "
+        SQL = SQL + vbCrLf + "   AND  TRIM(v.VALUE_TEXT) IS NOT NULL "
 
-        Dim title As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
-        If title <> "" Then Return title
+        Dim name As String = If(DB.RetreiveScalarSTRING(EBDB, SQL), "").Trim()
+        If name = "" Then
+            name = If(DB.RetreiveScalarSTRING(EBDB,
+                "SELECT PROJECT_NAME_EN FROM UNITSHUB_PROJECTS WHERE PROJECT_ID = '" & idSql & "'"), "").Trim()
+        End If
+        If name = "" Then name = id
 
-        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
-            "SELECT PROJECT_NAME_EN FROM UNITSHUB_PROJECTS WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "'")).Trim()
+        ' A valid single folder name: no \ / : * ? " < > | and no trailing dots / spaces
+        For Each c As Char In Path.GetInvalidFileNameChars()
+            name = name.Replace(c, "_"c)
+        Next
+        name = name.Trim().TrimEnd("."c).Trim()
+        Return If(name = "", id, name)
     End Function
 
     ''' <summary>
