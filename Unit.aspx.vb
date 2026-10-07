@@ -404,11 +404,61 @@ Partial Class Unit
             _editProblems.Add(AttributeName & " has no SQL for its list")
         End If
 
-        If CurrentValue <> "" AndAlso ddl.Items.FindByValue(CurrentValue) Is Nothing Then
-            ddl.Items.Add(New ListItem(CurrentValue, CurrentValue))
+        SelectCurrentValue(ddl, CurrentValue)
+    End Sub
+
+    ''' <summary>
+    ''' Selects the unit's stored value in a list, without adding a duplicate entry:
+    '''   1. an item whose value is exactly the stored value;
+    '''   2. an item whose value is the same apart from letter case / spaces;
+    '''   3. an item whose TEXT is the stored value - the unit stores the text, not the
+    '''      list's 1st column (e.g. "Corner" while the SQL returns SEQ, VALUE), so every
+    '''      item's value becomes its text and Save keeps storing text the same way;
+    '''   4. none of these: the stored value is added as its own entry, so opening Edit
+    '''      never changes a value by itself.
+    ''' </summary>
+    Private Sub SelectCurrentValue(ddl As DropDownList, CurrentValue As String)
+        If CurrentValue = "" Then
+            ddl.SelectedValue = ""
+            Exit Sub
         End If
+
+        If ddl.Items.FindByValue(CurrentValue) IsNot Nothing Then
+            ddl.SelectedValue = CurrentValue
+            Exit Sub
+        End If
+
+        Dim wanted As String = NormalizeListText(CurrentValue)
+
+        For Each item As ListItem In ddl.Items
+            If item.Value <> "" AndAlso NormalizeListText(item.Value) = wanted Then
+                ddl.ClearSelection()
+                item.Selected = True
+                Exit Sub
+            End If
+        Next
+
+        For Each item As ListItem In ddl.Items
+            If item.Value <> "" AndAlso NormalizeListText(item.Text) = wanted Then
+                For Each it As ListItem In ddl.Items
+                    If it.Value <> "" Then it.Value = it.Text
+                Next
+                ddl.ClearSelection()
+                item.Selected = True
+                Exit Sub
+            End If
+        Next
+
+        ddl.Items.Add(New ListItem(CurrentValue, CurrentValue))
         ddl.SelectedValue = CurrentValue
     End Sub
+
+    ''' <summary>Text compared loosely: non-breaking spaces as spaces, repeated spaces as one, trimmed, upper case.</summary>
+    Private Function NormalizeListText(Value As String) As String
+        Dim t As String = If(Value, "").Replace(ChrW(160), " "c)
+        t = System.Text.RegularExpressions.Regex.Replace(t, "\s+", " ")
+        Return t.Trim().ToUpperInvariant()
+    End Function
 
     ''' <summary>Shows Edit, or Save + Cancel, and outlines the box while editing.</summary>
     Private Sub ApplyDetailsMode()
