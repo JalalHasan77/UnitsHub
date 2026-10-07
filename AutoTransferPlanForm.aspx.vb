@@ -405,12 +405,7 @@ Partial Class AutoTransferPlanForm
         If _implementOnOptions Is Nothing Then
             Dim SQL As String = ""
             SQL = SQL + vbCrLf + " SELECT P.PLAN_ID || '.' || D.DETAIL_ID AS ID, "
-            SQL = SQL + vbCrLf + "        P.NAME || ' (' || D.DESCRIPTION || ': ' || "
-            SQL = SQL + vbCrLf + "            CASE "
-            SQL = SQL + vbCrLf + "                WHEN D.AMOUNT IS NOT NULL THEN TO_CHAR(D.AMOUNT) "
-            SQL = SQL + vbCrLf + "                ELSE TO_CHAR(D.PERCENT) "
-            SQL = SQL + vbCrLf + "            END "
-            SQL = SQL + vbCrLf + "        || ')' AS NAME "
+            SQL = SQL + vbCrLf + "        P.NAME || ' (' || D.DESCRIPTION || ': ' || D.FORMULA || ')' AS NAME "
             SQL = SQL + vbCrLf + " FROM   UNITSHUB_PAYMENTPLAN P "
             SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_PAYMENTPLANDETAILS D ON P.PLAN_ID = D.PLAN_ID "
             SQL = SQL + vbCrLf + " ORDER BY P.PLAN_ID, D.DETAIL_ID "

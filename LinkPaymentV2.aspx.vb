@@ -247,8 +247,8 @@ Partial Class LinkPaymentV2
         Dim DetailPercent As String
         Try
             TransAmount = ParseDecimalLenient(AmountValue).ToString(CultureInfo.InvariantCulture)
-            DetailPercent = If(DetailRow("PERCENT") Is DBNull.Value, "0",
-                               ParseDecimalLenient(DetailRow("PERCENT")).ToString(CultureInfo.InvariantCulture))
+            DetailPercent = If(DetailRow("FORMULA") Is DBNull.Value, "0",
+                               ParseDecimalLenient(DetailRow("FORMULA")).ToString(CultureInfo.InvariantCulture))
         Catch ex As FormatException
             ShowPaymentMessage("The payment amount could not be read: " & ex.Message)
             Exit Sub
@@ -363,8 +363,8 @@ Partial Class LinkPaymentV2
     ''' </summary>
     Private Function GetNextPlanDetail(PlanId As String) As DataTable
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + "SELECT SEQ, DESCRIPTION, PERCENT FROM ( "
-        SQL = SQL + vbCrLf + "    SELECT D.DETAIL_ID AS SEQ, D.DESCRIPTION, D.PERCENT "
+        SQL = SQL + vbCrLf + "SELECT SEQ, DESCRIPTION, FORMULA FROM ( "
+        SQL = SQL + vbCrLf + "    SELECT D.DETAIL_ID AS SEQ, D.DESCRIPTION, D.FORMULA "
         SQL = SQL + vbCrLf + "    FROM UNITSHUB_PAYMENTPLANDETAILS D "
         SQL = SQL + vbCrLf + "    WHERE D.PLAN_ID = '" & PlanId.Replace("'", "''") & "' "
         SQL = SQL + vbCrLf + "      AND NOT EXISTS ( "
