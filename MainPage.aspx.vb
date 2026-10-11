@@ -185,12 +185,37 @@ Partial Class MainPage
                     "ContactMaintenance.aspx?mode=New&isDialogue=Yes",
                     950, 750, "Y", "ADM", "LINK", "1.2", "1",
                     "Y", "", "")
-
+        '============================================================
+        '============================================================
+        '============================================================
         dt.Rows.Add("AUTOTRANSFER PLANS", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
         dt.Rows.Add("Autotransfer Plans",
                     "AutoTransferPlanForm.aspx",
                     950, 0, "Y", "ADM", "LINK", "2.1", "2",
                     "Y", "", "")
+        dt.Rows.Add("Payment Schedules",
+                    "PaymentSchedule.aspx",
+                    950, 0, "Y", "ADM", "LINK", "2.2", "2",
+                    "Y", "", "")
+        '============================================================
+        '============================================================
+        '============================================================
+        dt.Rows.Add("Users, Groups, and Roles", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
+        dt.Rows.Add("Users",
+                    "PaymentSchedule.aspx",
+                    950, 0, "Y", "ADM", "LINK", "3.1", "3",
+                    "Y", "", "")
+        dt.Rows.Add("Groups",
+                    "PaymentSchedule.aspx",
+                    950, 0, "Y", "ADM", "LINK", "3.2", "3",
+                    "Y", "", "")
+        dt.Rows.Add("Roles",
+                    "ManageRoles.aspx",
+                    950, 0, "Y", "ADM", "LINK", "3.3", "3",
+                    "Y", "", "")
+
+        '
+
 
 
         'dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")

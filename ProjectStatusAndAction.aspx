@@ -96,6 +96,37 @@
         .btn.danger { color: #b91c1c; }
         .btn[disabled], .btn.aspNetDisabled { opacity: .45; cursor: not-allowed; }
 
+        /* ---------- Icon buttons (Edit / Delete / Move / Users / Insert / Close) ---------- */
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 7px;
+            background: #ffffff;
+            color: var(--navy);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background .15s ease, border-color .15s ease, transform .1s ease;
+        }
+        .icon-btn svg { width: 18px; height: 18px; }
+        .icon-btn:hover { border-color: var(--navy); background: #f1f4fb; }
+        .icon-btn:active { transform: scale(0.95); }
+        .icon-btn:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+
+        /* Edit: blue outline, blue pen (as in the sample) */
+        .icon-btn.edit { border-color: #2563eb; color: #2563eb; }
+        .icon-btn.edit:hover { background: #eff6ff; }
+
+        /* Delete: red outline, light red fill, red bin (as in the sample) */
+        .icon-btn.del { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+        .icon-btn.del:hover { background: #fee2e2; }
+
+        .icon-btn.aspNetDisabled { opacity: .45; cursor: not-allowed; }
+
         .inp, select.inp {
             height: 34px;
             padding: 0 10px;
@@ -171,7 +202,7 @@
             <h1>Statuses and actions</h1>
             <div style="display:flex;gap:10px;align-items:center">
                 <asp:DropDownList ID="ddlProjectName" runat="server" AutoPostBack="true" OnSelectedIndexChanged="ddlProjectName_SelectedIndexChanged" />
-                <asp:Button ID="btnClose" runat="server" Text="Close" CssClass="btn small" OnClick="btnClose_Click" CausesValidation="false" />
+                <asp:LinkButton ID="btnClose" runat="server" OnClick="btnClose_Click" CausesValidation="false" CssClass="icon-btn" ToolTip="Close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></asp:LinkButton>
             </div>
         </div>
 
@@ -209,12 +240,12 @@
                             <div class="title"><asp:Literal ID="litTitle" runat="server" /></div>
                         </div>
                         <div class="head-tools">
-                            <asp:Button ID="btnAddStateUp" runat="server" Text="Add state ▲" CssClass="btn small" CausesValidation="false" />
-                            <asp:Button ID="btnAddStateDown" runat="server" Text="Add state ▼" CssClass="btn small" CausesValidation="false" />
-                            <asp:Button ID="btnEditStatus" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false" />
-                            <asp:Button ID="btnUp" runat="server" Text="▲" CssClass="btn small" ToolTip="Move up" CausesValidation="false" OnClick="btnUp_Click" />
-                            <asp:Button ID="btnDown" runat="server" Text="▼" CssClass="btn small" ToolTip="Move down" CausesValidation="false" OnClick="btnDown_Click" />
-                            <asp:Button ID="btnEdit" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false" OnClick="btnEdit_Click" />
+                            <asp:LinkButton ID="btnAddStateUp" runat="server" CausesValidation="false" CssClass="icon-btn" ToolTip="Add a state above" aria-label="Add a state above"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="3" x2="12" y2="11"/><line x1="8" y1="7" x2="16" y2="7"/><rect x="4" y="15" width="16" height="5" rx="1.2"/></svg></asp:LinkButton>
+                            <asp:LinkButton ID="btnAddStateDown" runat="server" CausesValidation="false" CssClass="icon-btn" ToolTip="Add a state below" aria-label="Add a state below"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="5" rx="1.2"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="8" y1="17" x2="16" y2="17"/></svg></asp:LinkButton>
+                            <asp:LinkButton ID="btnEditStatus" runat="server" CausesValidation="false" CssClass="icon-btn edit" ToolTip="Edit status" aria-label="Edit status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6l-3.6.8.8-3.6z"/></svg></asp:LinkButton>
+                            <asp:LinkButton ID="btnUp" runat="server" CausesValidation="false" OnClick="btnUp_Click" CssClass="icon-btn" ToolTip="Move up" aria-label="Move up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"/></svg></asp:LinkButton>
+                            <asp:LinkButton ID="btnDown" runat="server" CausesValidation="false" OnClick="btnDown_Click" CssClass="icon-btn" ToolTip="Move down" aria-label="Move down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></asp:LinkButton>
+                            <asp:LinkButton ID="btnEdit" runat="server" CausesValidation="false" OnClick="btnEdit_Click" CssClass="icon-btn edit" ToolTip="Edit sub-status" aria-label="Edit sub-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6l-3.6.8.8-3.6z"/></svg></asp:LinkButton>
                         </div>
                     </div>
 
@@ -310,13 +341,13 @@
                                 <span><span class='<%# "tag " & Eval("TagClass") %>'><%# Server.HtmlEncode(Eval("TagText").ToString()) %></span></span>
                                 <span><%# Eval("UsersHtml") %></span>
                                 <span class="row-tools">
-                                    <asp:Button ID="btnUsers" runat="server" Text="Users" CssClass="btn small"
-                                        CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" OnClick="btnUsers_Click" />
-                                    <asp:Button ID="btnEditAction" runat="server" Text="Edit" CssClass="btn small" CausesValidation="false"
-                                        CommandName="EditAction" CommandArgument='<%# Eval("PlacementKey") %>' />
-                                    <asp:Button ID="btnRemove" runat="server" Text="Remove from here" CssClass="btn small danger" CommandName="Remove"
+                                    <asp:LinkButton ID="btnUsers" runat="server"
+                                        CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" OnClick="btnUsers_Click" CssClass="icon-btn" ToolTip="Users" aria-label="Users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0 1 21.5 20"/></svg></asp:LinkButton>
+                                    <asp:LinkButton ID="btnEditAction" runat="server" CausesValidation="false"
+                                        CommandName="EditAction" CommandArgument='<%# Eval("PlacementKey") %>' CssClass="icon-btn edit" ToolTip="Edit action" aria-label="Edit action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6l-3.6.8.8-3.6z"/></svg></asp:LinkButton>
+                                    <asp:LinkButton ID="btnRemove" runat="server" CommandName="Remove"
                                         CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false"
-                                        OnClientClick="return confirm('Remove this action from here? Its users for this place are removed too.');" />
+                                        OnClientClick="return confirm('Remove this action from here? Its users for this place are removed too.');" CssClass="icon-btn del" ToolTip="Remove from here" aria-label="Remove from here"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2.5h6l1 1.5h4.5v2.5h-17V4H8z"/><path d="M5.5 8h13l-1 12.2A2 2 0 0 1 15.5 22h-7a2 2 0 0 1-2-1.8z"/></svg></asp:LinkButton>
                                 </span>
                             </div>
                         </ItemTemplate>

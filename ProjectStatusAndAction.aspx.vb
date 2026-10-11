@@ -544,11 +544,11 @@ Partial Class ProjectStatusAndAction
         If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
         Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
 
-        Dim btnRemove As Button = CType(e.Item.FindControl("btnRemove"), Button)
+        Dim btnRemove As LinkButton = CType(e.Item.FindControl("btnRemove"), LinkButton)
         btnRemove.Visible = CBool(r("IsExactlyHere"))
 
         ' Users picker (same list popup as before), ticked = rights for exactly this placement
-        Dim btnUsers As Button = CType(e.Item.FindControl("btnUsers"), Button)
+        Dim btnUsers As LinkButton = CType(e.Item.FindControl("btnUsers"), LinkButton)
         Dim MemberListParameters As New clsListProperties
         With MemberListParameters
             .ItemsSQL = "Select USER_ID as ID, FULL_NAME as Name from UNITSHUB_USERS order by Name"
@@ -566,7 +566,7 @@ Partial Class ProjectStatusAndAction
             "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)),
             400, 600, PopupPlacement.Center, "Select Adj", VendorPopupHelper.PopupDisplayMode.FrameOnly)
 
-        Dim btnEditAction As Button = CType(e.Item.FindControl("btnEditAction"), Button)
+        Dim btnEditAction As LinkButton = CType(e.Item.FindControl("btnEditAction"), LinkButton)
         VendorPopupHelper.RegisterVendorPopup(Me, btnEditAction,
             "ActionAddEdit.aspx?ProjectID=" & Server.UrlEncode(ProjectId) &
             "&StatusID=" & Server.UrlEncode(Convert.ToString(r("STATUS_ID"))) &
@@ -739,7 +739,7 @@ Partial Class ProjectStatusAndAction
                     List(Of Dictionary(Of String, Object)))
         If selectedItems Is Nothing Then Exit Sub    ' closed without saving
 
-        Dim parts() As String = Convert.ToString(CType(sender, Button).CommandArgument).Split("|"c)
+        Dim parts() As String = Convert.ToString(CType(sender, IButtonControl).CommandArgument).Split("|"c)
         If parts.Length < 3 Then Exit Sub
         Dim actionId As String = parts(0), pst As String = parts(1), psb As String = parts(2)
 
