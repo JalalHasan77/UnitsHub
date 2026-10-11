@@ -1,0 +1,1363 @@
+Imports System.Data
+Imports System.Collections.Generic
+Imports System.DateTime
+Imports System.Drawing
+Imports System.Globalization
+Imports System.IO
+Imports CrystalDecisions.CrystalReports.Engine
+
+Partial Class ProjectComp
+    Inherits System.Web.UI.Page
+
+    ''' <summary>Entity this page's documents belong to (UNITSHUB_ENTITIES.ENTITY_NAME); also sent to AddAttachment.</summary>
+    Private Const EntityName As String = "Unit"
+    Private encryNdecry As New EncryDecry
+
+    Private Sub AutoTransfer_Load(sender As Object, e As EventArgs) Handles Me.Load
+        If Not Page.IsPostBack Then
+            lblPID.Text = If(Request("NodeID"), "").Trim()
+            lblPRJID.Text = If(Request("ProjectId"), "").Trim()
+        End If
+
+        ' The component lists are built on every request (they are dynamic controls), so
+        ' their selection and change events survive postbacks
+        BuildComponentLists()
+
+        If Not Page.IsPostBack Then
+            LoadNode()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Fills everything below the component lists for the node in lblPID: details,
+    ''' customer, attachment categories and history (comments/attachments are bound in
+    ''' PreRender on every request).
+    ''' </summary>
+    Private Sub LoadNode()
+        LoadProject()
+        LoadAttributes()
+
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        Dim ContactId As String = GetUnitContactId(NodeId)
+        UnitContactId = ContactId      ' still used to show the customer's attachments / comments
+        LoadDocCategories(NodeId)
+        BindHistory()
+    End Sub
+
+    ' ==================================================================
+    ' Components: one dropdown per node type, from 000 up to the received NodeTypeID
+    ' ==================================================================
+    '   UNITSHUB_NODE_TYPES          (NODE_TYPE_ID, TYPE_NAME, MUST_ATTRIBUTES, EDITFORM, REFERETOBY)
+    '   UNITSHUB_NODES               (NODE_ID, PROJECT_ID, PARENT_NODE_ID, NODE_TYPE_ID, CREATION_DATE)
+    '   UNITSHUB_NODE_ATTRIBUTE_VALUE(NODE_ID, DISPLAY_ORDER, VALUE_TEXT)
+    ' REFERETOBY says which attribute(s) name a node in the list: DISPLAY_ORDER numbers
+    ' (e.g. "1" or "1,3") or attribute names; several are joined with " - ".
+    ' A type with no nodes gets no dropdown.
+
+    ''' <summary>The NodeTypeID this page was opened for ("" = none).</summary>
+    Private ReadOnly Property ReceivedNodeTypeId As String
+        Get
+            Return If(Request("NodeTypeID"), "").Trim()
+        End Get
+    End Property
+
+    ' The dropdowns built for this request, by numeric NODE_TYPE_ID
+    Private ReadOnly _compLists As New SortedDictionary(Of Long, DropDownList)
+    Private ReadOnly _compTypeNames As New Dictionary(Of Long, String)
+
+    ''' <summary>
+    ''' Builds the dropdowns into phComponents, smallest NODE_TYPE_ID first (000, 001, ...) up
+    ''' to the received type. Every list posts back on change: the lists of the smaller types
+    ''' then show the chosen node's ancestors (SyncAncestors), and the received type's list
+    ''' also loads the chosen node into the boxes below.
+    ''' </summary>
+    Private Sub BuildComponentLists()
+        phComponents.Controls.Clear()
+        _compLists.Clear()
+        _compTypeNames.Clear()
+        pnlComponents.Visible = False
+        Dim received As String = ReceivedNodeTypeId
+        If received = "" Then Exit Sub
+
+        Dim types As DataTable = GetDataTable(EBDB,
+            "SELECT NODE_TYPE_ID, TYPE_NAME, REFERETOBY FROM UNITSHUB_NODE_TYPES " &
+            "WHERE REGEXP_LIKE(TRIM(NODE_TYPE_ID), '^[0-9]+$') " &
+            "AND TO_NUMBER(NODE_TYPE_ID) <= " & ToNumberOrZero(received) & " " &
+            "ORDER BY TO_NUMBER(NODE_TYPE_ID)")
+        If types Is Nothing Then Exit Sub
+
+        For Each t As DataRow In types.Rows
+            Dim typeId As String = Convert.ToString(t("NODE_TYPE_ID")).Trim()
+            Dim nodes As DataTable = ComponentNodes(typeId, Convert.ToString(t("REFERETOBY")))
+            If nodes Is Nothing OrElse nodes.Rows.Count = 0 Then Continue For   ' nothing found: not shown
+
+            Dim typeName As String = Convert.ToString(t("TYPE_NAME")).Trim()
+
+            Dim field As New Panel()
+            field.CssClass = "comp-field"
+            Dim ddl As New DropDownList()
+            ddl.ID = "ddlComp_" & typeId
+            ddl.CssClass = "ddl-input comp-ddl"
+            ddl.Items.Add(New ListItem("-- Select " & If(typeName = "", "a component", typeName) & " --", ""))
+            For Each n As DataRow In nodes.Rows
+                ddl.Items.Add(New ListItem(Convert.ToString(n("NODE_TEXT")).Trim(), Convert.ToString(n("NODE_ID")).Trim()))
+            Next
+
+            Dim lbl As New Label()
+            lbl.CssClass = "comp-label"
+            lbl.Text = Server.HtmlEncode(If(typeName = "", "Type " & typeId, typeName)) &
+                       " <span class=""comp-count"">(" & nodes.Rows.Count & ")</span>"
+            lbl.AssociatedControlID = ddl.ID
+
+            ddl.AutoPostBack = True
+            _compLists(ToNumberOrZero(typeId)) = ddl
+            _compTypeNames(ToNumberOrZero(typeId)) = If(typeName = "", "Type " & typeId, typeName)
+
+            field.Controls.Add(lbl)
+            field.Controls.Add(ddl)
+            phComponents.Controls.Add(field)
+            pnlComponents.Visible = True
+        Next
+
+        ' Events: the LARGEST type shown loads its node into the details box below (and
+        ' syncs the smaller lists); every other list only syncs the lists smaller than it
+        If _compLists.Count > 0 Then
+            Dim largest As Long = Long.MinValue
+            For Each k As Long In _compLists.Keys
+                If k > largest Then largest = k
+            Next
+            For Each kv As KeyValuePair(Of Long, DropDownList) In _compLists
+                If kv.Key = largest Then
+                    AddHandler kv.Value.SelectedIndexChanged, AddressOf ReceivedComponent_Changed
+                    If Not IsPostBack AndAlso lblPID.Text <> "" AndAlso kv.Value.Items.FindByValue(lblPID.Text) IsNot Nothing Then
+                        kv.Value.SelectedValue = lblPID.Text
+                    End If
+                Else
+                    AddHandler kv.Value.SelectedIndexChanged, AddressOf Component_Changed
+                End If
+            Next
+            ' "<TYPE_NAME> Details" for the box below
+            litDetailsLegend.Text = Server.HtmlEncode(_compTypeNames(largest).ToUpperInvariant() & " DETAILS")
+        End If
+
+        ' Opened for a given NodeID: show its ancestors too
+        If Not IsPostBack AndAlso lblPID.Text <> "" Then SyncAncestors(lblPID.Text)
+    End Sub
+
+    ''' <summary>
+    ''' Selects, in the lists of the smaller node types, the ancestors of NodeId (walking up
+    ''' UNITSHUB_NODES.PARENT_NODE_ID). A list whose type isn't in the chain, or whose
+    ''' ancestor isn't listed, goes back to "-- Select --". Nothing changes when NodeId is "".
+    ''' </summary>
+    Private Sub SyncAncestors(NodeId As String)
+        If String.IsNullOrEmpty(NodeId) Then Exit Sub
+
+        Dim chain As DataTable = GetDataTable(EBDB,
+            "SELECT NODE_ID, NODE_TYPE_ID, LEVEL AS LVL FROM UNITSHUB_NODES " &
+            "START WITH NODE_ID = '" & NodeId.Replace("'", "''") & "' " &
+            "CONNECT BY NOCYCLE PRIOR PARENT_NODE_ID = NODE_ID")
+        If chain Is Nothing OrElse chain.Rows.Count = 0 Then Exit Sub
+
+        ' Type of the chosen node (level 1), and the nearest ancestor of each type above it
+        Dim chosenType As Long = -1
+        Dim ancestorOfType As New Dictionary(Of Long, String)
+        For Each r As DataRow In chain.Rows
+            Dim t As Long = ToNumberOrZero(Convert.ToString(r("NODE_TYPE_ID")))
+            If Convert.ToInt32(r("LVL")) = 1 Then
+                chosenType = t
+            ElseIf Not ancestorOfType.ContainsKey(t) Then
+                ancestorOfType(t) = Convert.ToString(r("NODE_ID")).Trim()
+            End If
+        Next
+        If chosenType < 0 Then Exit Sub
+
+        For Each kv As KeyValuePair(Of Long, DropDownList) In _compLists
+            If kv.Key >= chosenType Then Continue For          ' only the smaller types change
+            Dim ddl As DropDownList = kv.Value
+            Dim ancestor As String = Nothing
+            If ancestorOfType.TryGetValue(kv.Key, ancestor) AndAlso ddl.Items.FindByValue(ancestor) IsNot Nothing Then
+                ddl.SelectedValue = ancestor
+            Else
+                ddl.SelectedIndex = 0
+            End If
+        Next
+    End Sub
+
+    ''' <summary>A component of a smaller type was chosen: show its own ancestors.</summary>
+    Private Sub Component_Changed(sender As Object, e As EventArgs)
+        SyncAncestors(CType(sender, DropDownList).SelectedValue)
+    End Sub
+
+    ''' <summary>
+    ''' Nodes of one type (in the page's project when a ProjectId is known), each with its
+    ''' display text from the REFERETOBY attributes; NODE_ID when they have no value.
+    ''' </summary>
+    Private Function ComponentNodes(TypeId As String, ReferTo As String) As DataTable
+        Dim orders As New List(Of Integer)
+        Dim names As New List(Of String)
+        For Each part As String In If(ReferTo, "").Split(New Char() {","c, ";"c, "|"c}, StringSplitOptions.RemoveEmptyEntries)
+            Dim p As String = part.Trim()
+            Dim n As Integer
+            If p = "" Then Continue For
+            If Integer.TryParse(p, n) Then orders.Add(n) Else names.Add(p.ToUpperInvariant())
+        Next
+
+        ' Which attribute values make up the text, and in which order
+        Dim textSql As String
+        If orders.Count > 0 Then
+            Dim rank As String = "DECODE(TO_NUMBER(V.DISPLAY_ORDER)"
+            For i As Integer = 0 To orders.Count - 1
+                rank &= ", " & orders(i) & ", " & (i + 1)
+            Next
+            rank &= ")"
+            textSql = "(SELECT LISTAGG(TRIM(V.VALUE_TEXT), ' - ') WITHIN GROUP (ORDER BY " & rank & ") " &
+                      "FROM UNITSHUB_NODE_ATTRIBUTE_VALUE V WHERE V.NODE_ID = N.NODE_ID " &
+                      "AND TRIM(V.VALUE_TEXT) IS NOT NULL " &
+                      "AND REGEXP_LIKE(TRIM(V.DISPLAY_ORDER), '^[0-9]+$') " &
+                      "AND TO_NUMBER(V.DISPLAY_ORDER) IN (" & String.Join(", ", orders) & "))"
+        ElseIf names.Count > 0 Then
+            textSql = "(SELECT LISTAGG(TRIM(V.VALUE_TEXT), ' - ') WITHIN GROUP (ORDER BY TO_NUMBER(V.DISPLAY_ORDER)) " &
+                      "FROM UNITSHUB_NODE_ATTRIBUTE_VALUE V JOIN UNITSHUB_ATTRIBUTES A " &
+                      "ON A.PROJECT_ID = N.PROJECT_ID AND A.NODE_TYPE_ID = N.NODE_TYPE_ID " &
+                      "AND TO_NUMBER(A.DISPLAY_ORDER) = TO_NUMBER(V.DISPLAY_ORDER) " &
+                      "WHERE V.NODE_ID = N.NODE_ID AND TRIM(V.VALUE_TEXT) IS NOT NULL " &
+                      "AND UPPER(TRIM(A.ATTRIBUTE_NAME)) IN (" & String.Join(", ", names.ConvertAll(Function(x) "'" & x.Replace("'", "''") & "'")) & "))"
+        Else
+            textSql = "NULL"
+        End If
+
+        Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
+        Dim SQL As String =
+            "SELECT NODE_ID, NVL(NODE_TEXT, NODE_ID) AS NODE_TEXT FROM ( " &
+            "SELECT N.NODE_ID, " & textSql & " AS NODE_TEXT FROM UNITSHUB_NODES N " &
+            "WHERE N.NODE_TYPE_ID = '" & TypeId.Replace("'", "''") & "'" &
+            If(projectId = "", "", " AND N.PROJECT_ID = '" & projectId.Replace("'", "''") & "'") &
+            ") ORDER BY 2"
+        Try
+            Return GetDataTable(EBDB, SQL)
+        Catch ex As Exception
+            Return Nothing
+        End Try
+    End Function
+
+    Private Function ToNumberOrZero(Value As String) As Long
+        Dim n As Long
+        Return If(Long.TryParse(If(Value, "").Trim(), n), n, 0)
+    End Function
+
+    ''' <summary>A component of the largest type shown was chosen: show it in the boxes below.</summary>
+    Private Sub ReceivedComponent_Changed(sender As Object, e As EventArgs)
+        Dim ddl As DropDownList = CType(sender, DropDownList)
+        lblPID.Text = ddl.SelectedValue
+        SyncAncestors(ddl.SelectedValue)
+        DetailsEditMode = False
+        ShowDetailsMessage("", True)
+        LoadNode()
+    End Sub
+
+    ''' <summary>
+    ''' The project the unit belongs to: PROJECT_ID from UNITSHUB_NODES (the ProjectId passed
+    ''' in is only used if the unit isn't found). There is no PROJECT box on this page, so it
+    ''' is only kept in the hidden lblPRJID (used by AddAttachment and the history).
+    ''' </summary>
+    Private Sub LoadProject()
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        Dim projectId As String = ""
+        If NodeId <> "" Then
+            projectId = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+                "SELECT PROJECT_ID FROM UNITSHUB_NODES WHERE NODE_ID = '" & NodeId.Replace("'", "''") & "'")).Trim()
+        End If
+        If projectId <> "" Then lblPRJID.Text = projectId
+    End Sub
+
+    ''' <summary>
+    ''' Every attribute of the unit's node type (UNITSHUB_ATTRIBUTES, by DISPLAY_ORDER) with
+    ''' the unit's value (UNITSHUB_NODE_ATTRIBUTE_VALUE; empty when not set), shown in two
+    ''' columns: the first half on the left, the rest on the right.
+    ''' Status / SubStatus show their names, and the payment plan its title
+    ''' (UNITSHUB_PAYMENTPLAN.NAME), instead of the stored IDs.
+    ''' </summary>
+    Private Sub LoadAttributes()
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        Dim DT As DataTable = Nothing
+
+        If NodeId <> "" Then
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT A.ATTRIBUTE_NAME, A.DISPLAY_ORDER, A.DATA_TYPE, V.VALUE_TEXT, N.PROJECT_ID, "
+            SQL = SQL + vbCrLf + "        PP.NAME AS PLAN_NAME, "
+            ' Edit mode: which control to use, and the SQL that fills a list
+            SQL = SQL + vbCrLf + "        AP.CONTROL_WEHN_EDIT AS EDIT_CONTROL, AP.SQL AS EDIT_SQL "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES N "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES A "
+            SQL = SQL + vbCrLf + "        ON A.PROJECT_ID = N.PROJECT_ID AND A.NODE_TYPE_ID = N.NODE_TYPE_ID "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_ATTRIBUTES_PROPERTIES AP "
+            SQL = SQL + vbCrLf + "        ON AP.PROJECT_ID = N.PROJECT_ID AND AP.NODE_TYPE_ID = N.NODE_TYPE_ID "
+            SQL = SQL + vbCrLf + "       AND TO_NUMBER(AP.DISPLAY_ORDER) = TO_NUMBER(A.DISPLAY_ORDER) "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_NODE_ATTRIBUTE_VALUE V "
+            SQL = SQL + vbCrLf + "        ON V.NODE_ID = N.NODE_ID AND TO_NUMBER(V.DISPLAY_ORDER) = TO_NUMBER(A.DISPLAY_ORDER) "
+            ' Payment plan title for the payment-plan attribute ("PAYMENTPLAN" / "Payment Plan")
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_PAYMENTPLAN PP "
+            SQL = SQL + vbCrLf + "        ON UPPER(REPLACE(REPLACE(A.ATTRIBUTE_NAME, ' ', ''), '_', '')) = 'PAYMENTPLAN' "
+            SQL = SQL + vbCrLf + "       AND ( PP.PLAN_ID = TRIM(V.VALUE_TEXT) "
+            ' ...or the same number written differently, e.g. "1" = "00001"
+            ' (CASE so TO_NUMBER only runs on values that are numbers)
+            SQL = SQL + vbCrLf + "             OR CASE WHEN REGEXP_LIKE(TRIM(V.VALUE_TEXT), '^[0-9]+$') THEN TO_NUMBER(TRIM(V.VALUE_TEXT)) END "
+            SQL = SQL + vbCrLf + "              = CASE WHEN REGEXP_LIKE(PP.PLAN_ID, '^[0-9]+$') THEN TO_NUMBER(PP.PLAN_ID) END ) "
+            SQL = SQL + vbCrLf + " WHERE  N.NODE_ID = '" & NodeId.Replace("'", "''") & "' "
+            SQL = SQL + vbCrLf + " ORDER BY TO_NUMBER(A.DISPLAY_ORDER) "
+            DT = GetDataTable(EBDB, SQL)
+        End If
+        If DT Is Nothing Then DT = New DataTable()
+        If Not DT.Columns.Contains("DISPLAY_VALUE") Then DT.Columns.Add("DISPLAY_VALUE", GetType(String))
+
+        ' Readable values: Status -> status name, SubStatus -> sub-status subtitle
+        Dim statusId As String = ""
+        For Each r As DataRow In DT.Rows
+            If String.Equals(Convert.ToString(r("ATTRIBUTE_NAME")).Trim(), "Status", StringComparison.OrdinalIgnoreCase) Then
+                statusId = Convert.ToString(r("VALUE_TEXT")).Trim()
+            End If
+        Next
+        For Each r As DataRow In DT.Rows
+            Dim name As String = Convert.ToString(r("ATTRIBUTE_NAME")).Trim()
+            Dim value As String = Convert.ToString(r("VALUE_TEXT")).Trim()
+            Dim projectId As String = Convert.ToString(r("PROJECT_ID")).Trim()
+
+            If String.Equals(name, "Status", StringComparison.OrdinalIgnoreCase) AndAlso value <> "" Then
+                Dim statusName As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+                    "SELECT STATUS FROM UNITSHUB_PROJECTSTATUS WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' " &
+                    "AND STATE_ID = '" & value.Replace("'", "''") & "'")).Trim()
+                If statusName <> "" Then value = statusName
+            ElseIf Convert.ToString(r("PLAN_NAME")).Trim() <> "" Then
+                ' Payment plan: its title from UNITSHUB_PAYMENTPLAN instead of the PLAN_ID
+                value = Convert.ToString(r("PLAN_NAME")).Trim()
+            ElseIf String.Equals(name, "SubStatus", StringComparison.OrdinalIgnoreCase) AndAlso value <> "" Then
+                Dim subName As String = Convert.ToString(DB.RetreiveScalarSTRING(EBDB,
+                    "SELECT SUBTITLE FROM UNITSHUB_PROJECTSUBSTATUS WHERE PROJECT_ID = '" & projectId.Replace("'", "''") & "' " &
+                    "AND STATE_ID = '" & statusId.Replace("'", "''") & "' AND SUBSTATE_ID = '" & value.Replace("'", "''") & "'")).Trim()
+                If subName <> "" Then value = subName
+            End If
+
+            r("DISPLAY_VALUE") = value
+        Next
+
+        ' Split over two columns
+        Dim leftCount As Integer = CInt(Math.Ceiling(DT.Rows.Count / 2.0))
+        Dim leftDT As DataTable = DT.Clone()
+        Dim rightDT As DataTable = DT.Clone()
+        For i As Integer = 0 To DT.Rows.Count - 1
+            If i < leftCount Then leftDT.ImportRow(DT.Rows(i)) Else rightDT.ImportRow(DT.Rows(i))
+        Next
+
+        _editProblems.Clear()
+        rptAttributesLeft.DataSource = leftDT
+        rptAttributesLeft.DataBind()
+        rptAttributesRight.DataSource = rightDT
+        rptAttributesRight.DataBind()
+
+        lblNoAttributes.Visible = (DT.Rows.Count = 0)
+        If DT.Rows.Count = 0 Then DetailsEditMode = False
+        ApplyDetailsMode()
+        If DetailsEditMode AndAlso _editProblems.Count > 0 Then
+            ShowDetailsMessage("Note: " & String.Join("; ", _editProblems) & ".", False)
+        End If
+
+        ' Title: "Unit <Reference>" when the unit has a Reference attribute
+        For Each r As DataRow In DT.Rows
+            If String.Equals(Convert.ToString(r("ATTRIBUTE_NAME")).Trim(), "Reference", StringComparison.OrdinalIgnoreCase) AndAlso
+               Convert.ToString(r("VALUE_TEXT")).Trim() <> "" Then
+                litUnitTitle.Text = Server.HtmlEncode("Unit " & Convert.ToString(r("VALUE_TEXT")).Trim())
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Fills one attribute line: name and value (HTML-encoded, "-" when empty). In Edit mode,
+    ''' an attribute with an edit control (CONTROL_WEHN_EDIT) shows that control holding the
+    ''' stored value instead; one without stays as text.
+    ''' </summary>
+    Protected Sub rptAttributes_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
+
+        Dim litName As Literal = CType(e.Item.FindControl("litName"), Literal)
+        Dim litValue As Literal = CType(e.Item.FindControl("litValue"), Literal)
+        Dim txtEdit As TextBox = CType(e.Item.FindControl("txtEdit"), TextBox)
+        Dim ddlEdit As DropDownList = CType(e.Item.FindControl("ddlEdit"), DropDownList)
+        Dim chkEdit As CheckBox = CType(e.Item.FindControl("chkEdit"), CheckBox)
+        Dim hfOrder As HiddenField = CType(e.Item.FindControl("hfOrder"), HiddenField)
+        Dim hfControl As HiddenField = CType(e.Item.FindControl("hfControl"), HiddenField)
+        Dim hfOriginal As HiddenField = CType(e.Item.FindControl("hfOriginal"), HiddenField)
+
+        Dim name As String = Convert.ToString(r("ATTRIBUTE_NAME")).Trim()
+        litName.Text = Server.HtmlEncode(name)
+        Dim value As String = Convert.ToString(r("DISPLAY_VALUE")).Trim()
+        Dim storedValue As String = Convert.ToString(r("VALUE_TEXT")).Trim()
+        Dim valueHtml As String = If(value = "", "<span style=""color:var(--muted)"">-</span>", Server.HtmlEncode(value))
+
+        txtEdit.Visible = False
+        ddlEdit.Visible = False
+        chkEdit.Visible = False
+        hfOrder.Value = Convert.ToString(r("DISPLAY_ORDER")).Trim()
+        hfControl.Value = ""
+        hfOriginal.Value = ""
+
+        Dim kind As String = If(DetailsEditMode, EditKindFor(r), "")
+        If kind = "" Then
+            ' Show mode, or an attribute that can't be edited
+            litValue.Text = If(DetailsEditMode, "<span class=""kv-readonly"">" & valueHtml & "</span>", valueHtml)
+            Exit Sub
+        End If
+
+        litValue.Text = ""
+        hfControl.Value = kind
+
+        Select Case kind
+            Case "DROPDOWN"
+                FillEditList(ddlEdit, Convert.ToString(r("EDIT_SQL")), storedValue, name, Convert.ToString(r("PROJECT_ID")).Trim())
+                ddlEdit.ToolTip = name
+                ddlEdit.Visible = True
+                hfOriginal.Value = ddlEdit.SelectedValue
+
+            Case "CHECKBOX"
+                Dim v As String = storedValue.ToUpperInvariant()
+                chkEdit.Checked = (v = "Y" OrElse v = "YES" OrElse v = "TRUE" OrElse v = "1")
+                chkEdit.ToolTip = name
+                chkEdit.Visible = True
+                hfOriginal.Value = If(chkEdit.Checked, "Y", "N")
+
+            Case Else
+                txtEdit.Text = storedValue
+                txtEdit.ToolTip = name
+                txtEdit.Attributes("aria-label") = name
+                Select Case kind
+                    Case "TEXTAREA"
+                        txtEdit.TextMode = TextBoxMode.MultiLine
+                        txtEdit.Rows = 3
+                    Case "DATE"
+                        ' Date picker only when the stored value is empty or yyyy-MM-dd (the
+                        ' format it uses); any other stored format stays a plain textbox
+                        If storedValue = "" OrElse System.Text.RegularExpressions.Regex.IsMatch(storedValue, "^\d{4}-\d{2}-\d{2}$") Then
+                            txtEdit.TextMode = TextBoxMode.Date
+                        End If
+                    Case "NUMBER"
+                        txtEdit.Attributes("inputmode") = "decimal"
+                End Select
+                txtEdit.Visible = True
+                hfOriginal.Value = storedValue
+        End Select
+    End Sub
+
+    ' ==================================================================
+    ' UNIT DETAILS: Edit mode
+    ' [Edit] turns every attribute that has an edit control (UNITSHUB_ATTRIBUTES_PROPERTIES.
+    ' CONTROL_WEHN_EDIT) into that control; lists are filled from the attribute's SQL.
+    ' Attributes with no control stay as text. [Save] writes the changed values to
+    ' UNITSHUB_NODE_ATTRIBUTE_VALUE, [Cancel] drops them; both return to show mode.
+    ' ==================================================================
+
+    ' Problems met while building the edit controls (e.g. a list SQL that fails)
+    Private _editProblems As New List(Of String)
+
+    Private Property DetailsEditMode As Boolean
+        Get
+            Return CBool(If(ViewState("DetailsEditMode"), False))
+        End Get
+        Set(value As Boolean)
+            ViewState("DetailsEditMode") = value
+        End Set
+    End Property
+
+    Protected Sub btnEditDetails_Click(sender As Object, e As EventArgs) Handles btnEditDetails.Click
+        DetailsEditMode = True
+        ShowDetailsMessage("", True)
+        LoadAttributes()
+    End Sub
+
+    Protected Sub btnCancelDetails_Click(sender As Object, e As EventArgs) Handles btnCancelDetails.Click
+        DetailsEditMode = False
+        ShowDetailsMessage("", True)
+        LoadAttributes()
+    End Sub
+
+    ''' <summary>
+    ''' Saves every edited value that changed, then returns to show mode. If a value is
+    ''' invalid (e.g. text in a number field), nothing is saved and the box stays in Edit.
+    ''' </summary>
+    Protected Sub btnSaveDetails_Click(sender As Object, e As EventArgs) Handles btnSaveDetails.Click
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        If NodeId = "" Then Exit Sub
+
+        ' 1. Collect the changes (order -> new value) and check them
+        Dim changes As New List(Of KeyValuePair(Of String, String))
+        Dim errors As New List(Of String)
+        For Each rpt As Repeater In {rptAttributesLeft, rptAttributesRight}
+            For Each item As RepeaterItem In rpt.Items
+                Dim kind As String = CType(item.FindControl("hfControl"), HiddenField).Value
+                If kind = "" Then Continue For
+
+                Dim newValue As String = ReadEditValue(item, kind)
+                Dim oldValue As String = CType(item.FindControl("hfOriginal"), HiddenField).Value
+                If newValue = oldValue Then Continue For
+
+                If kind = "NUMBER" AndAlso newValue <> "" Then
+                    Dim n As Decimal
+                    If Not Decimal.TryParse(newValue.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, n) Then
+                        errors.Add(Server.HtmlDecode(CType(item.FindControl("litName"), Literal).Text) & " must be a number")
+                        Continue For
+                    End If
+                End If
+
+                changes.Add(New KeyValuePair(Of String, String)(CType(item.FindControl("hfOrder"), HiddenField).Value, newValue))
+            Next
+        Next
+
+        If errors.Count > 0 Then
+            ShowDetailsMessage("Not saved: " & String.Join("; ", errors) & ".", False)
+            Exit Sub
+        End If
+
+        ' 2. Write them (update the value, or insert it if the unit had none)
+        Try
+            For Each c As KeyValuePair(Of String, String) In changes
+                SaveAttributeValue(NodeId, c.Key, c.Value)
+            Next
+        Catch ex As Exception
+            ShowDetailsMessage("Saving failed: " & ex.Message, False)
+            Exit Sub
+        End Try
+
+        DetailsEditMode = False
+        LoadAttributes()
+        ShowDetailsMessage(If(changes.Count = 0, "No changes to save.",
+                              changes.Count & If(changes.Count = 1, " value", " values") & " saved."), True)
+    End Sub
+
+    ''' <summary>The value an item's edit control holds now, as it will be stored.</summary>
+    Private Function ReadEditValue(item As RepeaterItem, Kind As String) As String
+        Select Case Kind
+            Case "DROPDOWN"
+                Return CType(item.FindControl("ddlEdit"), DropDownList).SelectedValue
+            Case "CHECKBOX"
+                Return If(CType(item.FindControl("chkEdit"), CheckBox).Checked, "Y", "N")
+            Case Else
+                Return CType(item.FindControl("txtEdit"), TextBox).Text.Trim()
+        End Select
+    End Function
+
+    ''' <summary>Writes one attribute value of the unit (same MERGE as AutoTransfer's SetNodeSubStatus).</summary>
+    Private Sub SaveAttributeValue(NodeId As String, DisplayOrder As String, Value As String)
+        Dim orderNumber As Integer
+        If Not Integer.TryParse(DisplayOrder, orderNumber) Then Exit Sub
+
+        Dim safeNodeId As String = NodeId.Replace("'", "''")
+        Dim safeOrder As String = orderNumber.ToString("000")
+        Dim safeValue As String = If(Value, "").Replace("'", "''")
+
+        Dim SQL As String =
+            "MERGE INTO UNITSHUB_NODE_ATTRIBUTE_VALUE v " &
+            "USING (SELECT '" & safeNodeId & "' AS NODE_ID, '" & safeOrder & "' AS DISPLAY_ORDER FROM DUAL) s " &
+            "ON (v.NODE_ID = s.NODE_ID AND TO_NUMBER(v.DISPLAY_ORDER) = TO_NUMBER(s.DISPLAY_ORDER)) " &
+            "WHEN MATCHED THEN UPDATE SET v.VALUE_TEXT = '" & safeValue & "' " &
+            "WHEN NOT MATCHED THEN INSERT (NODE_ID, DISPLAY_ORDER, VALUE_TEXT) " &
+            "VALUES (s.NODE_ID, s.DISPLAY_ORDER, '" & safeValue & "')"
+
+        DB.ExecuteNonQuery(EBDB_CS, SQL)
+    End Sub
+
+    ''' <summary>
+    ''' Which control CONTROL_WEHN_EDIT asks for (any letter case):
+    '''   DROPDOWN  - contains DROP, DDL, COMBO, LIST or SELECT (filled from the SQL column)
+    '''   CHECKBOX  - contains CHECK or BOOL                    (stored Y / N)
+    '''   TEXTAREA  - contains AREA, MULTI or MEMO
+    '''   DATE      - contains DATE                             (date picker, yyyy-MM-dd)
+    '''   NUMBER    - contains NUM, INT or DEC                  (checked on Save)
+    '''   TEXT      - anything else that isn't empty
+    '''   ""        - empty: the attribute can't be edited
+    ''' </summary>
+    ''' <summary>
+    ''' Edit control for an attribute: CONTROL_WEHN_EDIT when it is set
+    ''' (UNITSHUB_ATTRIBUTES_PROPERTIES), otherwise one picked from A.DATA_TYPE (date ->
+    ''' date box, number -> number box, Y/N -> checkbox, anything else -> textbox), so every
+    ''' node type can be edited even without properties rows. Status and SubStatus stay
+    ''' read-only: they are changed by actions, not typed in.
+    ''' </summary>
+    Private Function EditKindFor(r As DataRowView) As String
+        Dim name As String = Convert.ToString(r("ATTRIBUTE_NAME")).Trim()
+        If String.Equals(name, "Status", StringComparison.OrdinalIgnoreCase) OrElse
+           String.Equals(name, "SubStatus", StringComparison.OrdinalIgnoreCase) Then Return ""
+
+        Dim fromProperties As String = EditKind(Convert.ToString(r("EDIT_CONTROL")))
+        If fromProperties <> "" Then Return fromProperties
+
+        Dim dataType As String = Convert.ToString(r("DATA_TYPE")).Trim().ToUpperInvariant()
+        If dataType.Contains("DATE") OrElse dataType.Contains("TIME") Then Return "DATE"
+        If dataType.Contains("NUM") OrElse dataType.Contains("INT") OrElse dataType.Contains("DEC") OrElse
+           dataType.Contains("FLOAT") OrElse dataType.Contains("MONEY") OrElse dataType.Contains("AMOUNT") Then Return "NUMBER"
+        If dataType.Contains("BOOL") OrElse dataType.Contains("CHECK") OrElse dataType = "YN" OrElse dataType = "Y/N" Then Return "CHECKBOX"
+        Return "TEXT"
+    End Function
+
+    Private Function EditKind(ControlWhenEdit As String) As String
+        Dim c As String = If(ControlWhenEdit, "").Trim().ToUpperInvariant()
+        If c = "" Then Return ""
+        For Each k As String In {"DROP", "DDL", "COMBO", "LIST", "SELECT"}
+            If c.Contains(k) Then Return "DROPDOWN"
+        Next
+        If c.Contains("CHECK") OrElse c.Contains("BOOL") Then Return "CHECKBOX"
+        If c.Contains("AREA") OrElse c.Contains("MULTI") OrElse c.Contains("MEMO") Then Return "TEXTAREA"
+        If c.Contains("DATE") Then Return "DATE"
+        If c.Contains("NUM") OrElse c.Contains("INT") OrElse c.Contains("DEC") Then Return "NUMBER"
+        Return "TEXT"
+    End Function
+
+    ''' <summary>
+    ''' Fills a dropdown from the attribute's SQL: 1st column = value stored, 2nd column =
+    ''' text shown (the 1st again if there's only one). "&lt;ProjectId&gt;" and "&lt;NodeId&gt;"
+    ''' in the SQL are replaced by this unit's. The current value is kept even when the SQL
+    ''' doesn't return it, so opening Edit never changes a value by itself.
+    ''' </summary>
+    Private Sub FillEditList(ddl As DropDownList, ListSql As String, CurrentValue As String, AttributeName As String, ProjectId As String)
+        ddl.Items.Clear()
+        ddl.Items.Add(New ListItem("-", ""))
+
+        Dim sqlText As String = If(ListSql, "").Trim()
+        If sqlText <> "" Then
+            sqlText = sqlText.Replace("<ProjectId>", ProjectId.Replace("'", "''")) _
+                             .Replace("<NodeId>", Convert.ToString(lblPID.Text).Trim().Replace("'", "''"))
+            Try
+                Dim DT As DataTable = GetDataTable(EBDB, sqlText)
+                If DT IsNot Nothing AndAlso DT.Columns.Count > 0 Then
+                    Dim textCol As Integer = If(DT.Columns.Count > 1, 1, 0)
+                    For Each r As DataRow In DT.Rows
+                        Dim v As String = Convert.ToString(r(0)).Trim()
+                        If ddl.Items.FindByValue(v) Is Nothing Then
+                            ddl.Items.Add(New ListItem(Convert.ToString(r(textCol)).Trim(), v))
+                        End If
+                    Next
+                End If
+            Catch ex As Exception
+                _editProblems.Add("the list of " & AttributeName & " couldn't be loaded (" & ex.Message & ")")
+            End Try
+        Else
+            _editProblems.Add(AttributeName & " has no SQL for its list")
+        End If
+
+        SelectCurrentValue(ddl, CurrentValue)
+    End Sub
+
+    ''' <summary>
+    ''' Selects the unit's stored value in a list, without adding a duplicate entry:
+    '''   1. an item whose value is exactly the stored value;
+    '''   2. an item whose value is the same apart from letter case / spaces;
+    '''   3. an item whose TEXT is the stored value - the unit stores the text, not the
+    '''      list's 1st column (e.g. "Corner" while the SQL returns SEQ, VALUE), so every
+    '''      item's value becomes its text and Save keeps storing text the same way;
+    '''   4. none of these: the stored value is added as its own entry, so opening Edit
+    '''      never changes a value by itself.
+    ''' </summary>
+    Private Sub SelectCurrentValue(ddl As DropDownList, CurrentValue As String)
+        If CurrentValue = "" Then
+            ddl.SelectedValue = ""
+            Exit Sub
+        End If
+
+        If ddl.Items.FindByValue(CurrentValue) IsNot Nothing Then
+            ddl.SelectedValue = CurrentValue
+            Exit Sub
+        End If
+
+        Dim wanted As String = NormalizeListText(CurrentValue)
+
+        For Each item As ListItem In ddl.Items
+            If item.Value <> "" AndAlso NormalizeListText(item.Value) = wanted Then
+                ddl.ClearSelection()
+                item.Selected = True
+                Exit Sub
+            End If
+        Next
+
+        For Each item As ListItem In ddl.Items
+            If item.Value <> "" AndAlso NormalizeListText(item.Text) = wanted Then
+                For Each it As ListItem In ddl.Items
+                    If it.Value <> "" Then it.Value = it.Text
+                Next
+                ddl.ClearSelection()
+                item.Selected = True
+                Exit Sub
+            End If
+        Next
+
+        ddl.Items.Add(New ListItem(CurrentValue, CurrentValue))
+        ddl.SelectedValue = CurrentValue
+    End Sub
+
+    ''' <summary>Text compared loosely: non-breaking spaces as spaces, repeated spaces as one, trimmed, upper case.</summary>
+    Private Function NormalizeListText(Value As String) As String
+        Dim t As String = If(Value, "").Replace(ChrW(160), " "c)
+        t = System.Text.RegularExpressions.Regex.Replace(t, "\s+", " ")
+        Return t.Trim().ToUpperInvariant()
+    End Function
+
+    ''' <summary>Shows Edit, or Save + Cancel, and outlines the box while editing.</summary>
+    Private Sub ApplyDetailsMode()
+        Dim hasDetails As Boolean = Not lblNoAttributes.Visible
+        btnEditDetails.Visible = hasDetails AndAlso Not DetailsEditMode
+        btnSaveDetails.Visible = DetailsEditMode
+        btnCancelDetails.Visible = DetailsEditMode
+        fsDetails.Attributes("class") = "customer-box details-box" & If(DetailsEditMode, " editing", "")
+    End Sub
+
+    Private Sub ShowDetailsMessage(Text As String, IsOk As Boolean)
+        lblDetailsMessage.Text = Server.HtmlEncode(Text)
+        lblDetailsMessage.CssClass = "details-msg " & If(IsOk, "ok", "err")
+        lblDetailsMessage.Visible = (Text <> "")
+    End Sub
+
+    ' ------------------------------------------------------------------
+    ' Tabs: Attachments | Comments | History
+    ' ------------------------------------------------------------------
+
+    ''' <summary>Switches the tab, same as ContactMaintenance's Menu3 / MultiView3.</summary>
+    Protected Sub menuUnitTabs_MenuItemClick(sender As Object, e As MenuEventArgs)
+        Try
+            mvUnitTabs.ActiveViewIndex = menuUnitTabs.Items.IndexOf(menuUnitTabs.SelectedItem)
+        Catch ex As Exception
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' The unit's current customer (latest UNITSHUB_CUSTOMERPROPERTIES row), so the tabs can
+    ''' also show items about the customer. "" if the unit has none.
+    ''' </summary>
+    Private Function GetUnitContactId(NodeId As String) As String
+        If String.IsNullOrWhiteSpace(NodeId) Then Return ""
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT CONTACT_ID FROM ( "
+        SQL = SQL + vbCrLf + "     SELECT CONTACT_ID FROM UNITSHUB_CUSTOMERPROPERTIES "
+        SQL = SQL + vbCrLf + "     WHERE  NODE_ID = '" & NodeId.Trim().Replace("'", "''") & "' AND CONTACT_ID IS NOT NULL "
+        SQL = SQL + vbCrLf + "     ORDER BY CREATED_AT DESC "
+        SQL = SQL + vbCrLf + " ) WHERE ROWNUM = 1 "
+        Return Convert.ToString(DB.RetreiveScalarSTRING(EBDB, SQL)).Trim()
+    End Function
+
+
+    ''' <summary>"WHERE" part for items about this unit, or about its current customer.</summary>
+    Private Function UnitOrCustomerFilter(Alias_ As String, NodeId As String, ContactId As String) As String
+        Dim f As String = Alias_ & ".NODE_ID = '" & NodeId.Trim().Replace("'", "''") & "'"
+        If ContactId <> "" Then f = "(" & f & " OR " & Alias_ & ".CONTACT_ID = '" & ContactId.Replace("'", "''") & "')"
+        Return f
+    End Function
+
+    ''' <summary>Small tag: Unit / Customer / Unit &amp; customer.</summary>
+    Private Function AboutHtml(NodeIdValue As Object, ContactIdValue As Object) As String
+        Dim hasUnit As Boolean = Convert.ToString(NodeIdValue).Trim() <> ""
+        Dim hasCustomer As Boolean = Convert.ToString(ContactIdValue).Trim() <> ""
+        Dim text As String = If(hasUnit AndAlso hasCustomer, "Unit & customer", If(hasUnit, "Unit", "Customer"))
+        Return "<span class=""about-tag"">" & Server.HtmlEncode(text) & "</span>"
+    End Function
+
+    ''' <summary>The unit's current customer, kept for postbacks (the category filter).</summary>
+    Private Property UnitContactId As String
+        Get
+            Return Convert.ToString(ViewState("UnitContactId"))
+        End Get
+        Set(value As String)
+            ViewState("UnitContactId") = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Fills "Display Attachments" with "All" plus the active categories linked to the
+    ''' "Unit" entity (EntityName) in UNITSHUB_DOC2ENTITY, in SORT_ORDER.
+    ''' </summary>
+    Private Sub LoadDocCategories(NodeId As String)
+        ddlDocCategory.Items.Clear()
+        ddlDocCategory.Items.Add(New ListItem("All", ""))
+
+        Try
+            ' Categories linked to this entity (UNITSHUB_DOC2ENTITY), compared upper-case
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT DISTINCT DC.CATEGORY_ID, DC.TITLE, DC.SORT_ORDER "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOC_CATEGORIES DC "
+            SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_DOC2ENTITY DOC ON DC.CATEGORY_ID = DOC.CATEGORY_ID "
+            SQL = SQL + vbCrLf + " INNER JOIN UNITSHUB_ENTITIES ENT ON DOC.ENTITY_ID = ENT.ENTITY_ID "
+            SQL = SQL + vbCrLf + " WHERE  UPPER(ENT.ENTITY_NAME) = '" & EntityName.ToUpperInvariant().Replace("'", "''") & "' "
+            SQL = SQL + vbCrLf + "   AND  DC.IS_ACTIVE = 'Y' "
+            SQL = SQL + vbCrLf + " ORDER BY DC.SORT_ORDER, DC.TITLE "
+            Dim DT As DataTable = GetDataTable(EBDB, SQL)
+            If DT IsNot Nothing Then
+                For Each r As DataRow In DT.Rows
+                    ddlDocCategory.Items.Add(New ListItem(Convert.ToString(r("TITLE")), Convert.ToString(r("CATEGORY_ID"))))
+                Next
+            End If
+        Catch ex As Exception
+            ' Category tables not there yet - "All" only; the tab shows why below
+        End Try
+    End Sub
+
+    ''' <summary>Shows only the chosen category's documents ("All" = every category).</summary>
+    Protected Sub ddlDocCategory_SelectedIndexChanged(sender As Object, e As EventArgs)
+        mvUnitTabs.ActiveViewIndex = 0
+    End Sub
+
+    Private Const OpenActionPopupReturnKey As String = "AddAttachmentPopup"
+
+    ''' <summary>
+    ''' "+" opens the AddAttachment popup for this unit, its project, its current customer
+    ''' and the category picked in "Display Attachments" (pre-selected there). Registered on
+    ''' every request, after the dropdown may have changed, so the popup always gets the
+    ''' current category.
+    ''' </summary>
+    Protected Sub Page_PreRender(sender As Object, e As EventArgs) Handles Me.PreRender
+        ' Attachments: rebuilt on every request (after any filter / view change), so each
+        ' file link and its viewer popup always exist
+        BindAttachments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
+
+        ' Comments: also rebuilt on every request, for the same reason (attachment links)
+        BindComments(Convert.ToString(lblPID.Text).Trim(), UnitContactId)
+
+        Dim projectId As String = Convert.ToString(lblPRJID.Text).Trim()
+
+        Dim Url As String = "AddAttachment.aspx?NodeID=" & Server.UrlEncode(Convert.ToString(lblPID.Text).Trim()) &
+                            "&ProjectId=" & Server.UrlEncode(projectId) &
+                            "&ContactId=" & Server.UrlEncode(UnitContactId) &
+                            "&CategoryId=" & Server.UrlEncode(ddlDocCategory.SelectedValue) &
+                            "&Entity=" & Server.UrlEncode(EntityName)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              btnAddAttachment,
+                                              Url,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
+
+        ' "Add Comment" (Comments tab) opens AddComment for this unit, its project and its
+        ' current customer - no category, comments don't have one
+        Dim CommentUrl As String = "AddComment.aspx?NodeID=" & Server.UrlEncode(Convert.ToString(lblPID.Text).Trim()) &
+                                   "&ProjectId=" & Server.UrlEncode(projectId) &
+                                   "&ContactId=" & Server.UrlEncode(UnitContactId)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              btnAddComment,
+                                              CommentUrl,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
+    End Sub
+
+    ''' <summary>
+    ''' Runs when the AddComment popup closes: reloads the Comments tab so a new comment
+    ''' shows straight away, and keeps that tab selected.
+    ''' </summary>
+    Protected Sub btnAddComment_Click(sender As Object, e As ImageClickEventArgs)
+        ' The list itself is rebuilt in Page_PreRender
+        mvUnitTabs.ActiveViewIndex = 1
+    End Sub
+
+    ''' <summary>
+    ''' Runs when the AddAttachment popup closes: reloads the Attachments tab so anything
+    ''' added there shows straight away, and keeps that tab selected.
+    ''' </summary>
+    Protected Sub btnAddAttachment_Click(sender As Object, e As ImageClickEventArgs)
+        mvUnitTabs.ActiveViewIndex = 0
+    End Sub
+
+    ''' <summary>How attachments are shown: "list" (default) or "icons". Kept across postbacks.</summary>
+    Private Property AttachView As String
+        Get
+            Dim v As String = Convert.ToString(ViewState("AttachView"))
+            Return If(v = "", "list", v)
+        End Get
+        Set(value As String)
+            ViewState("AttachView") = value
+        End Set
+    End Property
+
+    Protected Sub lnkViewList_Click(sender As Object, e As EventArgs)
+        SetAttachView("list")
+    End Sub
+
+    Protected Sub lnkViewIcons_Click(sender As Object, e As EventArgs)
+        SetAttachView("icons")
+    End Sub
+
+    ''' <summary>Switches List / Icons, marks the active button and redraws the attachments.</summary>
+    Private Sub SetAttachView(View As String)
+        AttachView = View
+        lnkViewList.CssClass = "view-btn" & If(View = "list", " active", "")
+        lnkViewIcons.CssClass = "view-btn" & If(View = "icons", " active", "")
+        mvUnitTabs.ActiveViewIndex = 0
+    End Sub
+
+    ''' <summary>
+    ''' Attachments tab: files of the documents about this unit or its current customer,
+    ''' grouped by category (rptAttachCategories). Inside each category, the List view shows
+    ''' a grid (Seq | Date | Time | Added By | Document) and the Icons view shows tiles. In
+    ''' both, each file is a link that opens it in the DisplayInvoice viewer (see
+    ''' RegisterFilePopup). Bound on EVERY request from Page_PreRender, so the links and their
+    ''' popups are always there after postbacks.
+    ''' </summary>
+    Private Sub BindAttachments(NodeId As String, ContactId As String)
+        litAttachments.Text = ""
+        _attachFiles = Nothing
+
+        If NodeId = "" Then
+            litAttachments.Text = "<span class=""tab-note"">No unit was given.</span>"
+            BindAttachCategories(Nothing)
+            Exit Sub
+        End If
+
+        Try
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT c.CATEGORY_ID, c.TITLE AS CATEGORY, NVL(c.SORT_ORDER, 0) AS CAT_SORT, "
+            SQL = SQL + vbCrLf + "        d.DOCUMENT_ID, d.TITLE, d.NODE_ID, d.CONTACT_ID, "
+            SQL = SQL + vbCrLf + "        a.ATTACHMENT_ID, a.FILE_NAME, a.CREATED_AT AS FILE_CREATED_AT, "
+            SQL = SQL + vbCrLf + "        NVL(u.FULL_NAME, a.CREATED_BY) AS ADDED_BY "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_DOCUMENTS d "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_DOC_CATEGORIES c ON c.CATEGORY_ID = d.CATEGORY_ID "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTACHMENTS a "
+            SQL = SQL + vbCrLf + "        ON a.DOCUMENT_ID = d.DOCUMENT_ID AND a.IS_ACTIVE = 'Y' "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_USERS u ON u.USER_ID = a.CREATED_BY "
+            SQL = SQL + vbCrLf + " WHERE  d.IS_ACTIVE = 'Y' AND " & UnitOrCustomerFilter("d", NodeId, ContactId)
+            ' "Display Attachments" filter ("All" = no filter)
+            If ddlDocCategory.SelectedValue <> "" Then
+                SQL = SQL + vbCrLf + "   AND  d.CATEGORY_ID = '" & ddlDocCategory.SelectedValue.Replace("'", "''") & "' "
+            End If
+            SQL = SQL + vbCrLf + " ORDER BY NVL(c.SORT_ORDER, 0), c.TITLE, a.CREATED_AT, a.ATTACHMENT_ID "
+
+            Dim DT As DataTable = GetDataTable(EBDB, SQL)
+            If DT Is Nothing OrElse DT.Rows.Count = 0 Then
+                litAttachments.Text = If(ddlDocCategory.SelectedValue = "",
+                    "<span class=""tab-note"">No files for this unit or its customer yet.</span>",
+                    "<span class=""tab-note"">No " & Server.HtmlEncode(ddlDocCategory.SelectedItem.Text) & " for this unit or its customer.</span>")
+                BindAttachCategories(Nothing)
+                Exit Sub
+            End If
+
+            ' Per-file display columns
+            DT.Columns.Add("SEQ_NO", GetType(Integer))
+            DT.Columns.Add("DATE_TEXT", GetType(String))
+            DT.Columns.Add("TIME_TEXT", GetType(String))
+            Dim seq As Integer = 0
+            Dim lastCategory As String = Nothing
+            For Each r As DataRow In DT.Rows
+                Dim cat As String = Convert.ToString(r("CATEGORY_ID"))
+                If cat <> lastCategory Then seq = 0 : lastCategory = cat
+                seq += 1
+                r("SEQ_NO") = seq
+                Dim d As String = "", t As String = ""
+                SplitUnixTime(Convert.ToString(r("FILE_CREATED_AT")), d, t)
+                r("DATE_TEXT") = d
+                r("TIME_TEXT") = t
+            Next
+
+            _attachFiles = DT
+            BindAttachCategories(DT)
+        Catch ex As Exception
+            litAttachments.Text = "<span class=""tab-note"">Attachments can't be shown: " & Server.HtmlEncode(ex.Message) & "</span>"
+            BindAttachCategories(Nothing)
+        End Try
+    End Sub
+
+    ' Files of the current bind, used by the nested category binding below
+    Private _attachFiles As DataTable
+
+    ''' <summary>Binds one block per category (in the order the files came back).</summary>
+    Private Sub BindAttachCategories(Files As DataTable)
+        Dim cats As New DataTable()
+        cats.Columns.Add("CATEGORY_ID", GetType(String))
+        cats.Columns.Add("CATEGORY", GetType(String))
+        If Files IsNot Nothing Then
+            Dim seen As New List(Of String)
+            For Each r As DataRow In Files.Rows
+                Dim id As String = Convert.ToString(r("CATEGORY_ID"))
+                If Not seen.Contains(id) Then
+                    seen.Add(id)
+                    cats.Rows.Add(id, Convert.ToString(r("CATEGORY")))
+                End If
+            Next
+        End If
+        rptAttachCategories.DataSource = cats
+        rptAttachCategories.DataBind()
+    End Sub
+
+    ''' <summary>Fills one category block: its heading, and its files as a grid or as tiles.</summary>
+    Protected Sub rptAttachCategories_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim cat As DataRowView = CType(e.Item.DataItem, DataRowView)
+        Dim categoryId As String = Convert.ToString(cat("CATEGORY_ID"))
+
+        CType(e.Item.FindControl("litCategory"), Literal).Text = Server.HtmlEncode(Convert.ToString(cat("CATEGORY")))
+
+        Dim files As DataTable = _attachFiles.Clone()
+        For Each r As DataRow In _attachFiles.Rows
+            If Convert.ToString(r("CATEGORY_ID")) = categoryId Then files.ImportRow(r)
+        Next
+
+        Dim showIcons As Boolean = (AttachView = "icons")
+        Dim pnlList As Panel = CType(e.Item.FindControl("pnlList"), Panel)
+        Dim pnlIcons As Panel = CType(e.Item.FindControl("pnlIcons"), Panel)
+        pnlList.Visible = Not showIcons
+        pnlIcons.Visible = showIcons
+
+        If showIcons Then
+            Dim rptTiles As Repeater = CType(e.Item.FindControl("rptTiles"), Repeater)
+            rptTiles.DataSource = files
+            rptTiles.DataBind()
+        Else
+            Dim gv As GridView = CType(e.Item.FindControl("gvAttachFiles"), GridView)
+            gv.DataSource = files
+            gv.DataBind()
+        End If
+    End Sub
+
+    ''' <summary>List view: the Document cell is a link that opens the file.</summary>
+    Protected Sub gvAttachFiles_RowDataBound(sender As Object, e As GridViewRowEventArgs)
+        If e.Row.RowType <> DataControlRowType.DataRow Then Exit Sub
+        Dim r As DataRowView = CType(e.Row.DataItem, DataRowView)
+        Dim lnkFile As LinkButton = CType(e.Row.FindControl("lnkFile"), LinkButton)
+        Dim fileName As String = Convert.ToString(r("FILE_NAME"))
+
+        lnkFile.Text = Server.HtmlEncode(fileName)
+        lnkFile.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnkFile, Convert.ToString(r("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>Icons view: the whole tile is a link that opens the file.</summary>
+    Protected Sub rptTiles_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
+        Dim lnkTile As LinkButton = CType(e.Item.FindControl("lnkTile"), LinkButton)
+        Dim litTile As Literal = CType(e.Item.FindControl("litTile"), Literal)
+
+        Dim fileName As String = Convert.ToString(r("FILE_NAME")).Trim()
+        Dim ext As String = Path.GetExtension(fileName).TrimStart("."c).ToLowerInvariant()
+        Dim iconClass As String
+        Select Case ext
+            Case "pdf" : iconClass = "pdf"
+            Case "jpg", "jpeg", "png", "gif", "bmp", "tif", "tiff" : iconClass = "img"
+            Case "doc", "docx" : iconClass = "doc"
+            Case "xls", "xlsx" : iconClass = "xls"
+            Case Else : iconClass = ""
+        End Select
+
+        litTile.Text = "<span class=""file-icon " & iconClass & """>" & Server.HtmlEncode(If(ext = "", "-", ext.ToUpperInvariant())) & "</span>" &
+                       "<span class=""name"">" & Server.HtmlEncode(fileName) & "</span>" &
+                       "<span class=""doc"">" & Server.HtmlEncode(Convert.ToString(r("ADDED_BY")) & " · " & Convert.ToString(r("DATE_TEXT"))) & "</span>" &
+                       AboutHtml(r("NODE_ID"), r("CONTACT_ID"))
+        lnkTile.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnkTile, Convert.ToString(r("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>
+    ''' Opens a stored file in the DisplayInvoice viewer - the same popup used for invoices.
+    ''' The viewer looks the file up by its ATTACHMENT_ID.
+    ''' </summary>
+    Private Sub RegisterFilePopup(Link As LinkButton, AttachmentId As String)
+        Dim Url As String = "DisplayInvoice.aspx?AttachmentId=" & Server.UrlEncode(AttachmentId)
+
+        VendorPopupHelper.RegisterVendorPopup(Me,
+                                              Link,
+                                              Url,
+                                              1000, 0,
+                                              PopupPlacement.Center,
+                                              "",
+                                              VendorPopupHelper.PopupDisplayMode.FrameOnly,
+                                              returnKey:=OpenActionPopupReturnKey)
+    End Sub
+
+    ''' <summary>Files of the comments being shown, by COMMENT_ID; filled by BindComments.</summary>
+    Private _commentFiles As Dictionary(Of String, List(Of DataRow))
+
+    ''' <summary>
+    ''' Comments tab: comments about this unit or its current customer, newest first. Each
+    ''' comment is a box of three rows (see rptComments in the markup):
+    '''   1. Comment by: user name, ID(user id), On: yyyy MMM,dd HH:mm (Bahrain time)
+    '''   2. The comment text
+    '''   3. Its files (UNITSHUB_ATTACHMENTS whose COMMENT_ID is set) as links side by side,
+    '''      separated by commas; each opens the file in the DisplayInvoice viewer.
+    ''' Bound on EVERY request from Page_PreRender, so the links and their popups are always
+    ''' there after postbacks.
+    ''' </summary>
+    Private Sub BindComments(NodeId As String, ContactId As String)
+        lblCommentsNote.Visible = False
+        lblNoComments.Visible = False
+        _commentFiles = New Dictionary(Of String, List(Of DataRow))
+
+        If NodeId = "" Then
+            rptComments.DataSource = Nothing
+            rptComments.DataBind()
+            lblNoComments.Visible = True
+            Exit Sub
+        End If
+
+        Try
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT c.COMMENT_ID, c.NODE_ID, c.CONTACT_ID, c.COMMENT_TEXT, c.CREATED_AT, c.CREATED_BY, "
+            SQL = SQL + vbCrLf + "        NVL(u.FULL_NAME, c.CREATED_BY) AS CREATED_BY_NAME "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_COMMENTS c "
+            SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_USERS u ON u.USER_ID = c.CREATED_BY "
+            SQL = SQL + vbCrLf + " WHERE  c.IS_ACTIVE = 'Y' AND " & UnitOrCustomerFilter("c", NodeId, ContactId)
+            SQL = SQL + vbCrLf + " ORDER BY c.CREATED_AT DESC, c.COMMENT_ID DESC "
+
+            Dim DT As DataTable = GetDataTable(EBDB, SQL)
+            If DT Is Nothing Then DT = New DataTable()
+
+            ' Files of all these comments in one query, grouped by comment
+            If DT.Rows.Count > 0 Then
+                Dim filesDT As DataTable = GetDataTable(EBDB,
+                    "SELECT a.COMMENT_ID, a.ATTACHMENT_ID, a.FILE_NAME FROM UNITSHUB_ATTACHMENTS a " &
+                    "JOIN UNITSHUB_COMMENTS c ON c.COMMENT_ID = a.COMMENT_ID " &
+                    "WHERE a.IS_ACTIVE = 'Y' AND c.IS_ACTIVE = 'Y' AND " & UnitOrCustomerFilter("c", NodeId, ContactId) &
+                    " ORDER BY a.COMMENT_ID, a.SORT_ORDER, a.ATTACHMENT_ID")
+                If filesDT IsNot Nothing Then
+                    For Each f As DataRow In filesDT.Rows
+                        Dim key As String = Convert.ToString(f("COMMENT_ID"))
+                        If Not _commentFiles.ContainsKey(key) Then _commentFiles(key) = New List(Of DataRow)
+                        _commentFiles(key).Add(f)
+                    Next
+                End If
+            End If
+
+            rptComments.DataSource = DT
+            rptComments.DataBind()
+            lblNoComments.Visible = (DT.Rows.Count = 0)
+        Catch ex As Exception
+            rptComments.DataSource = Nothing
+            rptComments.DataBind()
+            lblCommentsNote.Text = Server.HtmlEncode("Comments can't be shown: " & ex.Message)
+            lblCommentsNote.Visible = True
+        End Try
+    End Sub
+
+    ''' <summary>One comment box: header row, text row, and its files in the third row.</summary>
+    Protected Sub rptComments_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim r As DataRowView = CType(e.Item.DataItem, DataRowView)
+
+        Dim litHead As Literal = CType(e.Item.FindControl("litCommentHead"), Literal)
+        Dim litText As Literal = CType(e.Item.FindControl("litCommentText"), Literal)
+        Dim rptFiles As Repeater = CType(e.Item.FindControl("rptCommentFiles"), Repeater)
+        Dim lblNoFiles As Label = CType(e.Item.FindControl("lblNoFiles"), Label)
+
+        ' Row 1: Comment by: <name>, ID(<user id>), On: <yyyy MMM,dd HH:mm>
+        Dim userName As String = Convert.ToString(r("CREATED_BY_NAME")).Trim()
+        Dim userId As String = Convert.ToString(r("CREATED_BY")).Trim()
+        litHead.Text = "<span class=""lbl"">Comment by:</span> " & Server.HtmlEncode(userName) &
+                       ", ID(" & Server.HtmlEncode(userId) & ")" &
+                       ", <span class=""lbl"">On:</span> " & Server.HtmlEncode(FormatCommentTime(Convert.ToString(r("CREATED_AT"))))
+
+        ' Row 2: the comment text (line breaks are kept by the CSS)
+        litText.Text = Server.HtmlEncode(Convert.ToString(r("COMMENT_TEXT")))
+
+        ' Row 3: its files, or "None"
+        Dim key As String = Convert.ToString(r("COMMENT_ID"))
+        Dim files As List(Of DataRow) = Nothing
+        If _commentFiles IsNot Nothing Then _commentFiles.TryGetValue(key, files)
+        If files IsNot Nothing AndAlso files.Count > 0 Then
+            rptFiles.DataSource = files
+            rptFiles.DataBind()
+            lblNoFiles.Visible = False
+        Else
+            rptFiles.DataSource = Nothing
+            rptFiles.DataBind()
+            lblNoFiles.Visible = True
+        End If
+    End Sub
+
+    ''' <summary>One attachment of a comment: a link that opens the file in the DisplayInvoice viewer.</summary>
+    Protected Sub rptCommentFiles_ItemDataBound(sender As Object, e As RepeaterItemEventArgs)
+        If e.Item.ItemType <> ListItemType.Item AndAlso e.Item.ItemType <> ListItemType.AlternatingItem Then Exit Sub
+        Dim f As DataRow = CType(e.Item.DataItem, DataRow)
+        Dim lnk As LinkButton = CType(e.Item.FindControl("lnkCommentFile"), LinkButton)
+        Dim fileName As String = Convert.ToString(f("FILE_NAME")).Trim()
+
+        lnk.Text = Server.HtmlEncode(fileName)
+        lnk.ToolTip = "Open " & fileName
+        RegisterFilePopup(lnk, Convert.ToString(f("ATTACHMENT_ID")))
+    End Sub
+
+    ''' <summary>
+    ''' Comment time (Unix seconds, UTC) in Bahrain time as "yyyy MMM,dd HH:mm",
+    ''' e.g. "2026 Oct,05 14:30"; shown as stored if it isn't a number.
+    ''' </summary>
+    Private Function FormatCommentTime(Value As String) As String
+        Dim seconds As Long
+        If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Return If(Value, "")
+        Dim bahrain As DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToOffset(TimeSpan.FromHours(3))
+        Return bahrain.ToString("yyyy MMM,dd HH:mm", CultureInfo.InvariantCulture)
+    End Function
+
+    ''' <summary>Unix seconds (UTC) as Bahrain date (yyyy-MM-dd) and time (HH:mm); both "" if not a number.</summary>
+    Private Sub SplitUnixTime(Value As String, ByRef DateText As String, ByRef TimeText As String)
+        DateText = ""
+        TimeText = ""
+        Dim seconds As Long
+        If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Exit Sub
+        Dim bahrain As DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(seconds).ToOffset(TimeSpan.FromHours(3))
+        DateText = bahrain.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        TimeText = bahrain.ToString("HH:mm", CultureInfo.InvariantCulture)
+    End Sub
+
+    ''' <summary>A DATE (or date text) as yyyy-MM-dd; "" when empty.</summary>
+    Private Function FormatDateValue(Value As Object) As String
+        If Value Is Nothing OrElse Value Is DBNull.Value Then Return ""
+        If TypeOf Value Is DateTime Then Return CType(Value, DateTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        Return Server.HtmlEncode(Convert.ToString(Value))
+    End Function
+
+    ''' <summary>
+    ''' Fills gvHistory with this unit's UNITSHUB_UNITSHISTORY rows, newest first, with
+    ''' readable names joined in:
+    '''   From / To       status name (UNITSHUB_PROJECTSTATUS) + sub-status subtitle
+    '''                   (UNITSHUB_PROJECTSUBSTATUS); the IDs when a name isn't found
+    '''                   (e.g. old status IDs from before the sub-status change)
+    '''   Action          UNITSHUB_ACTIONS.ACTION_TITLE
+    '''   Implemented by  UNITSHUB_USERS.FULL_NAME
+    '''   Customer        UNITSHUB_CONTACTS.NAME
+    '''   Date and time   DATENTIME (Unix seconds) shown in Bahrain time
+    ''' </summary>
+    Private Sub BindHistory()
+        Dim NodeId As String = Convert.ToString(lblPID.Text).Trim()
+        If NodeId = "" Then
+            gvHistory.DataSource = Nothing
+            gvHistory.DataBind()
+            Exit Sub
+        End If
+
+        Dim safeNode As String = NodeId.Replace("'", "''")
+        Dim projectFilter As String = ""
+        If Convert.ToString(lblPRJID.Text).Trim() <> "" Then
+            projectFilter = " AND H.PROJECT_ID = '" & lblPRJID.Text.Trim().Replace("'", "''") & "' "
+        End If
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + " SELECT H.DATENTIME, "
+        SQL = SQL + vbCrLf + "        H.FROM_STATUS, H.FROM_SUBSTATUS, H.TO_STATUS, H.TO_SUBSTATUS, "
+        SQL = SQL + vbCrLf + "        FS.STATUS AS FROM_STATUS_NAME, "
+        SQL = SQL + vbCrLf + "        NVL(FSS.SUBTITLE, CASE WHEN H.FROM_SUBSTATUS IS NULL THEN FS.SUBTITLE END) AS FROM_SUB_NAME, "
+        SQL = SQL + vbCrLf + "        TS.STATUS AS TO_STATUS_NAME, "
+        SQL = SQL + vbCrLf + "        NVL(TSS.SUBTITLE, CASE WHEN H.TO_SUBSTATUS IS NULL THEN TS.SUBTITLE END) AS TO_SUB_NAME, "
+        ' Card colours: the sub-status's own where set, otherwise the status's (as on MainPage)
+        SQL = SQL + vbCrLf + "        NVL(FSS.STATUS_BG_COLOR, FS.STATUS_BG_COLOR) AS FROM_BG, "
+        SQL = SQL + vbCrLf + "        NVL(FSS.STATUS_FG_COLOR, FS.STATUS_FG_COLOR) AS FROM_FG, "
+        SQL = SQL + vbCrLf + "        NVL(FSS.SUBTITLE_BG_COLOR, FS.SUBTITLE_BG_COLOR) AS FROM_SUB_BG, "
+        SQL = SQL + vbCrLf + "        NVL(FSS.SUBTITLE_FG_COLOR, FS.SUBTITLE_FG_COLOR) AS FROM_SUB_FG, "
+        SQL = SQL + vbCrLf + "        NVL(TSS.STATUS_BG_COLOR, TS.STATUS_BG_COLOR) AS TO_BG, "
+        SQL = SQL + vbCrLf + "        NVL(TSS.STATUS_FG_COLOR, TS.STATUS_FG_COLOR) AS TO_FG, "
+        SQL = SQL + vbCrLf + "        NVL(TSS.SUBTITLE_BG_COLOR, TS.SUBTITLE_BG_COLOR) AS TO_SUB_BG, "
+        SQL = SQL + vbCrLf + "        NVL(TSS.SUBTITLE_FG_COLOR, TS.SUBTITLE_FG_COLOR) AS TO_SUB_FG, "
+        SQL = SQL + vbCrLf + "        NVL(A.ACTION_TITLE, H.ACTION_ID) AS ACTION_TITLE, "
+        SQL = SQL + vbCrLf + "        NVL(U.FULL_NAME, H.IMPLEMENTEDBY) AS IMPLEMENTED_BY_NAME, "
+        SQL = SQL + vbCrLf + "        C.NAME AS CUSTOMER_NAME, "
+        SQL = SQL + vbCrLf + "        H.SUMMARY "
+        SQL = SQL + vbCrLf + " FROM   UNITSHUB_UNITSHISTORY H "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_PROJECTSTATUS FS "
+        SQL = SQL + vbCrLf + "        ON FS.PROJECT_ID = H.PROJECT_ID AND FS.STATE_ID = H.FROM_STATUS "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_PROJECTSUBSTATUS FSS "
+        SQL = SQL + vbCrLf + "        ON FSS.PROJECT_ID = H.PROJECT_ID AND FSS.STATE_ID = H.FROM_STATUS AND FSS.SUBSTATE_ID = H.FROM_SUBSTATUS "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_PROJECTSTATUS TS "
+        SQL = SQL + vbCrLf + "        ON TS.PROJECT_ID = H.PROJECT_ID AND TS.STATE_ID = H.TO_STATUS "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_PROJECTSUBSTATUS TSS "
+        SQL = SQL + vbCrLf + "        ON TSS.PROJECT_ID = H.PROJECT_ID AND TSS.STATE_ID = H.TO_STATUS AND TSS.SUBSTATE_ID = H.TO_SUBSTATUS "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_ACTIONS A "
+        SQL = SQL + vbCrLf + "        ON A.PROJECT_ID = H.PROJECT_ID AND A.ACTION_ID = H.ACTION_ID "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_USERS U "
+        SQL = SQL + vbCrLf + "        ON U.USER_ID = H.IMPLEMENTEDBY "
+        SQL = SQL + vbCrLf + " LEFT JOIN UNITSHUB_CONTACTS C "
+        SQL = SQL + vbCrLf + "        ON C.ID = H.CONTACT_ID "
+        SQL = SQL + vbCrLf + " WHERE  H.NODE_ID = '" & safeNode & "' " & projectFilter
+        SQL = SQL + vbCrLf + " ORDER BY CASE WHEN REGEXP_LIKE(TRIM(H.DATENTIME), '^[0-9]+$') THEN TO_NUMBER(TRIM(H.DATENTIME)) END DESC NULLS LAST "
+
+        Dim DT As DataTable = GetDataTable(EBDB, SQL)
+        If DT Is Nothing Then DT = New DataTable()
+
+        DT.Columns.Add("WHEN_TEXT", GetType(String))
+        DT.Columns.Add("FROM_HTML", GetType(String))
+        DT.Columns.Add("TO_HTML", GetType(String))
+
+        For Each r As DataRow In DT.Rows
+            r("WHEN_TEXT") = FormatUnixTime(Convert.ToString(r("DATENTIME")))
+            r("FROM_HTML") = StatusHtml(r, "FROM")
+            r("TO_HTML") = StatusHtml(r, "TO")
+        Next
+
+        gvHistory.DataSource = DT
+        gvHistory.DataBind()
+
+    End Sub
+
+    ''' <summary>
+    ''' The status as a small card like the ones on MainPage: status name on the card colour,
+    ''' and the sub-status (or the status's own subtitle) in a rounded box underneath, with
+    ''' that box's colours. Side = "FROM" or "TO". Falls back to the raw IDs and default
+    ''' colours when a status / sub-status isn't found (e.g. old IDs in early history rows).
+    ''' </summary>
+    Private Function StatusHtml(r As DataRow, Side As String) As String
+        Dim statusId As String = Convert.ToString(r(Side & "_STATUS")).Trim()
+        Dim subId As String = Convert.ToString(r(Side & "_SUBSTATUS")).Trim()
+        Dim statusName As String = Convert.ToString(r(Side & "_STATUS_NAME")).Trim()
+        Dim subName As String = Convert.ToString(r(Side & "_SUB_NAME")).Trim()
+
+        If statusId = "" AndAlso statusName = "" Then Return "&ndash;"
+        If statusName = "" Then statusName = statusId
+        If subName = "" AndAlso subId <> "" Then subName = subId
+
+        Dim cardStyle As String = ColorStyle(r(Side & "_BG"), r(Side & "_FG"))
+        Dim subStyle As String = ColorStyle(r(Side & "_SUB_BG"), r(Side & "_SUB_FG"))
+
+        Dim html As String = "<span class=""st-card""" & cardStyle & ">" &
+                             "<span class=""st-title"">" & Server.HtmlEncode(statusName) & "</span>"
+        If subName <> "" Then
+            html &= "<span class=""st-sub""" & subStyle & ">" & Server.HtmlEncode(subName) & "</span>"
+        End If
+        Return html & "</span>"
+    End Function
+
+    ''' <summary>
+    ''' style="background-color:..;color:.." from two colour values; only values that look
+    ''' like colours (#hex or a plain colour name) are used, anything else is left out.
+    ''' </summary>
+    Private Function ColorStyle(Background As Object, Foreground As Object) As String
+        Dim parts As New List(Of String)
+        Dim bg As String = SafeColor(Background)
+        Dim fg As String = SafeColor(Foreground)
+        If bg <> "" Then parts.Add("background-color:" & bg)
+        If fg <> "" Then parts.Add("color:" & fg)
+        Return If(parts.Count = 0, "", " style=""" & String.Join(";", parts) & """")
+    End Function
+
+    Private Function SafeColor(Value As Object) As String
+        Dim v As String = Convert.ToString(Value).Trim()
+        If v = "" Then Return ""
+        If System.Text.RegularExpressions.Regex.IsMatch(v, "^#?[0-9A-Fa-f]{3,8}$") Then
+            Return If(v.StartsWith("#"), v, "#" & v)
+        End If
+        If System.Text.RegularExpressions.Regex.IsMatch(v, "^[A-Za-z]+$") Then Return v
+        Return ""
+    End Function
+
+    ''' <summary>
+    ''' DATENTIME is a Unix timestamp in seconds (UTC). Shown in Bahrain time (UTC+3) on two
+    ''' lines - date above (yyyy-MM-dd), time below (HH:mm) - or as stored if it isn't a number.
+    ''' </summary>
+    ''' 
+    Private Function FormatUnixTime(Value As String) As String
+        Dim seconds As Long
+        If Not Long.TryParse(If(Value, "").Trim(), seconds) Then Return Server.HtmlEncode(If(Value, ""))
+
+        Dim utc As DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(seconds)
+        Dim bahrain As DateTimeOffset = utc.ToOffset(TimeSpan.FromHours(3))
+        Return "<span class=""d"">" & bahrain.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) & "</span>" &
+               "<span class=""t"">" & bahrain.ToString("HH:mm", CultureInfo.InvariantCulture) & "</span>"
+    End Function
+
+    Protected Sub imgClose_Click(sender As Object, e As ImageClickEventArgs) Handles imgClose.Click
+        VendorPopupHelper.RegisterPopupSelectionAndClose(Me, False, skipPostBack:=False)
+    End Sub
+
+End Class

@@ -8,7 +8,7 @@ Public Class EncryDecry
         Dim EncryptionKey As String = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         Dim clearBytes As Byte() = Encoding.Unicode.GetBytes(encryptString)
 
-        Using encryptor As Aes = Aes.Create()
+        Using encryptor As Aes = CreateAes()
             Dim pdb As Rfc2898DeriveBytes =
             New Rfc2898DeriveBytes(EncryptionKey,
                                    New Byte() {&H49, &H76, &H61, &H6E, &H20, &H4D, &H65, &H64, &H76, &H65, &H64, &H65, &H76})
@@ -31,6 +31,22 @@ Public Class EncryDecry
         Dim plainText As String = New JavaScriptSerializer().Serialize(values)
         Return encrypt(plainText)
     End Function
+
+    ''' <summary>
+    ''' AES object for Encrypt/Decrypt. Aes.Create() uses the Windows crypto provider, which
+    ''' fails on some machines ("not supported on this platform"); AesManaged is the same
+    ''' AES done in .NET itself, so it works there and stays compatible with existing data.
+    ''' </summary>
+    Private Shared Function CreateAes() As Aes
+        Try
+            Return Aes.Create()
+        Catch ex As Exception When TypeOf ex Is PlatformNotSupportedException OrElse
+                               TypeOf ex.InnerException Is PlatformNotSupportedException OrElse
+                               TypeOf ex Is System.Reflection.TargetInvocationException
+            Return New AesManaged()
+        End Try
+    End Function
+
 
     Public Function Decrypt(ByVal cipherText As String) As String
         If String.IsNullOrEmpty(cipherText) Then

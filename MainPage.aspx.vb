@@ -227,22 +227,29 @@ Partial Class MainPage
                     "ManageRoles.aspx",
                     950, 0, "Y", "ADM", "LINK", "4.3", "4",
                     "Y", "", "")
-
+        '============================================================
+        '============================================================
+        '============================================================
+        dt.Rows.Add("Projects and subs", "", 800, 550, "Y", "ADM", "TITLE", "5", "")
+        ' One entry per node type (UNITSHUB_NODE_TYPES), each opening ProjectComp.aspx for
+        ' that type: INDX 5.1, 5.2, ... in NODE_TYPE_ID order
+        Dim nodeTypes As DataTable = GetDataTable(EBDB,
+            "SELECT NODE_TYPE_ID, TYPE_NAME || 'S' as TYPE_NAME FROM UNITSHUB_NODE_TYPES ORDER BY NODE_TYPE_ID")
+        If nodeTypes IsNot Nothing Then
+            Dim typeNo As Integer = 0
+            For Each nt As DataRow In nodeTypes.Rows
+                Dim typeId As String = Convert.ToString(nt("NODE_TYPE_ID")).Trim()
+                Dim typeName As String = Convert.ToString(nt("TYPE_NAME")).Trim()
+                If typeId = "" Then Continue For
+                typeNo += 1
+                dt.Rows.Add(If(typeName = "", typeId, typeName),
+                            "ProjectComp.aspx?NodeTypeID=" & Server.UrlEncode(typeId),
+                            950, 0, "Y", "ADM", "LINK", "5." & typeNo.ToString(), "5",
+                            "Y", "", "")
+            Next
+        End If
         '
 
-        Dim A As String = ""
-
-        'dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
-        'dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")
-        'dt.Rows.Add("Uploadees Control", "frmUploadees.aspx", 800, 550, "Y", "ADM", "LINK", "2.3", "2")
-        'dt.Rows.Add("User Management", "frmUsers.aspx", 800, 550, "Y", "ADM,ALL", "LINK", "2.4", "2")
-        'dt.Rows.Add("Vacations Control", "frmVacations.aspx", 800, 550, "Y", "ADM", "LINK", "2.5", "2")
-
-        'dt.Rows.Add("Requested-By-Me OnGoing", "frmStateActionsUsersPackages.aspx", 800, 550, "Y", "ADM,FCD", "LINK", "3.1", "3")
-        'dt.Rows.Add("Requested-From-Me OnGoing", "frmStateActionsUsersPackagesRequestedFromMe.aspx", 800, 550, "Y", "ADM", "LINK", "3.2", "3")
-        'dt.Rows.Add("Upcoming Events", "frmUpcomingsAuthorities.aspx", 800, 550, "Y", "ADM", "LINK", "3.3", "3")
-
-        'dt.Rows.Add("Dashboard", "frmDashboard.aspx", 800, 550, "Y", "ADM,FCD,ALL", "LINK", "4.1", "4")
 
         Dim currentRole As String = GetCurrentUserRole()
         Dim sb As New System.Text.StringBuilder
