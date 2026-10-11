@@ -202,11 +202,11 @@ Partial Class MainPage
         '============================================================
         dt.Rows.Add("Users, Groups, and Roles", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
         dt.Rows.Add("Users",
-                    "PaymentSchedule.aspx",
+                    "ManageUsers.aspx",
                     950, 0, "Y", "ADM", "LINK", "3.1", "3",
                     "Y", "", "")
         dt.Rows.Add("Groups",
-                    "PaymentSchedule.aspx",
+                    "ManageGroups.aspx",
                     950, 0, "Y", "ADM", "LINK", "3.2", "3",
                     "Y", "", "")
         dt.Rows.Add("Roles",
