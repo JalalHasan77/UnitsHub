@@ -1,4 +1,4 @@
-﻿Imports System.Data
+Imports System.Data
 Imports System.Globalization
 Imports System.Collections
 Imports System.Collections.Generic
@@ -132,11 +132,12 @@ Partial Class MainPage
     End Sub
 
     ''' <summary>
-    ''' Builds the right-side slide-in menu from the ISSIDE menu definition table.
-    ''' Rows of TYPE "TITLE" render as collapsible group headers; rows of TYPE "LINK"
-    ''' render as clickable items nested under the group whose INDX matches their
-    ''' PARENT. Only rows whose VISIBLETO list contains the current user's role (or
-    ''' "ALL") are included. Groups with no visible children are omitted entirely.
+    ''' Builds the right-side slide-in menu from the ISSIDE menu definition table, to any
+    ''' depth: each row sits under the row whose INDX equals its PARENT (top level =
+    ''' empty PARENT). A row with entries under it is a collapsible group (TITLE, or a
+    ''' LINK without URL such as "3.1 Users"); a LINK with a URL is a clickable item.
+    ''' Only rows whose VISIBLETO list contains the current user's role (or "ALL") are
+    ''' included. Groups with no visible links under them are omitted entirely.
     ''' Rebuilt on every request (like the grid's action placeholders) since the
     ''' PlaceHolder's dynamically-added children aren't preserved by ViewState.
     ''' </summary>
@@ -200,23 +201,36 @@ Partial Class MainPage
         '============================================================
         '============================================================
         '============================================================
-        dt.Rows.Add("Users, Groups, and Roles", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
-        dt.Rows.Add("Users",
-                    "ManageUsers.aspx",
+        dt.Rows.Add("STATUS & ACTIONS", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
+        dt.Rows.Add("Manage Status & Actions",
+                    "ProjectStatusAndAction.aspx",
                     950, 0, "Y", "ADM", "LINK", "3.1", "3",
+                    "Y", "", "")
+        '============================================================
+        '============================================================
+        '============================================================
+        dt.Rows.Add("Users, Groups, and Roles", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
+        dt.Rows.Add("Users", "", 800, 550, "Y", "ADM", "LINK", "4.1", "4")
+        dt.Rows.Add("Manage Users Profiles",
+                    "UserAddEdit.aspx",
+                    950, 0, "Y", "ADM", "LINK", "4.1.1", "4.1",
+                    "Y", "", "")
+        dt.Rows.Add("Manage Users Preveliges",
+                    "ManageUsers.aspx",
+                    950, 0, "Y", "ADM", "LINK", "4.1.2", "4.1",
                     "Y", "", "")
         dt.Rows.Add("Groups",
                     "ManageGroups.aspx",
-                    950, 0, "Y", "ADM", "LINK", "3.2", "3",
+                    950, 0, "Y", "ADM", "LINK", "4.2", "4",
                     "Y", "", "")
         dt.Rows.Add("Roles",
                     "ManageRoles.aspx",
-                    950, 0, "Y", "ADM", "LINK", "3.3", "3",
+                    950, 0, "Y", "ADM", "LINK", "4.3", "4",
                     "Y", "", "")
 
         '
 
-
+        Dim A As String = ""
 
         'dt.Rows.Add("Bands Control", "frmInsertEditBand.aspx", 800, 550, "Y", "ADM", "LINK", "2.1", "2")
         'dt.Rows.Add("Packages Control", "frmPackages.aspx", 800, 550, "Y", "ADM", "LINK", "2.2", "2")
@@ -231,67 +245,108 @@ Partial Class MainPage
         'dt.Rows.Add("Dashboard", "frmDashboard.aspx", 800, 550, "Y", "ADM,FCD,ALL", "LINK", "4.1", "4")
 
         Dim currentRole As String = GetCurrentUserRole()
-
-        Dim titleRows = dt.AsEnumerable().
-            Where(Function(r) String.Equals(r.Field(Of String)("TYPE"), "TITLE", StringComparison.OrdinalIgnoreCase) _
-                        AndAlso IsVisibleToRole(r.Field(Of String)("VISIBLETO"), currentRole)).
-            OrderBy(Function(r) ParseIndx(r.Field(Of String)("INDX")))
-
         Dim sb As New System.Text.StringBuilder
+        RenderMenuLevel(dt, "", 0, currentRole, sb)
+        phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
+    End Sub
 
-        For Each titleRow As DataRow In titleRows
-            Dim titleIndx As String = titleRow.Field(Of String)("INDX")
+    ''' <summary>
+    ''' Renders the menu rows whose PARENT is ParentIndx, at any depth:
+    '''   - a row that has visible entries under it becomes a collapsible group (its own
+    '''     header + its children, rendered by calling this again one level deeper) -
+    '''     whatever its TYPE, so "3.1 Users" (LINK, no URL) can hold 3.1.1, 3.1.2 ...;
+    '''   - a LINK row with a URL and nothing under it becomes a clickable item;
+    '''   - anything else (empty title, link without URL, not visible) is skipped.
+    ''' Top level = rows with an empty PARENT. Level is used only for indentation.
+    ''' </summary>
+    Private Sub RenderMenuLevel(dt As DataTable, ParentIndx As String, Level As Integer, Role As String, sb As System.Text.StringBuilder)
+        Dim rows = dt.AsEnumerable().
+            Where(Function(r) Convert.ToString(r("PARENT")).Trim() = ParentIndx AndAlso
+                              IsVisibleToRole(Convert.ToString(r("VISIBLETO")), Role)).
+            OrderBy(Function(r) IndxSortKey(Convert.ToString(r("INDX")))).ToList()
 
-            Dim childRows = dt.AsEnumerable().
-                Where(Function(r) String.Equals(r.Field(Of String)("TYPE"), "LINK", StringComparison.OrdinalIgnoreCase) _
-                            AndAlso r.Field(Of String)("PARENT") = titleIndx _
-                            AndAlso IsVisibleToRole(r.Field(Of String)("VISIBLETO"), currentRole)).
-                OrderBy(Function(r) ParseIndx(r.Field(Of String)("INDX"))).ToList()
+        Dim pad As Integer = 20 + Level * 14   ' px, deeper levels sit further right
 
-            If childRows.Count = 0 Then Continue For
+        For Each row As DataRow In rows
+            Dim indx As String = Convert.ToString(row("INDX")).Trim()
+            Dim title As String = Convert.ToString(row("TITLE"))
 
-            sb.Append("<div class=""sideMenuGroup"">")
-            sb.Append("<div class=""sideMenuGroupHeader"" onclick=""toggleSideMenuGroup(this)"">")
-            sb.Append("<span>").Append(Server.HtmlEncode(titleRow.Field(Of String)("TITLE"))).Append("</span>")
-            sb.Append("<span class=""sideMenuGroupArrow"">&#9662;</span>")
-            sb.Append("</div>")
-            sb.Append("<div class=""sideMenuGroupItems"">")
+            If HasVisibleLink(dt, indx, Role) Then
+                ' ---- a group (top-level title or a sub-menu) ----
+                sb.Append("<div class=""sideMenuGroup").Append(If(Level > 0, " sub", "")).Append(""">")
+                ' A sub-menu header lines up with the links beside it (same indent as an item)
+                Dim headerPad As Integer = If(Level > 0, pad + 12, pad)
+                sb.Append("<div class=""sideMenuGroupHeader"" style=""padding-left:").Append(headerPad).Append("px"" onclick=""toggleSideMenuGroup(this)"">")
+                sb.Append("<span>").Append(Server.HtmlEncode(title)).Append("</span>")
+                sb.Append("<span class=""sideMenuGroupArrow"">&#9662;</span>")
+                sb.Append("</div>")
+                sb.Append("<div class=""sideMenuGroupItems"">")
+                RenderMenuLevel(dt, indx, Level + 1, Role, sb)
+                sb.Append("</div>")
+                sb.Append("</div>")
 
-            For Each childRow As DataRow In childRows
-                Dim url As String = childRow.Field(Of String)("URL")
-                Dim width As Integer = childRow.Field(Of Integer)("WIDTH")
-                Dim height As Integer = childRow.Field(Of Integer)("HEIGHT")
+            ElseIf String.Equals(Convert.ToString(row("TYPE")), "LINK", StringComparison.OrdinalIgnoreCase) AndAlso
+                   Convert.ToString(row("URL")).Trim() <> "" Then
+                ' ---- a clickable item ----
+                Dim url As String = Convert.ToString(row("URL"))
+                Dim width As Integer = If(IsDBNull(row("WIDTH")), 800, CInt(row("WIDTH")))
+                Dim height As Integer = If(IsDBNull(row("HEIGHT")), 550, CInt(row("HEIGHT")))
+                Dim itemPad As Integer = pad + 12
 
-                If String.Equals(childRow.Field(Of String)("POPUP"), "Y", StringComparison.OrdinalIgnoreCase) Then
+                If String.Equals(Convert.ToString(row("POPUP")), "Y", StringComparison.OrdinalIgnoreCase) Then
                     ' VendorPopupHelper needs a server control: flush the HTML so far, then add
                     ' a LinkButton (same look) and register its popup
                     phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
                     sb.Clear()
-                    AddSideMenuPopupLink(childRow, url, width, height)
+                    AddSideMenuPopupLink(row, url, width, height, itemPad)
                 Else
-                    sb.Append("<a class=""sideMenuItem"" href=""javascript:void(0);"" onclick=""openMenuLink('") _
+                    sb.Append("<a class=""sideMenuItem"" style=""padding-left:").Append(itemPad).Append("px"" href=""javascript:void(0);"" onclick=""openMenuLink('") _
                       .Append(Server.HtmlEncode(url)).Append("', ").Append(width).Append(", ").Append(height).Append("); return false;"">") _
-                      .Append(Server.HtmlEncode(childRow.Field(Of String)("TITLE"))) _
+                      .Append(Server.HtmlEncode(title)) _
                       .Append("</a>")
                 End If
-            Next
-
-            sb.Append("</div>")
-            sb.Append("</div>")
+            End If
         Next
-
-        phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
     End Sub
+
+    ''' <summary>True when some visible LINK with a URL sits anywhere under Indx.</summary>
+    Private Function HasVisibleLink(dt As DataTable, Indx As String, Role As String) As Boolean
+        For Each r As DataRow In dt.Rows
+            If Convert.ToString(r("PARENT")).Trim() <> Indx Then Continue For
+            If Not IsVisibleToRole(Convert.ToString(r("VISIBLETO")), Role) Then Continue For
+            Dim childIndx As String = Convert.ToString(r("INDX")).Trim()
+            If childIndx = Indx Then Continue For   ' guard against a row that is its own parent
+            If String.Equals(Convert.ToString(r("TYPE")), "LINK", StringComparison.OrdinalIgnoreCase) AndAlso
+               Convert.ToString(r("URL")).Trim() <> "" Then Return True
+            If HasVisibleLink(dt, childIndx, Role) Then Return True
+        Next
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' Sort key for INDX values of any depth: each part zero-padded, so
+    ''' "3.1.2" -> "00003.00001.00002" and "1.10" sorts after "1.2".
+    ''' </summary>
+    Private Function IndxSortKey(Indx As String) As String
+        Dim parts As New List(Of String)
+        For Each p As String In If(Indx, "").Trim().Split("."c)
+            Dim n As Integer
+            parts.Add(If(Integer.TryParse(p, n), n.ToString("00000"), p.PadLeft(5, "0"c)))
+        Next
+        Return String.Join(".", parts)
+    End Function
 
     ''' <summary>
     ''' One side-menu link that opens through VendorPopupHelper (POPUP = "Y"). Added on every
     ''' request from Page_Load (PopulateSideMenu), with a fixed ID per INDX, so it exists for
     ''' its popup and for the postback when the popup returns.
     ''' </summary>
-    Private Sub AddSideMenuPopupLink(Row As DataRow, Url As String, Width As Integer, Height As Integer)
+    Private Sub AddSideMenuPopupLink(Row As DataRow, Url As String, Width As Integer, Height As Integer,
+                                     Optional PaddingLeft As Integer = 32)
         Dim lnk As New LinkButton()
         lnk.ID = "lnkSideMenu_" & Convert.ToString(Row("INDX")).Replace(".", "_")
         lnk.CssClass = "sideMenuItem"
+        lnk.Style("padding-left") = PaddingLeft & "px"
         lnk.CausesValidation = False
         lnk.Text = Server.HtmlEncode(Convert.ToString(Row("TITLE")))
         phSideMenu.Controls.Add(lnk)
@@ -1867,12 +1922,16 @@ Partial Class MainPage
             _projectActionsCache(cacheKey) = actionsTable
         End If
 
+        ' Who may use what: the security tables (UNITSHUB_SEC_*), per the row's real status
+        Dim perms As HashSet(Of String) = GetUserPermissions(lcProjectID, UserID)
+
         Dim Actions As New List(Of WorkflowAction)
 
         ' A placement fits the row when:
         '   - its STATUS_ID is '*' or the row's STATE_ID, and
         '   - its SUBSTATE_ID is '*' or the row's SUBSTATE_ID (a row without a
         '     sub-status only gets '*' placements).
+        ' and the user is permitted the action in the row's status (IsActionPermitted).
         ' If an action fits in several ways (e.g. "all of Sold" and "Sold 2048"), the
         ' most specific placement wins - its target is the one that applies here:
         '   exact sub-status (2)  >  whole status (1)  >  all statuses (0)
@@ -1898,7 +1957,8 @@ Partial Class MainPage
                       ' match a sub-status "0000" placement
                       If Not unitHasSubState Then Return False
                       Return String.Equals(NormalizeStateId(pSub), targetSubStateId, StringComparison.OrdinalIgnoreCase)
-                  End Function)
+                  End Function).
+            Where(Function(r) IsActionPermitted(perms, StateId, Convert.ToString(r("ACTION_ID"))))
 
         ' One placement per action (the most specific), then menu order:
         ' whole-status actions, sub-status actions, all-status actions (e.g. Show History)
@@ -1989,21 +2049,21 @@ Partial Class MainPage
     End Function
 
     ''' <summary>
-    ''' Every action PLACEMENT this user may use in this project, with the action's own
+    ''' Every active action PLACEMENT in this project, with the action's own
     ''' settings - one round-trip, cached per request in _projectActionsCache and then
     ''' filtered per grid row by GetAvailableActions.
     '''   UNITSHUB_ACTION_PLACEMENTS  where an action is valid: STATUS_ID / SUBSTATE_ID
     '''                               ('*' = all), and the target from there
     '''                               (TO_STATUS_ID / TO_SUBSTATE_ID)
     '''   UNITSHUB_ACTIONS            what the action is (title, type, dialogue, icon ...)
-    '''   UNITSHUB_PRJ_STS_ACTN_USRS  who may use it in that place: a right for the same
-    '''                               status / sub-status, or for '*'
+    ''' Who may use it is checked afterwards, per row, against the security tables
+    ''' (UNITSHUB_SEC_*, see LoadUserPermissions); UNITSHUB_PRJ_STS_ACTN_USRS is no longer used.
     ''' Column names are kept as before (STATUS_ID, SUBSTATE_ID, TO_STATUS_ID ...) but now
     ''' describe the placement, not the action row.
     ''' </summary>
     Private Function LoadAvailableActionsForProject(ByVal ProjectID As String, ByVal UserID As String) As DataTable
         Dim safeProjectID As String = If(ProjectID, "").Replace("'", "''")
-        Dim safeUserID As String = If(UserID, "").Replace("'", "''")
+        ' UserID is kept in the signature (cache key) but no longer filters the placements
 
         Dim SQL As String = ""
         SQL = SQL + vbCrLf + "Select "
@@ -2059,16 +2119,107 @@ Partial Class MainPage
         SQL = SQL + vbCrLf + "where "
         SQL = SQL + vbCrLf + "         P.PROJECT_ID = '" & safeProjectID & "' "
         SQL = SQL + vbCrLf + "         and NVL(P.IS_ACTIVE, 'Y') = 'Y' "
-        ' The user needs a right for this placement - or for every placement ('*')
-        SQL = SQL + vbCrLf + "         and exists ( "
-        SQL = SQL + vbCrLf + "             select 1 from UNITSHUB_PRJ_STS_ACTN_USRS U "
-        SQL = SQL + vbCrLf + "             where U.PROJECT_ID = P.PROJECT_ID "
-        SQL = SQL + vbCrLf + "               and U.ACTION_ID  = P.ACTION_ID "
-        SQL = SQL + vbCrLf + "               and U.USER_ID    = '" & safeUserID & "' "
-        SQL = SQL + vbCrLf + "               and U.STATUS_ID in (P.STATUS_ID, '*') "
-        SQL = SQL + vbCrLf + "               and NVL(U.SUBSTATE_ID, '*') in (NVL(P.SUBSTATE_ID, '*'), '*') "
-        SQL = SQL + vbCrLf + "         ) "
+        ' Who may use each placement is no longer decided here: GetAvailableActions checks
+        ' the security tables (UNITSHUB_SEC_*) per row - see LoadUserPermissions.
         Return GetDataTable(EBDB, SQL)
+    End Function
+
+    ''' <summary>
+    ''' The (STATE_ID, ACTION_ID) pairs the user may use in this project, from the security
+    ''' tables (UNITSHUB_SEC_*), as keys "normalizedState|ACTION_ID" - see PermissionKey.
+    ''' Loaded once per request per project+user (LoadUserPermissions).
+    ''' </summary>
+    Private ReadOnly _userPermissionsCache As New Dictionary(Of String, HashSet(Of String))
+
+    ''' <summary>Key used in the permission set: normalized STATE_ID + "|" + ACTION_ID (upper case).</summary>
+    Private Function PermissionKey(StateId As String, ActionId As String) As String
+        Dim s As String = If(StateId, "").Trim()
+        Return If(s = "*", "*", NormalizeStateId(s)) & "|" & If(ActionId, "").Trim().ToUpperInvariant()
+    End Function
+
+    ''' <summary>The current user's permission set for the project (cached per request).</summary>
+    Private Function GetUserPermissions(ProjectID As String, UserID As String) As HashSet(Of String)
+        Dim cacheKey As String = ProjectID & "|" & UserID
+        Dim perms As HashSet(Of String) = Nothing
+        If Not _userPermissionsCache.TryGetValue(cacheKey, perms) Then
+            perms = LoadUserPermissions(ProjectID, UserID)
+            _userPermissionsCache(cacheKey) = perms
+        End If
+        Return perms
+    End Function
+
+    ''' <summary>True when the user may use ActionId on a unit in StateId (or the right is for every status, '*').</summary>
+    Private Function IsActionPermitted(Perms As HashSet(Of String), StateId As String, ActionId As String) As Boolean
+        Return Perms.Contains(PermissionKey(StateId, ActionId)) OrElse Perms.Contains(PermissionKey("*", ActionId))
+    End Function
+
+    ''' <summary>
+    ''' Who may use which action, per status, from the security tables:
+    '''   UNITSHUB_SEC_USER_GROUPS    the user's groups
+    '''   UNITSHUB_SEC_GROUPS_ROLES   each group's role
+    '''   UNITSHUB_SEC_ROLES_ACTIONS  the actions a role allows (per PROJECT_ID + STATE_ID)
+    '''   UNITSHUB_SEC_GROUPS_ACTIONS a group's own Allow ('A') / Deny ('D')
+    '''   UNITSHUB_SEC_USER_ACTIONS   the user's own Allow ('A') / Deny ('D')
+    ''' Rules (same as Actions_Roles_Groups_Users / ManageUsers):
+    '''   - a group gives an action when it has no Deny row for it and either has an
+    '''     Allow row or its role allows it;
+    '''   - the user gets it when any of their groups gives it, unless the user's own row
+    '''     says Deny; the user's own Allow gives it regardless of groups;
+    '''   - a disabled user (UNITSHUB_USERS.IS_ENABLED N / 0) gets nothing.
+    ''' The security tables have no sub-status: a right for a status covers all of its
+    ''' sub-statuses (the placement still decides which sub-status shows the action).
+    ''' </summary>
+    Private Function LoadUserPermissions(ByVal ProjectID As String, ByVal UserID As String) As HashSet(Of String)
+        Dim perms As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim p As String = "'" & If(ProjectID, "").Replace("'", "''") & "'"
+        Dim u As String = "'" & If(UserID, "").Replace("'", "''") & "'"
+        Dim isDeny As String = "CASE WHEN SUBSTR(UPPER(TRIM(ALLOW_DENY)), 1, 1) IN ('D', 'N', '0') THEN 1 ELSE 0 END"
+
+        Dim SQL As String = ""
+        SQL = SQL + vbCrLf + "WITH UG AS ( "
+        SQL = SQL + vbCrLf + "     SELECT DISTINCT GROUP_ID FROM UNITSHUB_SEC_USER_GROUPS WHERE USER_ID = " & u & " "
+        SQL = SQL + vbCrLf + "), GA AS ( "
+        SQL = SQL + vbCrLf + "     SELECT GROUP_ID, STATE_ID, ACTION_ID, MAX(" & isDeny & ") AS IS_DENY "
+        SQL = SQL + vbCrLf + "     FROM   UNITSHUB_SEC_GROUPS_ACTIONS "
+        SQL = SQL + vbCrLf + "     WHERE  PROJECT_ID = " & p & " AND GROUP_ID IN (SELECT GROUP_ID FROM UG) "
+        SQL = SQL + vbCrLf + "     GROUP BY GROUP_ID, STATE_ID, ACTION_ID "
+        SQL = SQL + vbCrLf + "), GROUP_GIVES AS ( "
+        ' a group's own Allow
+        SQL = SQL + vbCrLf + "     SELECT STATE_ID, ACTION_ID FROM GA WHERE IS_DENY = 0 "
+        SQL = SQL + vbCrLf + "     UNION "
+        ' what the group's role allows, unless that group denies it
+        SQL = SQL + vbCrLf + "     SELECT RA.STATE_ID, RA.ACTION_ID "
+        SQL = SQL + vbCrLf + "     FROM   UG "
+        SQL = SQL + vbCrLf + "     JOIN   UNITSHUB_SEC_GROUPS_ROLES GR ON GR.GROUP_ID = UG.GROUP_ID "
+        SQL = SQL + vbCrLf + "     JOIN   UNITSHUB_SEC_ROLES_ACTIONS RA ON RA.ROLE_ID = GR.ROLE_ID AND RA.PROJECT_ID = " & p & " "
+        SQL = SQL + vbCrLf + "     WHERE  NOT EXISTS (SELECT 1 FROM GA D WHERE D.GROUP_ID = UG.GROUP_ID "
+        SQL = SQL + vbCrLf + "                          AND D.STATE_ID = RA.STATE_ID AND D.ACTION_ID = RA.ACTION_ID AND D.IS_DENY = 1) "
+        SQL = SQL + vbCrLf + "), UA AS ( "
+        SQL = SQL + vbCrLf + "     SELECT STATE_ID, ACTION_ID, MAX(" & isDeny & ") AS IS_DENY "
+        SQL = SQL + vbCrLf + "     FROM   UNITSHUB_SEC_USER_ACTIONS "
+        SQL = SQL + vbCrLf + "     WHERE  USER_ID = " & u & " AND PROJECT_ID = " & p & " "
+        SQL = SQL + vbCrLf + "     GROUP BY STATE_ID, ACTION_ID "
+        SQL = SQL + vbCrLf + ") "
+        SQL = SQL + vbCrLf + "SELECT STATE_ID, ACTION_ID FROM ( "
+        ' the user's own Allow
+        SQL = SQL + vbCrLf + "     SELECT STATE_ID, ACTION_ID FROM UA WHERE IS_DENY = 0 "
+        SQL = SQL + vbCrLf + "     UNION "
+        ' what the groups give, unless the user's own row denies it
+        SQL = SQL + vbCrLf + "     SELECT G.STATE_ID, G.ACTION_ID FROM GROUP_GIVES G "
+        SQL = SQL + vbCrLf + "     WHERE  NOT EXISTS (SELECT 1 FROM UA X WHERE X.STATE_ID = G.STATE_ID "
+        SQL = SQL + vbCrLf + "                          AND X.ACTION_ID = G.ACTION_ID AND X.IS_DENY = 1) "
+        SQL = SQL + vbCrLf + ") "
+        ' a disabled account gets nothing
+        SQL = SQL + vbCrLf + "WHERE NOT EXISTS (SELECT 1 FROM UNITSHUB_USERS US WHERE US.USER_ID = " & u & " "
+        SQL = SQL + vbCrLf + "                    AND (UPPER(TRIM(US.IS_ENABLED)) LIKE 'N%' OR TRIM(US.IS_ENABLED) = '0')) "
+
+        Dim DT As DataTable = GetDataTable(EBDB, SQL)
+        If DT IsNot Nothing Then
+            For Each r As DataRow In DT.Rows
+                perms.Add(PermissionKey(Convert.ToString(r("STATE_ID")), Convert.ToString(r("ACTION_ID"))))
+            Next
+        End If
+        Return perms
     End Function
 
     ''' <summary>

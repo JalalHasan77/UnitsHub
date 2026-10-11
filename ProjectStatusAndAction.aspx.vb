@@ -1,20 +1,23 @@
-﻿Imports System.Data
+Imports System.Data
 Imports System.Globalization
 Imports System.Collections.Generic
 
 ''' <summary>
 ''' One screen to set up a project's statuses, sub-statuses, where each action is valid
-''' (placements) and which users may use it there.
+''' (placements) and which groups / users may use it there.
 '''   Left : status tree - "All statuses", each status, and its sub-statuses.
 '''   Right: the selected node - its card colours, and the actions available there with
 '''          where each comes from (this sub-status / all of the status / all statuses)
-'''          and its users.
+'''          and the groups and users allowed it.
 ''' Tables:
 '''   UNITSHUB_PROJECTSTATUS      statuses
 '''   UNITSHUB_PROJECTSUBSTATUS   sub-statuses (SORT_ORDER = position under the status)
 '''   UNITSHUB_ACTIONS            what an action is
 '''   UNITSHUB_ACTION_PLACEMENTS  where it's valid ('*' = all) and its target from there
-'''   UNITSHUB_PRJ_STS_ACTN_USRS  who may use it in each placement ('*' = all placements)
+'''   Rights (who may use an action, per status) - see the "Rights" section:
+'''   UNITSHUB_SEC_ROLES, UNITSHUB_SEC_ROLES_ACTIONS, UNITSHUB_SEC_GROUPS_ROLES,
+'''   UNITSHUB_SEC_GROUPS_ACTIONS, UNITSHUB_SEC_USER_GROUPS, UNITSHUB_SEC_USER_ACTIONS
+'''   (UNITSHUB_PRJ_STS_ACTN_USRS is no longer used.)
 ''' </summary>
 Partial Class ProjectStatusAndAction
     Inherits System.Web.UI.Page
@@ -488,7 +491,7 @@ Partial Class ProjectStatusAndAction
     Private Sub BindActions()
         Dim P As DataTable = PlacementsHere()
         P.Columns.Add("TargetText") : P.Columns.Add("TagText") : P.Columns.Add("TagClass")
-        P.Columns.Add("UsersHtml") : P.Columns.Add("PlacementKey") : P.Columns.Add("IsExactlyHere", GetType(Boolean))
+        P.Columns.Add("UsersHtml") : P.Columns.Add("GroupsHtml") : P.Columns.Add("PlacementKey") : P.Columns.Add("IsExactlyHere", GetType(Boolean))
 
         For Each r As DataRow In P.Rows
             Dim pst As String = Col(r, "STATUS_ID")
@@ -511,21 +514,13 @@ Partial Class ProjectStatusAndAction
                                  "&rarr; " & Server.HtmlEncode(Col(StatusRow(toSt), "STATUS") &
                                  If(Col(r, "TO_SUBSTATE_ID") = "", "", " · " & Col(r, "TO_SUBSTATE_ID"))))
 
-            ' Users who may use it here: rights for this placement or for '*'
-            Dim users As DataTable = GetDataTable(EBDB,
-                "SELECT DISTINCT U.USER_ID, NVL(US.FULL_NAME, U.USER_ID) AS USER_NAME " &
-                "FROM UNITSHUB_PRJ_STS_ACTN_USRS U LEFT JOIN UNITSHUB_USERS US ON US.USER_ID = U.USER_ID " &
-                "WHERE U.PROJECT_ID = " & Q(ProjectId) & " AND U.ACTION_ID = " & Q(Col(r, "ACTION_ID")) & " " &
-                "AND U.STATUS_ID IN (" & Q(pst) & ", '*') AND NVL(U.SUBSTATE_ID, '*') IN (" & Q(psb) & ", '*') ORDER BY 2")
-            Dim chips As New System.Text.StringBuilder()
-            Dim n As Integer = 0
-            For Each u As DataRow In users.Rows
-                n += 1
-                If n <= 3 Then chips.Append("<span class=""chip"">" & Server.HtmlEncode(Col(u, "USER_NAME")) & "</span>")
-            Next
-            If n > 3 Then chips.Append("<span class=""chip"">+" & (n - 3).ToString() & "</span>")
-            If n = 0 Then chips.Append("<span class=""chip"">No users</span>")
-            r("UsersHtml") = chips.ToString()
+            ' Groups and users allowed it here (the placement's status; every status for '*')
+            Dim actionHere As String = Col(r, "ACTION_ID")
+            Dim states As List(Of String) = RightsStates(pst)
+            r("GroupsHtml") = Chips(NamesOf("UNITSHUB_SEC_GROUPS", "GROUP_ID", "GROUP_NAME",
+                                            AllowedInAll(states, Function(x) AllowedGroups(x, actionHere))), "No groups")
+            r("UsersHtml") = Chips(NamesOf("UNITSHUB_USERS", "USER_ID", "FULL_NAME",
+                                           AllowedInAll(states, Function(x) AllowedUsers(x, actionHere))), "No users")
 
             r("PlacementKey") = Col(r, "ACTION_ID") & "|" & pst & "|" & psb
         Next
@@ -547,24 +542,43 @@ Partial Class ProjectStatusAndAction
         Dim btnRemove As LinkButton = CType(e.Item.FindControl("btnRemove"), LinkButton)
         btnRemove.Visible = CBool(r("IsExactlyHere"))
 
-        ' Users picker (same list popup as before), ticked = rights for exactly this placement
+        ' Users / Groups pickers: everyone listed, ticked = allowed now (in every status for '*')
+        Dim actionIdHere As String = Convert.ToString(r("ACTION_ID"))
+        Dim statusHere As String = Convert.ToString(r("STATUS_ID"))
+        Dim states As List(Of String) = RightsStates(statusHere)
+        Dim titleTail As String = Convert.ToString(r("ACTION_TITLE")) & " in " & RightsPlaceName(statusHere)
+
         Dim btnUsers As LinkButton = CType(e.Item.FindControl("btnUsers"), LinkButton)
-        Dim MemberListParameters As New clsListProperties
-        With MemberListParameters
+        Dim UserListParameters As New clsListProperties
+        With UserListParameters
             .ItemsSQL = "Select USER_ID as ID, FULL_NAME as Name from UNITSHUB_USERS order by Name"
-            .CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_PRJ_STS_ACTN_USRS where PROJECT_ID = " & Q(ProjectId) &
-                               " and ACTION_ID = " & Q(Convert.ToString(r("ACTION_ID"))) &
-                               " and STATUS_ID = " & Q(Convert.ToString(r("STATUS_ID"))) &
-                               " and NVL(SUBSTATE_ID, '*') = " & Q(Convert.ToString(r("SUBSTATE_ID")))
-            .FormTitle = "Users of " & Convert.ToString(r("ACTION_TITLE")) & " in " & PlaceName(Convert.ToString(r("STATUS_ID")), Convert.ToString(r("SUBSTATE_ID")))
+            .CheckedItemsSQL = "Select USER_ID as ID from UNITSHUB_USERS where " &
+                               InListSql("USER_ID", AllowedInAll(states, Function(s) AllowedUsers(s, actionIdHere)))
+            .FormTitle = "Users allowed to " & titleTail
             .ColumnHideAndShow = "YN"
             .EditableColumns = "NN"
             .ColumnsWidth = New Double() {1, 3}
             .HoverableList = "Y"
         End With
         VendorPopupHelper.RegisterVendorPopup(Me, btnUsers,
-            "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)),
-            400, 600, PopupPlacement.Center, "Select Adj", VendorPopupHelper.PopupDisplayMode.FrameOnly)
+            "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(encryNdecry.EncryptObject(Of clsListProperties)(UserListParameters)),
+            400, 600, PopupPlacement.Center, "Users", VendorPopupHelper.PopupDisplayMode.FrameOnly)
+
+        Dim btnGroups As LinkButton = CType(e.Item.FindControl("btnGroups"), LinkButton)
+        Dim GroupListParameters As New clsListProperties
+        With GroupListParameters
+            .ItemsSQL = "Select GROUP_ID as ID, GROUP_NAME as Name from UNITSHUB_SEC_GROUPS order by Name"
+            .CheckedItemsSQL = "Select GROUP_ID as ID from UNITSHUB_SEC_GROUPS where " &
+                               InListSql("GROUP_ID", AllowedInAll(states, Function(s) AllowedGroups(s, actionIdHere)))
+            .FormTitle = "Groups allowed to " & titleTail
+            .ColumnHideAndShow = "YN"
+            .EditableColumns = "NN"
+            .ColumnsWidth = New Double() {1, 3}
+            .HoverableList = "Y"
+        End With
+        VendorPopupHelper.RegisterVendorPopup(Me, btnGroups,
+            "AddMultipleItemsFromList.aspx?Parameters=" & Server.UrlEncode(encryNdecry.EncryptObject(Of clsListProperties)(GroupListParameters)),
+            400, 600, PopupPlacement.Center, "Groups", VendorPopupHelper.PopupDisplayMode.FrameOnly)
 
         Dim btnEditAction As LinkButton = CType(e.Item.FindControl("btnEditAction"), LinkButton)
         VendorPopupHelper.RegisterVendorPopup(Me, btnEditAction,
@@ -583,8 +597,7 @@ Partial Class ProjectStatusAndAction
         Select Case e.CommandName
             Case "Remove"
                 Try
-                    Exec("DELETE FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
-                         " AND ACTION_ID = " & Q(actionId) & " AND STATUS_ID = " & Q(pst) & " AND NVL(SUBSTATE_ID, '*') = " & Q(psb))
+                    ' Rights are per status and may serve other placements, so they're kept
                     Exec("DELETE FROM UNITSHUB_ACTION_PLACEMENTS WHERE PROJECT_ID = " & Q(ProjectId) &
                          " AND ACTION_ID = " & Q(actionId) & " AND STATUS_ID = " & Q(pst) & " AND SUBSTATE_ID = " & Q(psb))
                     ShowMessage("Action removed from " & PlaceName(pst, psb) & ".", True)
@@ -650,17 +663,43 @@ Partial Class ProjectStatusAndAction
         Next
     End Sub
 
-    ''' <summary>"Copy users from" list: the chosen action's other placements.</summary>
+    ''' <summary>"Copy rights from" list: the statuses where the chosen action is already placed.</summary>
     Private Sub FillCopyUsersFrom()
         ddlCopyUsersFrom.Items.Clear()
-        ddlCopyUsersFrom.Items.Add(New ListItem("Don't copy users (set them afterwards)", ""))
+        ddlCopyUsersFrom.Items.Add(New ListItem("Don't copy rights (set them afterwards)", ""))
         If ddlPlaceAction.SelectedValue = "" Then Exit Sub
         Dim DT As DataTable = GetDataTable(EBDB,
-            "SELECT STATUS_ID, SUBSTATE_ID FROM UNITSHUB_ACTION_PLACEMENTS WHERE PROJECT_ID = " & Q(ProjectId) &
-            " AND ACTION_ID = " & Q(ddlPlaceAction.SelectedValue) & " ORDER BY STATUS_ID, SUBSTATE_ID")
+            "SELECT DISTINCT STATUS_ID FROM UNITSHUB_ACTION_PLACEMENTS WHERE PROJECT_ID = " & Q(ProjectId) &
+            " AND ACTION_ID = " & Q(ddlPlaceAction.SelectedValue) & " AND STATUS_ID <> '*' ORDER BY STATUS_ID")
         For Each r As DataRow In DT.Rows
-            ddlCopyUsersFrom.Items.Add(New ListItem("Copy users from " & PlaceName(Col(r, "STATUS_ID"), Col(r, "SUBSTATE_ID")),
-                                                    Col(r, "STATUS_ID") & "|" & Col(r, "SUBSTATE_ID")))
+            ddlCopyUsersFrom.Items.Add(New ListItem("Copy roles, groups and users from " & PlaceName(Col(r, "STATUS_ID"), "*"),
+                                                    Col(r, "STATUS_ID")))
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Copies the action's rights from one status to the target statuses: the role rows
+    ''' (UNITSHUB_SEC_ROLES_ACTIONS) and the group and user Allow/Deny rows
+    ''' (UNITSHUB_SEC_GROUPS_ACTIONS, UNITSHUB_SEC_USER_ACTIONS). Rows already there are kept.
+    ''' </summary>
+    Private Sub CopyRights(ActionId As String, FromState As String, ToStates As List(Of String))
+        For Each toState As String In ToStates
+            If toState = FromState Then Continue For
+            Exec("INSERT INTO UNITSHUB_SEC_ROLES_ACTIONS (ROLE_ID, PROJECT_ID, STATE_ID, ACTION_ID) " &
+                 "SELECT DISTINCT S.ROLE_ID, S.PROJECT_ID, " & Q(toState) & ", S.ACTION_ID FROM UNITSHUB_SEC_ROLES_ACTIONS S " &
+                 "WHERE S.PROJECT_ID = " & Q(ProjectId) & " AND S.STATE_ID = " & Q(FromState) & " AND S.ACTION_ID = " & Q(ActionId) &
+                 " AND NOT EXISTS (SELECT 1 FROM UNITSHUB_SEC_ROLES_ACTIONS X WHERE X.ROLE_ID = S.ROLE_ID AND X.PROJECT_ID = S.PROJECT_ID " &
+                 "AND X.STATE_ID = " & Q(toState) & " AND X.ACTION_ID = S.ACTION_ID)")
+            Exec("INSERT INTO UNITSHUB_SEC_GROUPS_ACTIONS (GROUP_ID, PROJECT_ID, STATE_ID, ACTION_ID, ALLOW_DENY) " &
+                 "SELECT S.GROUP_ID, S.PROJECT_ID, " & Q(toState) & ", S.ACTION_ID, MAX(S.ALLOW_DENY) FROM UNITSHUB_SEC_GROUPS_ACTIONS S " &
+                 "WHERE S.PROJECT_ID = " & Q(ProjectId) & " AND S.STATE_ID = " & Q(FromState) & " AND S.ACTION_ID = " & Q(ActionId) &
+                 " AND NOT EXISTS (SELECT 1 FROM UNITSHUB_SEC_GROUPS_ACTIONS X WHERE X.GROUP_ID = S.GROUP_ID AND X.PROJECT_ID = S.PROJECT_ID " &
+                 "AND X.STATE_ID = " & Q(toState) & " AND X.ACTION_ID = S.ACTION_ID) GROUP BY S.GROUP_ID, S.PROJECT_ID, S.ACTION_ID")
+            Exec("INSERT INTO UNITSHUB_SEC_USER_ACTIONS (USER_ID, PROJECT_ID, STATE_ID, ACTION_ID, ALLOW_DENY) " &
+                 "SELECT S.USER_ID, S.PROJECT_ID, " & Q(toState) & ", S.ACTION_ID, MAX(S.ALLOW_DENY) FROM UNITSHUB_SEC_USER_ACTIONS S " &
+                 "WHERE S.PROJECT_ID = " & Q(ProjectId) & " AND S.STATE_ID = " & Q(FromState) & " AND S.ACTION_ID = " & Q(ActionId) &
+                 " AND NOT EXISTS (SELECT 1 FROM UNITSHUB_SEC_USER_ACTIONS X WHERE X.USER_ID = S.USER_ID AND X.PROJECT_ID = S.PROJECT_ID " &
+                 "AND X.STATE_ID = " & Q(toState) & " AND X.ACTION_ID = S.ACTION_ID) GROUP BY S.USER_ID, S.PROJECT_ID, S.ACTION_ID")
         Next
     End Sub
 
@@ -704,16 +743,10 @@ Partial Class ProjectStatusAndAction
                  QOrNull(ddlPlaceToStatus.SelectedValue) & ", " & QOrNull(ddlPlaceToSub.SelectedValue) & ", " &
                  CInt(Val(actionId)).ToString(CultureInfo.InvariantCulture) & ", 'Y')")
 
-            ' Copy the users of another placement of the same action
+            ' Copy the action's rights from another status where it is placed
             If ddlCopyUsersFrom.SelectedValue <> "" Then
-                Dim from() As String = ddlCopyUsersFrom.SelectedValue.Split("|"c)
-                Exec("INSERT INTO UNITSHUB_PRJ_STS_ACTN_USRS (PROJECT_ID, STATUS_ID, SUBSTATE_ID, ACTION_ID, USER_ID) " &
-                     "SELECT DISTINCT U.PROJECT_ID, " & Q(pst) & ", " & Q(psb) & ", U.ACTION_ID, U.USER_ID " &
-                     "FROM UNITSHUB_PRJ_STS_ACTN_USRS U WHERE U.PROJECT_ID = " & Q(ProjectId) & " AND U.ACTION_ID = " & Q(actionId) &
-                     " AND U.STATUS_ID = " & Q(from(0)) & " AND NVL(U.SUBSTATE_ID, '*') = " & Q(from(1)) &
-                     " AND NOT EXISTS (SELECT 1 FROM UNITSHUB_PRJ_STS_ACTN_USRS X WHERE X.PROJECT_ID = U.PROJECT_ID " &
-                     "AND X.ACTION_ID = U.ACTION_ID AND X.USER_ID = U.USER_ID AND X.STATUS_ID = " & Q(pst) &
-                     " AND NVL(X.SUBSTATE_ID, '*') = " & Q(psb) & ")")
+                CopyRights(actionId, ddlCopyUsersFrom.SelectedValue, RightsStates(pst))
+                _allowedCache.Clear()
             End If
 
             pnlPlace.Visible = False
@@ -725,13 +758,240 @@ Partial Class ProjectStatusAndAction
     End Sub
 
     ' ------------------------------------------------------------------
-    ' Users of one placement (AddMultipleItemsFromList picker)
+    ' Rights (security tables): who may use an action in a status
     ' ------------------------------------------------------------------
+    '   UNITSHUB_SEC_USER_GROUPS    user -> groups
+    '   UNITSHUB_SEC_GROUPS_ROLES   group -> role
+    '   UNITSHUB_SEC_ROLES_ACTIONS  role allows action (PROJECT_ID + STATE_ID)
+    '   UNITSHUB_SEC_GROUPS_ACTIONS group's own Allow 'A' / Deny 'D'
+    '   UNITSHUB_SEC_USER_ACTIONS   user's own Allow 'A' / Deny 'D'
+    ' A group is allowed when it has no Deny row and either an Allow row or its role
+    ' allows it. A user is allowed when they have no Deny row and either an Allow row or
+    ' an allowed group. Rights are per status: a sub-status placement uses its status's
+    ' rights, and an "All statuses" placement uses every status of the project.
+
+    ''' <summary>The statuses a placement's rights live in: its status, or all of them for '*'.</summary>
+    Private Function RightsStates(PlacementStatus As String) As List(Of String)
+        Dim result As New List(Of String)
+        If PlacementStatus = "*" OrElse PlacementStatus = "" Then
+            For Each st As DataRow In Statuses().Rows
+                result.Add(Col(st, "STATE_ID"))
+            Next
+        Else
+            result.Add(PlacementStatus)
+        End If
+        Return result
+    End Function
+
+    Private Function DenySql(RowAlias As String) As String
+        Return "SUBSTR(UPPER(TRIM(" & RowAlias & ".ALLOW_DENY)), 1, 1) IN ('D', 'N', '0')"
+    End Function
+
+    ''' <summary>Rows of Table for this project/status/action (alias A), plus Extra.</summary>
+    Private Function RightRowSql(Table As String, RowAlias As String, StateId As String, ActionId As String, Extra As String) As String
+        Return "EXISTS (SELECT 1 FROM " & Table & " " & RowAlias &
+               " WHERE " & RowAlias & ".PROJECT_ID = " & Q(ProjectId) &
+               " AND " & RowAlias & ".STATE_ID = " & Q(StateId) &
+               " AND " & RowAlias & ".ACTION_ID = " & Q(ActionId) & " AND " & Extra & ")"
+    End Function
+
+    ''' <summary>The role of group GroupExpr allows the action in the status.</summary>
+    Private Function RoleGivesSql(GroupExpr As String, StateId As String, ActionId As String) As String
+        Return "EXISTS (SELECT 1 FROM UNITSHUB_SEC_GROUPS_ROLES GR JOIN UNITSHUB_SEC_ROLES_ACTIONS RA " &
+               "ON RA.ROLE_ID = GR.ROLE_ID AND RA.PROJECT_ID = " & Q(ProjectId) &
+               " AND RA.STATE_ID = " & Q(StateId) & " AND RA.ACTION_ID = " & Q(ActionId) &
+               " WHERE GR.GROUP_ID = " & GroupExpr & ")"
+    End Function
+
+    ''' <summary>Group GroupExpr is allowed the action in the status.</summary>
+    Private Function GroupAllowedSql(GroupExpr As String, StateId As String, ActionId As String) As String
+        Return "(NOT " & RightRowSql("UNITSHUB_SEC_GROUPS_ACTIONS", "GD", StateId, ActionId, "GD.GROUP_ID = " & GroupExpr & " AND " & DenySql("GD")) &
+               " AND (" & RightRowSql("UNITSHUB_SEC_GROUPS_ACTIONS", "GA", StateId, ActionId, "GA.GROUP_ID = " & GroupExpr) &
+               " OR " & RoleGivesSql(GroupExpr, StateId, ActionId) & "))"
+    End Function
+
+    ''' <summary>User UserExpr gets the action through at least one allowed group.</summary>
+    Private Function UserViaGroupsSql(UserExpr As String, StateId As String, ActionId As String) As String
+        Return "EXISTS (SELECT 1 FROM UNITSHUB_SEC_USER_GROUPS UG WHERE UG.USER_ID = " & UserExpr &
+               " AND " & GroupAllowedSql("UG.GROUP_ID", StateId, ActionId) & ")"
+    End Function
+
+    ''' <summary>User UserExpr is allowed the action in the status.</summary>
+    Private Function UserAllowedSql(UserExpr As String, StateId As String, ActionId As String) As String
+        Return "(NOT " & RightRowSql("UNITSHUB_SEC_USER_ACTIONS", "UD", StateId, ActionId, "UD.USER_ID = " & UserExpr & " AND " & DenySql("UD")) &
+               " AND (" & RightRowSql("UNITSHUB_SEC_USER_ACTIONS", "UA", StateId, ActionId, "UA.USER_ID = " & UserExpr) &
+               " OR " & UserViaGroupsSql(UserExpr, StateId, ActionId) & "))"
+    End Function
+
+    ''' <summary>The first column of each row, trimmed, as a set.</summary>
+    Private Function IdSet(SQL As String) As HashSet(Of String)
+        Dim result As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim DT As DataTable = GetDataTable(EBDB, SQL)
+        If DT IsNot Nothing Then
+            For Each r As DataRow In DT.Rows
+                Dim v As String = Convert.ToString(r(0)).Trim()
+                If v <> "" Then result.Add(v)
+            Next
+        End If
+        Return result
+    End Function
+
+    ' Per-request cache of the allowed sets (cleared after every save)
+    Private ReadOnly _allowedCache As New Dictionary(Of String, HashSet(Of String))
+
+    Private Function Cached(Key As String, Loader As Func(Of HashSet(Of String))) As HashSet(Of String)
+        Dim found As HashSet(Of String) = Nothing
+        If Not _allowedCache.TryGetValue(Key, found) Then
+            found = Loader()
+            _allowedCache(Key) = found
+        End If
+        Return New HashSet(Of String)(found, StringComparer.OrdinalIgnoreCase)   ' a copy: callers may change it
+    End Function
+
+    Private Function AllowedUsers(StateId As String, ActionId As String) As HashSet(Of String)
+        Return Cached("U|" & StateId & "|" & ActionId,
+            Function() IdSet("SELECT U.USER_ID FROM UNITSHUB_USERS U WHERE " & UserAllowedSql("U.USER_ID", StateId, ActionId)))
+    End Function
+
+    Private Function UsersViaGroups(StateId As String, ActionId As String) As HashSet(Of String)
+        Return IdSet("SELECT U.USER_ID FROM UNITSHUB_USERS U WHERE " & UserViaGroupsSql("U.USER_ID", StateId, ActionId))
+    End Function
+
+    Private Function AllowedGroups(StateId As String, ActionId As String) As HashSet(Of String)
+        Return Cached("G|" & StateId & "|" & ActionId,
+            Function() IdSet("SELECT G.GROUP_ID FROM UNITSHUB_SEC_GROUPS G WHERE " & GroupAllowedSql("G.GROUP_ID", StateId, ActionId)))
+    End Function
+
+    Private Function GroupsViaRole(StateId As String, ActionId As String) As HashSet(Of String)
+        Return IdSet("SELECT G.GROUP_ID FROM UNITSHUB_SEC_GROUPS G WHERE " & RoleGivesSql("G.GROUP_ID", StateId, ActionId))
+    End Function
+
+    ''' <summary>IDs allowed in EVERY one of the statuses (one status = just that status).</summary>
+    Private Function AllowedInAll(States As List(Of String), Finder As Func(Of String, HashSet(Of String))) As HashSet(Of String)
+        Dim result As HashSet(Of String) = Nothing
+        For Each s As String In States
+            Dim one As HashSet(Of String) = Finder(s)
+            If result Is Nothing Then result = one Else result.IntersectWith(one)
+        Next
+        Return If(result, New HashSet(Of String)(StringComparer.OrdinalIgnoreCase))
+    End Function
+
+    ''' <summary>"col IN (...)" for the IDs (chunks of 900 for Oracle's 1000 limit); "1 = 0" when empty.</summary>
+    Private Function InListSql(Column As String, Ids As IEnumerable(Of String)) As String
+        Dim all As List(Of String) = Ids.ToList()
+        If all.Count = 0 Then Return "1 = 0"
+        Dim parts As New List(Of String)
+        For i As Integer = 0 To all.Count - 1 Step 900
+            parts.Add(Column & " IN (" & String.Join(", ", all.Skip(i).Take(900).Select(Function(x) Q(x))) & ")")
+        Next
+        Return "(" & String.Join(" OR ", parts) & ")"
+    End Function
+
+    ''' <summary>Up to three name chips plus "+n"; Empty when there are none.</summary>
+    Private Function Chips(Names As List(Of String), Empty As String) As String
+        Dim sb As New System.Text.StringBuilder()
+        For i As Integer = 0 To Math.Min(Names.Count, 3) - 1
+            sb.Append("<span class=""chip"">" & Server.HtmlEncode(Names(i)) & "</span>")
+        Next
+        If Names.Count > 3 Then sb.Append("<span class=""chip"">+" & (Names.Count - 3).ToString() & "</span>")
+        If Names.Count = 0 Then sb.Append("<span class=""chip"">" & Server.HtmlEncode(Empty) & "</span>")
+        Return sb.ToString()
+    End Function
+
+    ''' <summary>Names (by ID) of the users / groups in the set, sorted.</summary>
+    Private Function NamesOf(Table As String, IdColumn As String, NameColumn As String, Ids As HashSet(Of String)) As List(Of String)
+        Dim result As New List(Of String)
+        If Ids.Count = 0 Then Return result
+        Dim DT As DataTable = GetDataTable(EBDB,
+            "SELECT NVL(" & NameColumn & ", " & IdColumn & ") AS N FROM " & Table &
+            " WHERE " & InListSql(IdColumn, Ids) & " ORDER BY 1")
+        If DT IsNot Nothing Then
+            For Each r As DataRow In DT.Rows
+                result.Add(Convert.ToString(r("N")).Trim())
+            Next
+        End If
+        Return result
+    End Function
+
+    ''' <summary>The IDs ticked in an AddMultipleItemsFromList popup ("ID" of each item).</summary>
+    Private Function TickedIds(SelectedItems As List(Of Dictionary(Of String, Object))) As HashSet(Of String)
+        Dim result As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each item As Dictionary(Of String, Object) In SelectedItems
+            Dim id As String = If(item.ContainsKey("ID"), Convert.ToString(item("ID")).Trim(), "")
+            If id <> "" Then result.Add(id)
+        Next
+        Return result
+    End Function
 
     ''' <summary>
-    ''' Runs when the users picker closes after Save. Replaces the rights for exactly this
-    ''' placement (action + status + sub-status) with the ticked users. Wider rights ('*')
-    ''' are left alone.
+    ''' Makes exactly the ticked users allowed the action in each status, with the fewest
+    ''' rows in UNITSHUB_SEC_USER_ACTIONS: only users whose result changes are touched;
+    ''' their own row is removed, then 'A' is added when no group gives it, or 'D' when a
+    ''' group gives it but they were unticked. Returns how many users changed.
+    ''' </summary>
+    Private Function SaveUserRights(ActionId As String, States As List(Of String), Ticked As HashSet(Of String)) As Integer
+        Dim changed As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each s As String In States
+            Dim allowedNow As HashSet(Of String) = AllowedUsers(s, ActionId)
+            Dim viaGroups As HashSet(Of String) = UsersViaGroups(s, ActionId)
+            Dim candidates As New HashSet(Of String)(allowedNow, StringComparer.OrdinalIgnoreCase)
+            candidates.UnionWith(Ticked)
+
+            For Each userId As String In candidates
+                Dim wanted As Boolean = Ticked.Contains(userId)
+                If wanted = allowedNow.Contains(userId) Then Continue For
+                Exec("DELETE FROM UNITSHUB_SEC_USER_ACTIONS WHERE USER_ID = " & Q(userId) & " AND PROJECT_ID = " & Q(ProjectId) &
+                     " AND STATE_ID = " & Q(s) & " AND ACTION_ID = " & Q(ActionId))
+                Dim setting As String = ""
+                If wanted AndAlso Not viaGroups.Contains(userId) Then setting = "A"
+                If Not wanted AndAlso viaGroups.Contains(userId) Then setting = "D"
+                If setting <> "" Then
+                    Exec("INSERT INTO UNITSHUB_SEC_USER_ACTIONS (USER_ID, PROJECT_ID, STATE_ID, ACTION_ID, ALLOW_DENY) VALUES (" &
+                         Q(userId) & ", " & Q(ProjectId) & ", " & Q(s) & ", " & Q(ActionId) & ", " & Q(setting) & ")")
+                End If
+                changed.Add(userId)
+            Next
+        Next
+        _allowedCache.Clear()
+        Return changed.Count
+    End Function
+
+    ''' <summary>Same as SaveUserRights for groups (UNITSHUB_SEC_GROUPS_ACTIONS; the role is the inherited part).</summary>
+    Private Function SaveGroupRights(ActionId As String, States As List(Of String), Ticked As HashSet(Of String)) As Integer
+        Dim changed As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each s As String In States
+            Dim allowedNow As HashSet(Of String) = AllowedGroups(s, ActionId)
+            Dim viaRole As HashSet(Of String) = GroupsViaRole(s, ActionId)
+            Dim candidates As New HashSet(Of String)(allowedNow, StringComparer.OrdinalIgnoreCase)
+            candidates.UnionWith(Ticked)
+
+            For Each groupId As String In candidates
+                Dim wanted As Boolean = Ticked.Contains(groupId)
+                If wanted = allowedNow.Contains(groupId) Then Continue For
+                Exec("DELETE FROM UNITSHUB_SEC_GROUPS_ACTIONS WHERE GROUP_ID = " & Q(groupId) & " AND PROJECT_ID = " & Q(ProjectId) &
+                     " AND STATE_ID = " & Q(s) & " AND ACTION_ID = " & Q(ActionId))
+                Dim setting As String = ""
+                If wanted AndAlso Not viaRole.Contains(groupId) Then setting = "A"
+                If Not wanted AndAlso viaRole.Contains(groupId) Then setting = "D"
+                If setting <> "" Then
+                    Exec("INSERT INTO UNITSHUB_SEC_GROUPS_ACTIONS (GROUP_ID, PROJECT_ID, STATE_ID, ACTION_ID, ALLOW_DENY) VALUES (" &
+                         Q(groupId) & ", " & Q(ProjectId) & ", " & Q(s) & ", " & Q(ActionId) & ", " & Q(setting) & ")")
+                End If
+                changed.Add(groupId)
+            Next
+        Next
+        _allowedCache.Clear()
+        Return changed.Count
+    End Function
+
+    ''' <summary>Where the rights of a placement live, for messages and popup titles.</summary>
+    Private Function RightsPlaceName(PlacementStatus As String) As String
+        Return If(PlacementStatus = "*" OrElse PlacementStatus = "", "every status", PlaceName(PlacementStatus, "*"))
+    End Function
+
+    ''' <summary>
+    ''' Runs when the Users picker closes after Save: the ticked users become exactly the
+    ''' users allowed this action in the placement's status (all statuses for '*').
     ''' </summary>
     Protected Sub btnUsers_Click(sender As Object, e As EventArgs)
         Dim selectedItems As List(Of Dictionary(Of String, Object)) =
@@ -741,21 +1001,35 @@ Partial Class ProjectStatusAndAction
 
         Dim parts() As String = Convert.ToString(CType(sender, IButtonControl).CommandArgument).Split("|"c)
         If parts.Length < 3 Then Exit Sub
-        Dim actionId As String = parts(0), pst As String = parts(1), psb As String = parts(2)
+        Dim actionId As String = parts(0), pst As String = parts(1)
 
         Try
-            Exec("DELETE FROM UNITSHUB_PRJ_STS_ACTN_USRS WHERE PROJECT_ID = " & Q(ProjectId) &
-                 " AND ACTION_ID = " & Q(actionId) & " AND STATUS_ID = " & Q(pst) & " AND NVL(SUBSTATE_ID, '*') = " & Q(psb))
-
-            For Each item As Dictionary(Of String, Object) In selectedItems
-                Dim userId As String = If(item.ContainsKey("ID"), Convert.ToString(item("ID")).Trim(), "")
-                If userId = "" Then Continue For
-                Exec("INSERT INTO UNITSHUB_PRJ_STS_ACTN_USRS (PROJECT_ID, STATUS_ID, SUBSTATE_ID, ACTION_ID, USER_ID) VALUES (" &
-                     Q(ProjectId) & ", " & Q(pst) & ", " & Q(psb) & ", " & Q(actionId) & ", " & Q(userId) & ")")
-            Next
-            ShowMessage("Users saved for " & PlaceName(pst, psb) & ".", True)
+            Dim n As Integer = SaveUserRights(actionId, RightsStates(pst), TickedIds(selectedItems))
+            ShowMessage("Users saved for " & RightsPlaceName(pst) & " (" & n & If(n = 1, " user", " users") & " changed).", True)
         Catch ex As Exception
             ShowMessage("Couldn't save the users: " & ex.Message, False)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' Runs when the Groups picker closes after Save: the ticked groups become exactly the
+    ''' groups allowed this action in the placement's status (all statuses for '*').
+    ''' </summary>
+    Protected Sub btnGroups_Click(sender As Object, e As EventArgs)
+        Dim selectedItems As List(Of Dictionary(Of String, Object)) =
+            TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "SelectedItems"),
+                    List(Of Dictionary(Of String, Object)))
+        If selectedItems Is Nothing Then Exit Sub    ' closed without saving
+
+        Dim parts() As String = Convert.ToString(CType(sender, IButtonControl).CommandArgument).Split("|"c)
+        If parts.Length < 3 Then Exit Sub
+        Dim actionId As String = parts(0), pst As String = parts(1)
+
+        Try
+            Dim n As Integer = SaveGroupRights(actionId, RightsStates(pst), TickedIds(selectedItems))
+            ShowMessage("Groups saved for " & RightsPlaceName(pst) & " (" & n & If(n = 1, " group", " groups") & " changed).", True)
+        Catch ex As Exception
+            ShowMessage("Couldn't save the groups: " & ex.Message, False)
         End Try
     End Sub
 

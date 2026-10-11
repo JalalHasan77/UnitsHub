@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ProjectStatusAndAction.aspx.vb" Inherits="ProjectStatusAndAction" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
+<%@ Page Language="VB" AutoEventWireup="false" CodeFile="ProjectStatusAndAction.aspx.vb" Inherits="ProjectStatusAndAction" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
 
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -96,7 +96,7 @@
         .btn.danger { color: #b91c1c; }
         .btn[disabled], .btn.aspNetDisabled { opacity: .45; cursor: not-allowed; }
 
-        /* ---------- Icon buttons (Edit / Delete / Move / Users / Insert / Close) ---------- */
+        /* ---------- Icon buttons (Edit / Delete / Move / Users / Groups / Insert / Close) ---------- */
         .icon-btn {
             display: inline-flex;
             align-items: center;
@@ -165,7 +165,7 @@
         .actions-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
         .arow {
             display: grid;
-            grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.9fr) minmax(0, 1.2fr) auto;
+            grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(0, 1.1fr) auto;
             gap: 12px;
             align-items: center;
             padding: 9px 0;
@@ -320,7 +320,7 @@
                                 <asp:DropDownList ID="ddlPlaceToStatus" runat="server" CssClass="inp" AutoPostBack="true" OnSelectedIndexChanged="ddlPlaceToStatus_SelectedIndexChanged" />
                                 <asp:DropDownList ID="ddlPlaceToSub" runat="server" CssClass="inp" />
                             </div>
-                            <span>Users</span>
+                            <span>Rights</span>
                             <asp:DropDownList ID="ddlCopyUsersFrom" runat="server" CssClass="inp" />
                         </div>
                         <div class="panel-actions">
@@ -329,7 +329,7 @@
                         </div>
                     </asp:Panel>
 
-                    <div class="arow headrow"><span>Action</span><span>Comes from</span><span>Users</span><span></span></div>
+                    <div class="arow headrow"><span>Action</span><span>Comes from</span><span>Groups allowed</span><span>Users allowed</span><span></span></div>
 
                     <asp:Repeater ID="rptActions" runat="server" OnItemCommand="rptActions_ItemCommand" OnItemDataBound="rptActions_ItemDataBound">
                         <ItemTemplate>
@@ -339,15 +339,18 @@
                                     <span class="target"><%# Eval("TargetText") %></span>
                                 </span>
                                 <span><span class='<%# "tag " & Eval("TagClass") %>'><%# Server.HtmlEncode(Eval("TagText").ToString()) %></span></span>
+                                <span><%# Eval("GroupsHtml") %></span>
                                 <span><%# Eval("UsersHtml") %></span>
                                 <span class="row-tools">
+                                    <asp:LinkButton ID="btnGroups" runat="server"
+                                        CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" OnClick="btnGroups_Click" CssClass="icon-btn" ToolTip="Groups" aria-label="Groups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M6.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="4.8" cy="10" r="2.2"/><path d="M1.5 19a3.6 3.6 0 0 1 4.2-3.5"/><circle cx="19.2" cy="10" r="2.2"/><path d="M22.5 19a3.6 3.6 0 0 0-4.2-3.5"/></svg></asp:LinkButton>
                                     <asp:LinkButton ID="btnUsers" runat="server"
                                         CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false" OnClick="btnUsers_Click" CssClass="icon-btn" ToolTip="Users" aria-label="Users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.5 14.2A6.5 6.5 0 0 1 21.5 20"/></svg></asp:LinkButton>
                                     <asp:LinkButton ID="btnEditAction" runat="server" CausesValidation="false"
                                         CommandName="EditAction" CommandArgument='<%# Eval("PlacementKey") %>' CssClass="icon-btn edit" ToolTip="Edit action" aria-label="Edit action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6l-3.6.8.8-3.6z"/></svg></asp:LinkButton>
                                     <asp:LinkButton ID="btnRemove" runat="server" CommandName="Remove"
                                         CommandArgument='<%# Eval("PlacementKey") %>' CausesValidation="false"
-                                        OnClientClick="return confirm('Remove this action from here? Its users for this place are removed too.');" CssClass="icon-btn del" ToolTip="Remove from here" aria-label="Remove from here"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2.5h6l1 1.5h4.5v2.5h-17V4H8z"/><path d="M5.5 8h13l-1 12.2A2 2 0 0 1 15.5 22h-7a2 2 0 0 1-2-1.8z"/></svg></asp:LinkButton>
+                                        OnClientClick="return confirm('Remove this action from here? Its group and user rights are kept (they are per status).');" CssClass="icon-btn del" ToolTip="Remove from here" aria-label="Remove from here"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2.5h6l1 1.5h4.5v2.5h-17V4H8z"/><path d="M5.5 8h13l-1 12.2A2 2 0 0 1 15.5 22h-7a2 2 0 0 1-2-1.8z"/></svg></asp:LinkButton>
                                 </span>
                             </div>
                         </ItemTemplate>

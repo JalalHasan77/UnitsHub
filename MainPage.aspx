@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
+<%@ Page Language="VB" AutoEventWireup="true" Codefile="MainPage.aspx.vb" Inherits="MainPage"%>
 <%@ Register assembly="ServerControl1" namespace="ServerControl1" tagprefix="cc1" %>
 
 <!DOCTYPE html>
@@ -304,7 +304,7 @@
     transition: transform 0.2s ease;
 }
 
-.sideMenuGroup.open .sideMenuGroupArrow {
+.sideMenuGroup.open > .sideMenuGroupHeader .sideMenuGroupArrow {
     transform: rotate(180deg);
 }
 
@@ -315,8 +315,32 @@
     transition: max-height 0.25s ease;
 }
 
-.sideMenuGroup.open .sideMenuGroupItems {
-    max-height: 600px;
+.sideMenuGroup.open > .sideMenuGroupItems {
+    max-height: 2000px;   /* room for nested sub-menus */
+}
+
+/* Sub-menus (3rd level and deeper): the header looks exactly like the links beside
+   it (same font, size, colour, spacing); only the arrow shows it opens */
+.sideMenuGroup.sub {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.sideMenuGroup.sub > .sideMenuGroupHeader {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-right: 20px;
+    font-family: Arial;
+    font-size: 11pt;
+    font-weight: normal;
+    color: #333333;
+}
+
+.sideMenuGroup.sub > .sideMenuGroupHeader:hover {
+    background-color: #e8f0ff;
+}
+
+.sideMenuGroup.sub > .sideMenuGroupItems {
+    background-color: #f4f6fb;
 }
 
 .sideMenuItem {
