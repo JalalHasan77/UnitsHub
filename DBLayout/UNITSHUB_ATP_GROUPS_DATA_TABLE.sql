@@ -4,5 +4,6 @@ Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IM
 Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00004','Auto-transfer 2rd Payment',4,'1.2','Auto-Transfer 2nd Payment Unit [@Reference]');
 Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00005','Final Installment',5,'1.3','Transfer 3nd Payment Unit [@Reference]');
 Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00006','Auto-transfer 3rd Payment',6,'1.3','Auto-Transfer 3nd Payment Unit [@Reference]');
+Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00007','Cancel Reservation Fees',7,'1.4','Cancel Reservation [@Reference]');
 Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00001','Reservation Fees',1,'1.1','Reservation for Unit [@Reference]');
 Insert into INAP.UNITSHUB_ATP_GROUPS (PLAN_ID,GROUP_ID,GROUP_TITLE,SORT_ORDER,IMPLEMENT_ON,REFERENCE_PHRASE) values ('00001','00002','AUTOtransfer Reservation Fees',2,'1.1','Auto-Transfer Unit [@Reference]');

@@ -586,6 +586,55 @@
     background-repeat: no-repeat;
 }
 
+/* ---------- Toolbar on top of the units grid (Columns / Filter) ---------- */
+.grid-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 10px;
+    background: #eef2f7;
+    border: 1px solid #c9d3df;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    font-family: Arial;
+}
+
+.grid-count { font-size: 13px; color: #475569; }
+.grid-count b { color: #1e293b; }
+.grid-tools { display: flex; gap: 6px; }
+
+.tool-btn {
+    height: 30px;
+    padding: 0 10px 0 30px;          /* room for the icon */
+    border: 1px solid #c9d3df;
+    border-radius: 6px;
+    background-color: #ffffff;
+    background-repeat: no-repeat;
+    background-position: 9px center;
+    background-size: 15px 15px;
+    color: #3d5a7a;                   /* same family as the grid header #5D7B9D */
+    font-family: Arial;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+.tool-btn:hover { background-color: #f5f8fc; border-color: #5D7B9D; }
+.tool-btn:focus-visible { outline: 2px solid #5D7B9D; outline-offset: 1px; }
+
+.tool-columns {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d5a7a' stroke-width='2'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='9' y1='4' x2='9' y2='20'/><line x1='15' y1='4' x2='15' y2='20'/></svg>");
+}
+
+.tool-filter {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d5a7a' stroke-width='2' stroke-linejoin='round'><path d='M3 5h18l-7 8v6l-4-2v-4z'/></svg>");
+}
+
+/* the thin top scrollbar sits flush between toolbar and grid */
+.grid-toolbar + .gridview-scroll-top { border-left: 1px solid #c9d3df; border-right: 1px solid #c9d3df; box-sizing: border-box; }
+
 /* Reference column: link that opens the Unit page */
 .refLink {
     color: #1a1464;
@@ -717,6 +766,23 @@
         }
 
         window.addEventListener('load', syncGridScrollbars);
+
+        // Toolbar: "44 units" = rows of the units grid (header row excluded)
+        function showGridCount() {
+            var label = document.getElementById('gridCount');
+            // the units grid is the table directly inside #gvScrollBottom (no server code
+            // blocks here: they stop the popup helper from adding controls)
+            var grid = document.querySelector('#gvScrollBottom > table');
+            if (!label) { return; }
+            if (!grid) { label.innerHTML = ''; return; }
+            var rows = grid.querySelectorAll('tr');
+            var n = 0;
+            for (var i = 0; i < rows.length; i++) {
+                if (rows[i].querySelector('td') && rows[i].parentNode.closest('table') === grid) { n++; }
+            }
+            label.innerHTML = '<b>' + n + '</b> ' + (n === 1 ? 'unit' : 'units');
+        }
+        window.addEventListener('load', showGridCount);
    </script>
 
 
@@ -732,24 +798,11 @@
                     <table cellpadding="15" cellspacing="15" class="auto-style2">
                         <tr>
                             <td style="width: 50%">
-                                <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="36pt" ForeColor="White" Text="Label"></asp:Label>
-                                <asp:Button ID="Button1" runat="server" Text="Button" />
+                                <%-- Project name: blank until a project is selected (set in loadData) --%>
+                                <asp:Label ID="Label2" runat="server" Font-Names="Arial Black" Font-Size="36pt" ForeColor="White" Text=""></asp:Label>
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
 
-                                <asp:LinkButton ID="lnkOpenAction" runat="server">Open Actions</asp:LinkButton>
-
-                                <br />
-
-                                <asp:LinkButton ID="lnkConfirmation" runat="server">Open Confirmation</asp:LinkButton>
-
-                                <br />
-                                <br />
-                                <asp:LinkButton ID="LinkButton1" runat="server" PostBackUrl="AutoTransferPlanForm.aspx?PlanID=00001">LinkButton</asp:LinkButton>
-
-                            &nbsp;<asp:LinkButton ID="LinkButton4" runat="server" PostBackUrl="~/Unit.aspx?NodeID=001440&amp;ProjectId=0017">Units</asp:LinkButton>
-
-                            &nbsp;<asp:LinkButton ID="LinkButton5" runat="server" PostBackUrl="~/Actions_Roles_Groups_Users.aspx?ProjectID=0017&amp;StatusID=0768&amp;SUBSTATEID=0000&amp;ActionID=00003">Security</asp:LinkButton>
 
                             </td>
                             <td style="vertical-align: top; width: 50%;" align="right">
@@ -774,7 +827,7 @@
                                             <div class="unit-filter-control">
                                                 <asp:DropDownList ID="DropDownList1" runat="server" CssClass="styled-dropdown" Font-Names="Arial" AutoPostBack="True">
                                                 </asp:DropDownList>
-                                                <asp:Label ID="lblDisplayOrder" runat="server"></asp:Label>
+                                                <asp:Label ID="lblDisplayOrder" runat="server" Visible="False"></asp:Label>
                                             </div>
                                         </div>
                                         <table cellpadding="0" class="auto-style2">
@@ -841,15 +894,14 @@
                                         
                                         <br />
 
-                                        <div style="gap: 8px;width:100%;align-content:flex-end">
-                                            <asp:Button ID="btnColumns"
-    runat="server"
-    Text="Columns"
-    CssClass="btn-bootstrap" />
-                                            <asp:Button ID="btnFilter"
-    runat="server"
-    Text="Filter"
-    CssClass="btn-bootstrap" />
+                                        <%-- Toolbar attached to the top of the grid: unit count on the left,
+                                             Columns / Filter on the right (same IDs, popups unchanged) --%>
+                                        <div class="grid-toolbar">
+                                            <span class="grid-count" id="gridCount"></span>
+                                            <span class="grid-tools">
+                                                <asp:Button ID="btnColumns" runat="server" Text="Columns" CssClass="tool-btn tool-columns" ToolTip="Show or hide columns" />
+                                                <asp:Button ID="btnFilter" runat="server" Text="Filter" CssClass="tool-btn tool-filter" ToolTip="Filter the units" />
+                                            </span>
                                         </div>
                                         <div class="gridview-scroll-top" id="gvScrollTop">
                                             <div class="gridview-scroll-top-inner" id="gvScrollTopInner">&nbsp;</div>

@@ -96,34 +96,6 @@ Partial Class MainPage
                                  firstItemIs:="Select A Project")
         End If
 
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      lnkOpenAction,
-                                      "ProjectStatusAndAction.aspx",
-                                      1000, 0,
-                                      PopupPlacement.Center,
-                                      "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      returnKey:=OpenActionPopupReturnKey)
-
-        'lnkConfirmation
-
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      lnkConfirmation,
-                                      "ReserveUnit.aspx",
-                                      850, 650,
-                                      PopupPlacement.Center,
-                                      "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      returnKey:=ConfirmationPopupReturnKey)
-
-        VendorPopupHelper.RegisterVendorPopup(Me,
-                                      Button1,
-                                      "DisplayInvoice.aspx?PDF=27147",
-                                      1000, 0,
-                                      PopupPlacement.Center,
-                                      "",
-                                      VendorPopupHelper.PopupDisplayMode.FrameOnly,
-                                      returnKey:=OpenActionPopupReturnKey)
 
 
 
@@ -132,18 +104,21 @@ Partial Class MainPage
     End Sub
 
     ''' <summary>
-    ''' Builds the right-side slide-in menu from the ISSIDE menu definition table, to any
-    ''' depth: each row sits under the row whose INDX equals its PARENT (top level =
-    ''' empty PARENT). A row with entries under it is a collapsible group (TITLE, or a
-    ''' LINK without URL such as "3.1 Users"); a LINK with a URL is a clickable item.
-    ''' Only rows whose VISIBLETO list contains the current user's role (or "ALL") are
-    ''' included. Groups with no visible links under them are omitted entirely.
-    ''' Rebuilt on every request (like the grid's action placeholders) since the
-    ''' PlaceHolder's dynamically-added children aren't preserved by ViewState.
+    ''' Builds the right-side slide-in menu from UNITSHUB_SIDE_MENU (IS_SIDE = 'Y',
+    ''' IS_ACTIVE = 'Y'), to any depth: each row sits under the row whose MENU_ID equals its
+    ''' PARENT_ID (top level = no PARENT_ID), in SORT_ORDER. A row with entries under it is
+    ''' a collapsible group (a TITLE, or a LINK without URL such as "4.1 Users"); a LINK with
+    ''' a URL is a clickable item. Only rows whose VISIBLE_TO contains the current user's
+    ''' role (or "ALL") are shown; groups with no visible links under them are left out.
+    '''   OPEN_MODE    'POPUP' = VendorPopupHelper, 'WINDOW' = new browser window
+    '''   CHILDREN_SQL one LINK per row it returns (ID, TITLE), URL = URL_TEMPLATE with {ID}
+    '''   {CUSTOMER_LIST_PARAMS} in a URL = the encrypted parameters of the customer list
+    ''' Rebuilt on every request (the PlaceHolder's dynamic children aren't kept by ViewState).
     ''' </summary>
     Private Sub PopulateSideMenu()
         phSideMenu.Controls.Clear()
 
+        ' Same shape RenderMenuLevel / AddSideMenuPopupLink already use
         Dim dt As New DataTable
         dt.Columns.Add("TITLE")
         dt.Columns.Add("URL")
@@ -154,17 +129,94 @@ Partial Class MainPage
         dt.Columns.Add("TYPE")
         dt.Columns.Add("INDX")
         dt.Columns.Add("PARENT")
-        ' Optional, for links that open through VendorPopupHelper instead of openMenuLink:
-        '   POPUP = "Y", POPUPTITLE = the popup's title, RETURNKEY = the popup's return key ("" = none)
         dt.Columns.Add("POPUP")
         dt.Columns.Add("POPUPTITLE")
         dt.Columns.Add("RETURNKEY")
+        dt.Columns.Add("SORT", GetType(Integer))
 
-        'dt.Rows.Add("EMAIL TODAY", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
-        dt.Rows.Add("CUSTOMER", "", 800, 550, "Y", "ADM", "TITLE", "1", "")
+        Dim menuDT As DataTable = Nothing
+        Try
+            menuDT = GetDataTable(EBDB,
+                "SELECT MENU_ID, PARENT_ID, TITLE, MENU_TYPE, URL, WIDTH, HEIGHT, OPEN_MODE, POPUP_TITLE, " &
+                "RETURN_KEY, VISIBLE_TO, SORT_ORDER, CHILDREN_SQL, URL_TEMPLATE " &
+                "FROM UNITSHUB_SIDE_MENU WHERE IS_SIDE = 'Y' AND IS_ACTIVE = 'Y' " &
+                "ORDER BY PARENT_ID NULLS FIRST, SORT_ORDER, MENU_ID")
+        Catch ex As Exception
+            phSideMenu.Controls.Add(New LiteralControl(
+                "<div class=""sideMenuItem"" style=""color:#b91c1c"">The menu can't be loaded: " & Server.HtmlEncode(ex.Message) & "</div>"))
+            Exit Sub
+        End Try
+        If menuDT Is Nothing Then Exit Sub
 
-        'dt.Rows.Add("Events Control", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
-        'dt.Rows.Add("Charts and Statistics", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
+        ' Encrypted only when a menu entry actually uses it
+        Dim customerListParams As String = Nothing
+
+        For Each m As DataRow In menuDT.Rows
+            Dim menuId As String = Col(m, "MENU_ID")
+            Dim parentId As String = Col(m, "PARENT_ID")
+            Dim width As Integer = IntOr(m("WIDTH"), 950)
+            Dim height As Integer = IntOr(m("HEIGHT"), 0)
+            Dim popup As String = If(Col(m, "OPEN_MODE").ToUpperInvariant() = "WINDOW", "N", "Y")
+            Dim visibleTo As String = If(Col(m, "VISIBLE_TO") = "", "ADM", Col(m, "VISIBLE_TO"))
+
+            Dim url As String = Col(m, "URL")
+            If url.Contains("{CUSTOMER_LIST_PARAMS}") Then
+                If customerListParams Is Nothing Then customerListParams = Server.UrlEncode(CustomerListParameters())
+                url = url.Replace("{CUSTOMER_LIST_PARAMS}", customerListParams)
+            End If
+
+            dt.Rows.Add(Col(m, "TITLE"), url, width, height, "Y", visibleTo,
+                        If(Col(m, "MENU_TYPE") = "", "LINK", Col(m, "MENU_TYPE").ToUpperInvariant()),
+                        menuId, parentId, popup, Col(m, "POPUP_TITLE"), Col(m, "RETURN_KEY"),
+                        IntOr(m("SORT_ORDER"), 0))
+
+            ' Entries generated from a query (e.g. one per node type under "Projects and subs")
+            Dim childrenSql As String = Col(m, "CHILDREN_SQL")
+            If childrenSql <> "" Then
+                Try
+                    Dim kids As DataTable = GetDataTable(EBDB, childrenSql)
+                    If kids IsNot Nothing Then
+                        Dim n As Integer = 0
+                        For Each k As DataRow In kids.Rows
+                            Dim kidId As String = Convert.ToString(k(0)).Trim()
+                            If kidId = "" Then Continue For
+                            Dim kidTitle As String = If(kids.Columns.Count > 1, Convert.ToString(k(1)).Trim(), "")
+                            n += 1
+                            dt.Rows.Add(If(kidTitle = "", kidId, kidTitle),
+                                        Col(m, "URL_TEMPLATE").Replace("{ID}", Server.UrlEncode(kidId)),
+                                        width, height, "Y", visibleTo, "LINK",
+                                        menuId & "." & n.ToString(), menuId, popup, Col(m, "POPUP_TITLE"), "", n)
+                        Next
+                    End If
+                Catch ex As Exception
+                    ' A broken CHILDREN_SQL hides only its own entries, not the whole menu
+                End Try
+            End If
+        Next
+
+        Dim currentRole As String = GetCurrentUserRole()
+        Dim sb As New System.Text.StringBuilder
+        RenderMenuLevel(dt, "", 0, currentRole, sb)
+        phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
+    End Sub
+
+    ''' <summary>A column of a menu row, trimmed ("" for NULL).</summary>
+    Private Function Col(Row As DataRow, Name As String) As String
+        If Row Is Nothing OrElse Not Row.Table.Columns.Contains(Name) OrElse IsDBNull(Row(Name)) Then Return ""
+        Return Convert.ToString(Row(Name)).Trim()
+    End Function
+
+    Private Function IntOr(Value As Object, Fallback As Integer) As Integer
+        If Value Is Nothing OrElse IsDBNull(Value) Then Return Fallback
+        Dim n As Integer
+        Return If(Integer.TryParse(Convert.ToString(Value), n), n, Fallback)
+    End Function
+
+    ''' <summary>
+    ''' Encrypted parameters of the customer list used by "Maintain A Customer"
+    ''' ({CUSTOMER_LIST_PARAMS} in UNITSHUB_SIDE_MENU.URL).
+    ''' </summary>
+    Private Function CustomerListParameters() As String
         Dim MemberListParameters As New clsListProperties
         With MemberListParameters
             .ItemsSQL = "Select ID, NAME, NATIONALID from UNITSHUB_CONTACTS "
@@ -175,87 +227,8 @@ Partial Class MainPage
             .ColumnsWidth = New Double() {3, 1}
             .HoverableList = "Y"
         End With
-        Dim SelectMembersParameters As String = encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
-        ' "Maintain A Customer" = pick an existing customer from the list
-        dt.Rows.Add("Maintain A Customer",
-                    "SelectOneItemFromListMultiColumns.aspx?Parameters=" & Server.UrlEncode(SelectMembersParameters),
-                    400, 500, "Y", "ADM", "LINK", "1.1", "1",
-                    "Y", "Select Adj", "SelectedCustomer")
-        ' "Add New Customer" = empty ContactMaintenance form for a new customer
-        dt.Rows.Add("Add New Customer",
-                    "ContactMaintenance.aspx?mode=New&isDialogue=Yes",
-                    950, 750, "Y", "ADM", "LINK", "1.2", "1",
-                    "Y", "", "")
-        '============================================================
-        '============================================================
-        '============================================================
-        dt.Rows.Add("AUTOTRANSFER PLANS", "", 800, 550, "Y", "ADM", "TITLE", "2", "")
-        dt.Rows.Add("Autotransfer Plans",
-                    "AutoTransferPlanForm.aspx",
-                    950, 0, "Y", "ADM", "LINK", "2.1", "2",
-                    "Y", "", "")
-        dt.Rows.Add("Payment Schedules",
-                    "PaymentSchedule.aspx",
-                    950, 0, "Y", "ADM", "LINK", "2.2", "2",
-                    "Y", "", "")
-        '============================================================
-        '============================================================
-        '============================================================
-        dt.Rows.Add("STATUS & ACTIONS", "", 800, 550, "Y", "ADM", "TITLE", "3", "")
-        dt.Rows.Add("Manage Status & Actions",
-                    "ProjectStatusAndAction.aspx",
-                    950, 0, "Y", "ADM", "LINK", "3.1", "3",
-                    "Y", "", "")
-        '============================================================
-        '============================================================
-        '============================================================
-        dt.Rows.Add("Users, Groups, and Roles", "", 800, 550, "Y", "ADM", "TITLE", "4", "")
-        dt.Rows.Add("Users", "", 800, 550, "Y", "ADM", "LINK", "4.1", "4")
-        dt.Rows.Add("Manage Users Profiles",
-                    "UserAddEdit.aspx",
-                    950, 0, "Y", "ADM", "LINK", "4.1.1", "4.1",
-                    "Y", "", "")
-        dt.Rows.Add("Manage Users Preveliges",
-                    "ManageUsers.aspx",
-                    950, 0, "Y", "ADM", "LINK", "4.1.2", "4.1",
-                    "Y", "", "")
-        dt.Rows.Add("Groups",
-                    "ManageGroups.aspx",
-                    950, 0, "Y", "ADM", "LINK", "4.2", "4",
-                    "Y", "", "")
-        dt.Rows.Add("Roles",
-                    "ManageRoles.aspx",
-                    950, 0, "Y", "ADM", "LINK", "4.3", "4",
-                    "Y", "", "")
-        '============================================================
-        '============================================================
-        '============================================================
-        dt.Rows.Add("Projects and subs", "", 800, 550, "Y", "ADM", "TITLE", "5", "")
-        ' One entry per node type (UNITSHUB_NODE_TYPES), each opening ProjectComp.aspx for
-        ' that type: INDX 5.1, 5.2, ... in NODE_TYPE_ID order
-        Dim nodeTypes As DataTable = GetDataTable(EBDB,
-            "SELECT NODE_TYPE_ID, TYPE_NAME || 'S' as TYPE_NAME FROM UNITSHUB_NODE_TYPES ORDER BY NODE_TYPE_ID")
-        If nodeTypes IsNot Nothing Then
-            Dim typeNo As Integer = 0
-            For Each nt As DataRow In nodeTypes.Rows
-                Dim typeId As String = Convert.ToString(nt("NODE_TYPE_ID")).Trim()
-                Dim typeName As String = Convert.ToString(nt("TYPE_NAME")).Trim()
-                If typeId = "" Then Continue For
-                typeNo += 1
-                dt.Rows.Add(If(typeName = "", typeId, typeName),
-                            "ProjectComp.aspx?NodeTypeID=" & Server.UrlEncode(typeId),
-                            950, 0, "Y", "ADM", "LINK", "5." & typeNo.ToString(), "5",
-                            "Y", "", "")
-            Next
-        End If
-        '
-
-
-        Dim currentRole As String = GetCurrentUserRole()
-        Dim sb As New System.Text.StringBuilder
-        RenderMenuLevel(dt, "", 0, currentRole, sb)
-        phSideMenu.Controls.Add(New LiteralControl(sb.ToString()))
-    End Sub
+        Return encryNdecry.EncryptObject(Of clsListProperties)(MemberListParameters)
+    End Function
 
     ''' <summary>
     ''' Renders the menu rows whose PARENT is ParentIndx, at any depth:
@@ -270,7 +243,8 @@ Partial Class MainPage
         Dim rows = dt.AsEnumerable().
             Where(Function(r) Convert.ToString(r("PARENT")).Trim() = ParentIndx AndAlso
                               IsVisibleToRole(Convert.ToString(r("VISIBLETO")), Role)).
-            OrderBy(Function(r) IndxSortKey(Convert.ToString(r("INDX")))).ToList()
+            OrderBy(Function(r) If(r.Table.Columns.Contains("SORT") AndAlso Not IsDBNull(r("SORT")), CInt(r("SORT")), 0)).
+            ThenBy(Function(r) IndxSortKey(Convert.ToString(r("INDX")))).ToList()
 
         Dim pad As Integer = 20 + Level * 14   ' px, deeper levels sit further right
 
@@ -1801,7 +1775,7 @@ Partial Class MainPage
         ' of running straight through. By the time THIS postback runs - the one
         ' __doPostBack fires from inside ConfirmBox's btnOK_Click - the popup's
         ' selection is already sitting in Session under ConfirmationPopupReturnKey,
-        ' exactly the way lnkConfirmation_Click reads its own. Read it once here
+        ' the same way the old Open Confirmation link read its own. Read it once here
         ' (GetPopupReturnValue clears it after reading, same as everywhere else)
         ' and branch out before falling into the generic ACTION_TYPE logic below,
         ' since that logic doesn't know anything about the popup's data.
@@ -2374,33 +2348,6 @@ Partial Class MainPage
                String.Equals(If(act.StateId, "").Trim(), ConfirmationPopupStateId, StringComparison.OrdinalIgnoreCase)
     End Function
 
-    Protected Sub lnkOpenAction_Click(sender As Object, e As EventArgs) Handles lnkOpenAction.Click
-        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
-        If returnValue Is Nothing Then Exit Sub
-        ' Executed when a standard action button is clicked
-        MsgBox("Here")
-        loadData()
-    End Sub
-
-    Protected Sub lnkConfirmation_Click(sender As Object, e As EventArgs) Handles lnkConfirmation.Click
-        ' Executed when ConfirmBox.aspx completes and returns data
-        Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, ConfirmationPopupReturnKey)
-        If returnValue Is Nothing Then Exit Sub
-
-        MsgBox("Confirmed")
-
-        Dim confirmationData As DataTable = TryCast(returnValue, DataTable)
-        If confirmationData IsNot Nothing Then
-            For Each row As DataRow In confirmationData.Rows
-                Dim id As Integer = Convert.ToInt32(row("ID"))
-                Dim name As String = Convert.ToString(row("Name"))
-                Dim value As String = Convert.ToString(row("Value"))
-                ' Process confirmed items...
-            Next
-        End If
-
-        loadData()
-    End Sub
 
 
 

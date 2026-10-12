@@ -1,4 +1,5 @@
-﻿Imports System
+Imports System
+Imports System.Collections
 Imports System.Collections.Generic
 Imports System.Data
 Imports System.Globalization
@@ -70,12 +71,46 @@ Partial Class AddMultipleItemsFromList
         LoadOptions(GetSelectedIdsFromRequest())
     End Sub
 
+    ''' <summary>
+    ''' Reads ?Parameters= in one of two forms:
+    '''   1. a Session key: Session("PopupParams_" &amp; key) holds the settings - either a
+    '''      clsListProperties (SQL lists) or a clsListPropertiesNoSQL (a ready-made list,
+    '''      e.g. MainPage's Columns dialog: WholeList / CheckedList, no SQL);
+    '''   2. an encrypted clsListProperties (EncryDecry.EncryptObject) - every other caller.
+    ''' The Session is checked first, so a plain key is never sent to Decrypt (which throws
+    ''' "The input data is not a complete block"). A value that can't be decrypted leaves
+    ''' the list empty instead of breaking the page.
+    ''' </summary>
     Private Sub InitializeFromParameters()
-        Dim encryptedParameters As String = Request("Parameters")
+        Dim parameters As String = If(Request("Parameters"), "").Trim()
         Dim ListParameters As clsListProperties = Nothing
+        NoSqlData = Nothing
 
-        If Not String.IsNullOrEmpty(encryptedParameters) Then
-            ListParameters = EncryNDecry.DecryptObject(Of clsListProperties)(encryptedParameters)
+        If parameters <> "" Then
+            Dim fromSession As Object = Session("PopupParams_" & parameters)
+
+            If TypeOf fromSession Is clsListProperties Then
+                ListParameters = CType(fromSession, clsListProperties)
+
+            ElseIf TypeOf fromSession Is clsListPropertiesNoSQL Then
+                Dim ns As clsListPropertiesNoSQL = CType(fromSession, clsListPropertiesNoSQL)
+                SqlText = String.Empty
+                CheckedItemsSqlText = String.Empty
+                Label1.Text = If(ns.FormTitle, String.Empty)
+                HideColumnsMask = ns.ColumnHideAndShow
+                EditableColumnsMask = ns.EditableColumns
+                ColumnsWidths = ns.ColumnsWidth
+                NoSqlData = ListToTable(ns.WholeList)
+                NoSqlCheckedIds = ListToIds(ns.CheckedList)
+                Exit Sub
+
+            Else
+                Try
+                    ListParameters = EncryNDecry.DecryptObject(Of clsListProperties)(parameters)
+                Catch ex As Exception
+                    ListParameters = Nothing    ' not encrypted / expired key: show an empty list
+                End Try
+            End If
         End If
 
         If ListParameters IsNot Nothing Then
@@ -95,10 +130,88 @@ Partial Class AddMultipleItemsFromList
         End If
     End Sub
 
+    ' ------------------------------------------------------------------
+    ' Ready-made lists (clsListPropertiesNoSQL)
+    ' ------------------------------------------------------------------
+
+    Private Const SessionNoSqlDataKey As String = "AddMultipleItemsFromList_NoSqlData"
+    Private Const ViewStateNoSqlCheckedKey As String = "AddMultipleItemsFromList_NoSqlChecked"
+
+    ''' <summary>The ready-made list (ID, Name), kept for postbacks; Nothing for SQL lists.</summary>
+    Private Property NoSqlData As DataTable
+        Get
+            Return TryCast(Session(SessionNoSqlDataKey), DataTable)
+        End Get
+        Set(value As DataTable)
+            Session(SessionNoSqlDataKey) = value
+        End Set
+    End Property
+
+    ''' <summary>IDs ticked when the ready-made list first opens (its CheckedList).</summary>
+    Private Property NoSqlCheckedIds As List(Of String)
+        Get
+            Dim v As String = Convert.ToString(ViewState(ViewStateNoSqlCheckedKey))
+            Return If(v = "", New List(Of String)(), New List(Of String)(v.Split(ChrW(1))))
+        End Get
+        Set(value As List(Of String))
+            ViewState(ViewStateNoSqlCheckedKey) = If(value Is Nothing, "", String.Join(ChrW(1), value.ToArray()))
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' A list given as a DataTable, a string ("a,b,c") or any list of values, as a table
+    ''' with two columns, ID and Name, holding the same value (same shape as
+    ''' "Select X as ID, Y as Name ..."); a DataTable is used as it is.
+    ''' </summary>
+    Private Function ListToTable(List As Object) As DataTable
+        If TypeOf List Is DataTable Then Return CType(List, DataTable)
+
+        Dim dt As New DataTable()
+        dt.Columns.Add("ID")
+        dt.Columns.Add("Name")
+        For Each id As String In ListToIds(List)
+            dt.Rows.Add(id, id)
+        Next
+        Return dt
+    End Function
+
+    ''' <summary>The values of a list (DataTable: first column; string: comma separated).</summary>
+    Private Function ListToIds(List As Object) As List(Of String)
+        Dim result As New List(Of String)()
+        If List Is Nothing Then Return result
+
+        If TypeOf List Is DataTable Then
+            Dim t As DataTable = CType(List, DataTable)
+            If t.Columns.Count > 0 Then
+                For Each r As DataRow In t.Rows
+                    result.Add(Convert.ToString(r(0)).Trim())
+                Next
+            End If
+        ElseIf TypeOf List Is String Then
+            For Each part As String In CStr(List).Split(","c)
+                If part.Trim() <> "" Then result.Add(part.Trim())
+            Next
+        ElseIf TypeOf List Is IEnumerable Then
+            For Each item As Object In CType(List, IEnumerable)
+                If item Is Nothing Then Continue For
+                If TypeOf item Is DataRow Then
+                    result.Add(Convert.ToString(CType(item, DataRow)(0)).Trim())
+                ElseIf TypeOf item Is ListItem Then
+                    result.Add(CType(item, ListItem).Value.Trim())
+                Else
+                    result.Add(Convert.ToString(item).Trim())
+                End If
+            Next
+        End If
+        Return result
+    End Function
+
     Private Sub LoadOptions(ByVal selectedIds As HashSet(Of String))
         Dim dt As DataTable
 
-        If String.IsNullOrWhiteSpace(SqlText) Then
+        If NoSqlData IsNot Nothing Then
+            dt = NoSqlData                          ' ready-made list (no SQL)
+        ElseIf String.IsNullOrWhiteSpace(SqlText) Then
             dt = New DataTable()
         Else
             dt = DB.GetDataTable(EBDB_CS, SqlText)
@@ -110,6 +223,11 @@ Partial Class AddMultipleItemsFromList
         ' checked on every postback.
         If Not Page.IsPostBack Then
             MergeCheckedIdsFromSql(selectedIds)
+            If NoSqlData IsNot Nothing Then
+                For Each id As String In NoSqlCheckedIds
+                    If id <> "" Then selectedIds.Add(id)
+                Next
+            End If
         End If
 
         Session(SessionDataKey) = dt
@@ -480,6 +598,7 @@ Partial Class AddMultipleItemsFromList
         Dim selectedIds As HashSet(Of String) = GetSelectedIdsFromRequest()
         Dim dt As DataTable = TryCast(Session(SessionDataKey), DataTable)
 
+        If dt Is Nothing AndAlso NoSqlData IsNot Nothing Then dt = NoSqlData
         If dt Is Nothing Then
             If String.IsNullOrWhiteSpace(SqlText) Then
                 dt = New DataTable()
