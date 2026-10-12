@@ -578,6 +578,14 @@
         display: inline-block;
     white-space: nowrap;
 }
+/* Top header bar: blue, or the project's image (set from code, ApplyHeaderImage) */
+.header-bar {
+    background-color: #3366FF;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
 /* Reference column: link that opens the Unit page */
 .refLink {
     color: #1a1464;
@@ -719,7 +727,8 @@
 
         <table cellpadding="0" class="auto-style2">
             <tr>
-                <td style="background-color: #3366FF">
+                <%-- Header bar: blue by default; the selected project's image as background when it has one (ApplyHeaderImage) --%>
+                <td id="tdHeader" runat="server" class="header-bar">
                     <table cellpadding="15" cellspacing="15" class="auto-style2">
                         <tr>
                             <td style="width: 50%">

@@ -1367,7 +1367,127 @@ Partial Class MainPage
     ''' </summary>
     Protected Sub Page_PreRender(sender As Object, e As EventArgs) Handles Me.PreRender
         WireReferenceLinks()
+        ApplyHeaderImage()
     End Sub
+
+    ''' <summary>
+    ''' Top header bar: the selected project's image as its background (blue when none is
+    ''' found). See GetProjectImageUrl. Re-checked whenever the project changes, and also on
+    ''' every request while none was found (so a value added meanwhile shows up).
+    ''' The outcome is written into the page source as data-image-info on the header cell
+    ''' (View Source, search "data-image-info") to see why no image is shown.
+    ''' </summary>
+    Private Sub ApplyHeaderImage()
+        Dim projectId As String = If(DropDownList1.SelectedItem Is Nothing, "", DropDownList1.SelectedValue.Trim())
+
+        If Convert.ToString(ViewState("HeaderImageProject")) <> projectId OrElse
+           Convert.ToString(ViewState("HeaderImageUrl")) = "" Then
+            Dim info As String = ""
+            ViewState("HeaderImageProject") = projectId
+            ViewState("HeaderImageUrl") = GetProjectImageUrl(projectId, info)
+            ViewState("HeaderImageInfo") = info
+        End If
+
+        Dim url As String = Convert.ToString(ViewState("HeaderImageUrl"))
+        tdHeader.Attributes("data-image-info") = Convert.ToString(ViewState("HeaderImageInfo"))
+        ' TEMP while setting this up: hover the header bar to see what was found (remove later)
+        'tdHeader.Attributes("title") = "Header image: " & Convert.ToString(ViewState("HeaderImageInfo"))
+
+        If url = "" Then
+            tdHeader.Attributes("class") = "header-bar"
+            tdHeader.Attributes.Remove("style")
+        Else
+            tdHeader.Attributes("class") = "header-bar has-image"
+            ' Darkened a little so the white title and buttons stay readable. The address is
+            ' quoted; backslashes, quotes and brackets in it are made URL-safe.
+            Dim safeUrl As String = url.Replace("\", "/").Replace("""", "%22").Replace("'", "%27").Replace("(", "%28").Replace(")", "%29")
+            ' Written as the raw style attribute: Style("background-image") would wrap the
+            ' value in its own url(...) and URL-encode it, which browsers ignore
+            tdHeader.Attributes("style") =
+                "background-image: linear-gradient(rgba(10, 20, 60, 0.45), rgba(10, 20, 60, 0.45)), url('" & safeUrl & "');"
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' The project's image as a URL the browser can load, or "" when there is none (Info
+    ''' then says why). The value is VALUE_TEXT in UNITSHUB_NODE_ATTRIBUTE_VALUE at the
+    ''' DISPLAY_ORDER of the image attribute in UNITSHUB_ATTRIBUTES, on a node of the project:
+    '''   - attribute named exactly "Image" first, then any name containing "IMAGE";
+    '''   - the project's top node first (no parent, then the lowest node type).
+    ''' DISPLAY_ORDER is compared as a number only where both sides are numbers (no
+    ''' ORA-01722 from odd values). Stored value:
+    '''   "~/Images/p.jpg" -> resolved from the site root; "http(s)://..." or "/..." -> as is;
+    '''   anything else ("Images/p.jpg") -> relative to this page.
+    ''' </summary>
+    Private Function GetProjectImageUrl(ProjectId As String, ByRef Info As String) As String
+        If ProjectId = "" Then
+            Info = "no project selected"
+            Return ""
+        End If
+        Try
+            Dim p As String = "'" & ProjectId.Replace("'", "''") & "'"
+            Dim sameOrder As String =
+                "(TRIM(V.DISPLAY_ORDER) = TRIM(A.DISPLAY_ORDER) OR " &
+                "(REGEXP_LIKE(TRIM(V.DISPLAY_ORDER), '^[0-9]+$') AND REGEXP_LIKE(TRIM(A.DISPLAY_ORDER), '^[0-9]+$') " &
+                "AND TO_NUMBER(TRIM(V.DISPLAY_ORDER)) = TO_NUMBER(TRIM(A.DISPLAY_ORDER))))"
+
+            Dim SQL As String = ""
+            SQL = SQL + vbCrLf + " SELECT TRIM(V.VALUE_TEXT) AS IMG, A.ATTRIBUTE_NAME, N.NODE_ID "
+            SQL = SQL + vbCrLf + " FROM   UNITSHUB_NODES N "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_ATTRIBUTES A "
+            SQL = SQL + vbCrLf + "        ON A.PROJECT_ID = N.PROJECT_ID AND A.NODE_TYPE_ID = N.NODE_TYPE_ID "
+            SQL = SQL + vbCrLf + "       AND UPPER(A.ATTRIBUTE_NAME) LIKE '%IMAGE%' "
+            SQL = SQL + vbCrLf + " JOIN   UNITSHUB_NODE_ATTRIBUTE_VALUE V "
+            SQL = SQL + vbCrLf + "        ON V.NODE_ID = N.NODE_ID AND " & sameOrder
+            SQL = SQL + vbCrLf + " WHERE  N.PROJECT_ID = " & p
+            SQL = SQL + vbCrLf + "   AND  TRIM(V.VALUE_TEXT) IS NOT NULL "
+            SQL = SQL + vbCrLf + " ORDER BY CASE WHEN UPPER(TRIM(A.ATTRIBUTE_NAME)) = 'IMAGE' THEN 0 ELSE 1 END, "
+            SQL = SQL + vbCrLf + "          CASE WHEN TRIM(N.PARENT_NODE_ID) IS NULL THEN 0 ELSE 1 END, "
+            SQL = SQL + vbCrLf + "          N.NODE_TYPE_ID, N.NODE_ID "
+
+            Dim DT As DataTable = GetDataTable(EBDB, SQL)
+            If DT Is Nothing OrElse DT.Rows.Count = 0 Then
+                ' Say which part is missing
+                Dim attrCount As String = If(DB.RetreiveScalarSTRING(EBDB,
+                    "SELECT COUNT(*) FROM UNITSHUB_ATTRIBUTES WHERE PROJECT_ID = " & p &
+                    " AND UPPER(ATTRIBUTE_NAME) LIKE '%IMAGE%'"), "0").Trim()
+                Info = If(Val(attrCount) = 0,
+                          "project " & ProjectId & ": no attribute named like 'Image' in UNITSHUB_ATTRIBUTES",
+                          "project " & ProjectId & ": 'Image' attribute exists (" & attrCount & " row(s)) but no node of the project has a value for it in UNITSHUB_NODE_ATTRIBUTE_VALUE")
+                Return ""
+            End If
+
+            Dim img As String = Convert.ToString(DT.Rows(0)("IMG")).Trim()
+            Dim found As String = "project " & ProjectId & ": node " & Convert.ToString(DT.Rows(0)("NODE_ID")).Trim() &
+                                  ", attribute '" & Convert.ToString(DT.Rows(0)("ATTRIBUTE_NAME")).Trim() & "' = '" & img & "'"
+
+            ' Web address: used as is
+            If img.StartsWith("http://", StringComparison.OrdinalIgnoreCase) OrElse
+               img.StartsWith("https://", StringComparison.OrdinalIgnoreCase) Then
+                Info = found & " -> " & img
+                Return img
+            End If
+
+            ' A file of the site, stored like "Image\f17011611.jpg": always taken from the site
+            ' root (~/Image/f17011611.jpg), whatever page or folder this runs from
+            Dim rel As String = img.Replace("\", "/").Trim()
+            If rel.StartsWith("~") Then rel = rel.Substring(1)
+            rel = "~/" & rel.TrimStart("/"c)
+
+            Dim physical As String = Server.MapPath(rel)
+            If Not System.IO.File.Exists(physical) Then
+                Info = found & " -> file not found on the server: " & physical
+                Return ""
+            End If
+
+            Dim url As String = ResolveUrl(rel)
+            Info = found & " -> " & url
+            Return url
+        Catch ex As Exception
+            Info = "project " & ProjectId & ": lookup failed - " & ex.Message
+            Return ""
+        End Try
+    End Function
 
     ''' <summary>
     ''' The Reference column (declared TemplateField right after Status in MainPage.aspx):
