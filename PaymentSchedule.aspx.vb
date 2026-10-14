@@ -1,27 +1,27 @@
-﻿Imports System.Data
+Imports System.Data
 Imports System.Collections.Generic
 
 ''' <summary>
-''' Popup page: sets up a project's payment schedule. Controls and logic taken from
-''' SetupPaymentSchedule.aspx, in this page's layout:
+''' Popup page: sets up payment plans (UNITSHUB_PAYMENTPLAN) and their lines
+''' (UNITSHUB_PAYMENTPLANDETAILS).
 '''
-''' LOAD   : ddlProject is filled from Select_Projects ("Select Project" first); the
-'''          "Add Other Expenses/Reduction" link is wired to the AddFormula popup.
-''' PROJECT: picking a project loads its saved schedule rows into GridView2
-'''          (Select_PaymentSchedule + SELECT_PAYMENTSCHEDULEDETAIL).
+''' Top options:
+'''   Add New : "New plan name" box; Save creates the plan (next PLAN_ID) and its lines.
+'''   Edit    : plan dropdown; picking a plan shows its active lines; Save replaces them.
+'''   Copy    : plan dropdown + "New plan name"; picking a plan shows its lines;
+'''             Save creates a new plan (next PLAN_ID) with the lines in the grid.
+'''
 ''' ADD    : the row chosen in AddFormula is appended to the grid (btnAddExpRdc_Click).
-''' DELETE : the bin icon removes a row from the grid.
-''' SAVE   : writes a new Select_PaymentSchedule row for the project plus one
-'''          SELECT_PAYMENTSCHEDULEDETAIL row per grid row, in grid order.
+''' DELETE : the bin icon removes a row from the grid (not from the database).
 ''' The grid's rows are kept in ViewState (GridView2Data) between postbacks, and their
-''' titles in Session("ExistingPaymentTitles") so AddFormula can block duplicates.
+''' descriptions in Session("ExistingPaymentTitles") so AddFormula can block duplicates.
 ''' </summary>
 Partial Class PaymentSchedule
     Inherits System.Web.UI.Page
 
     ''' <summary>
     ''' The DataTable currently bound to GridView2, persisted in ViewState so it
-    ''' survives postbacks (needed so Delete can remove a row and rebind).
+    ''' survives postbacks (needed so Add / Delete / Save see the current rows).
     ''' </summary>
     Private Property GridView2Data As DataTable
         Get
@@ -31,6 +31,17 @@ Partial Class PaymentSchedule
             ViewState("GridView2Data") = value
         End Set
     End Property
+
+    ''' <summary>
+    ''' SQL condition for a plan line that is still active (not closed).
+    ''' Lines saved by this page have END_IN = NULL; lines from elsewhere may use
+    ''' blanks or '0', so those count as active too. Used for loading AND saving,
+    ''' so both always agree on which lines are "current".
+    ''' </summary>
+    Private Shared Function ActiveLineCondition(Optional TableAlias As String = "") As String
+        Dim c As String = If(TableAlias = "", "END_IN", TableAlias & ".END_IN")
+        Return "(" & c & " IS NULL OR TRIM(" & c & ") IS NULL OR TRIM(" & c & ") = '0')"
+    End Function
 
     Private Sub PaymentSchedule_Load(sender As Object, e As EventArgs) Handles Me.Load
         If Not IsPostBack Then
@@ -52,21 +63,16 @@ Partial Class PaymentSchedule
         ddlExistingPlan.Items.Clear()
         ddlExistingPlan.Items.Add(New ListItem("-- Select a plan --", ""))
 
-        Dim DT As Data.DataTable = GetDataTable(EBDB, "Select PLAN_ID, NAME from UNITSHUB_PAYMENTPLAN order by PLAN_ID")
+        Dim DT As DataTable = GetDataTable(EBDB, "SELECT PLAN_ID, NAME FROM UNITSHUB_PAYMENTPLAN ORDER BY PLAN_ID")
         If DT IsNot Nothing Then
-            For Each r As Data.DataRow In DT.Rows
-                Dim id As String = Convert.ToString(r("PLAN_ID"))
-                ddlExistingPlan.Items.Add(New ListItem(Convert.ToString(r("NAME")), id))
+            For Each r As DataRow In DT.Rows
+                ddlExistingPlan.Items.Add(New ListItem(Convert.ToString(r("NAME")), Convert.ToString(r("PLAN_ID"))))
             Next
         End If
     End Sub
 
     ' ==================================================================
     ' Top options: Add New / Edit Existing / Copy Existing Schedule
-    '   New  : "New plan name" box; Save creates the plan (next PLAN_ID) and its lines
-    '   Edit : plan dropdown; picking a plan shows its lines; Save replaces its lines
-    '   Copy : plan dropdown + "New plan name" box; picking a plan shows its lines;
-    '          Save creates a new plan (next PLAN_ID) with the lines in the grid
     ' ==================================================================
 
     Private ReadOnly Property SelectedMode As String
@@ -78,6 +84,7 @@ Partial Class PaymentSchedule
 
     ''' <summary>Switching option starts clean: no plan picked, empty name, empty grid.</summary>
     Protected Sub rblMode_SelectedIndexChanged(sender As Object, e As EventArgs) Handles rblMode.SelectedIndexChanged
+        If ddlExistingPlan.Items.Count = 0 Then LoadExistingPlans()
         ddlExistingPlan.SelectedIndex = 0
         txtNewPlanName.Text = ""
         BindGrid(Nothing)
@@ -124,9 +131,8 @@ Partial Class PaymentSchedule
     End Function
 
     ''' <summary>
-    ''' Fires when a plan is picked in ddlExistingPlan: loads that plan's lines from
-    ''' UNITSHUB_PAYMENTPLANDETAILS into GridView2 (in DETAIL_ID order). "-- Select a
-    ''' plan --" clears the grid.
+    ''' Fires when a plan is picked in ddlExistingPlan: loads that plan's active lines
+    ''' into GridView2. "-- Select a plan --" clears the grid.
     ''' </summary>
     Protected Sub ddlExistingPlan_SelectedIndexChanged(sender As Object, e As EventArgs) Handles ddlExistingPlan.SelectedIndexChanged
         LoadPlanDetails(ddlExistingPlan.SelectedValue)
@@ -138,9 +144,8 @@ Partial Class PaymentSchedule
     End Sub
 
     ''' <summary>
-    ''' The plan's lines, named for GridView2's columns (and AddFormula's returned row):
-    ''' "Description", "Formula", and an empty "Comment" (the table has no comment). DETAIL_ID
-    ''' comes along too, for saving the lines back to the plan later.
+    ''' The plan's active lines, named for GridView2's columns (and AddFormula's returned
+    ''' row): "Description", "Formula", and an empty "Comment". DETAIL_ID comes along too.
     ''' </summary>
     Private Sub LoadPlanDetails(PlanId As String)
         lblScheduleMessage.Visible = False
@@ -151,28 +156,35 @@ Partial Class PaymentSchedule
         End If
 
         Dim SQL As String = ""
-        SQL = SQL + vbCrLf + " SELECT D.DETAIL_ID, "
-        SQL = SQL + vbCrLf + "        D.DESCRIPTION AS ""Description"", "
-        SQL = SQL + vbCrLf + "        D.FORMULA     AS ""Formula"", "
-        SQL = SQL + vbCrLf + "        CAST(NULL AS VARCHAR2(200)) AS ""Comment"" "
-        SQL = SQL + vbCrLf + " FROM   UNITSHUB_PAYMENTPLANDETAILS D "
-        SQL = SQL + vbCrLf + " WHERE  D.PLAN_ID = '" & PlanId.Replace("'", "''") & "' "
-        SQL = SQL + vbCrLf + "   AND  D.END_IN IS NULL "   ' only the active lines (closed ones are history)
+        SQL &= " SELECT D.DETAIL_ID, " & vbCrLf
+        SQL &= "        D.DESCRIPTION AS ""Description"", " & vbCrLf
+        SQL &= "        D.FORMULA     AS ""Formula"", " & vbCrLf
+        SQL &= "        CAST(NULL AS VARCHAR2(200)) AS ""Comment"" " & vbCrLf
+        SQL &= " FROM   UNITSHUB_PAYMENTPLANDETAILS D " & vbCrLf
+        SQL &= " WHERE  D.PLAN_ID = '" & PlanId.Replace("'", "''") & "' " & vbCrLf
+        SQL &= "   AND  " & ActiveLineCondition("D") & " " & vbCrLf
         ' DETAIL_ID as a number when it is one, so 10 comes after 9
-        SQL = SQL + vbCrLf + " ORDER BY CASE WHEN REGEXP_LIKE(D.DETAIL_ID, '^[0-9]+$') THEN TO_NUMBER(D.DETAIL_ID) END, D.DETAIL_ID "
+        SQL &= " ORDER BY CASE WHEN REGEXP_LIKE(D.DETAIL_ID, '^[0-9]+$') THEN TO_NUMBER(D.DETAIL_ID) END, D.DETAIL_ID "
 
         Try
-            BindGrid(GetDataTable(EBDB, SQL))
+            Dim dt As DataTable = GetDataTable(EBDB, SQL)
+            BindGrid(dt)
+
+            If dt Is Nothing OrElse dt.Rows.Count = 0 Then
+                ShowScheduleMessage("This plan has no active lines.", False)
+            End If
         Catch ex As Exception
             BindGrid(Nothing)
-            lblScheduleMessage.Text = Server.HtmlEncode("The plan's lines couldn't be loaded: " & ex.Message)
-            lblScheduleMessage.CssClass = "schedule-message err"
-            lblScheduleMessage.Visible = True
+            ShowScheduleMessage("The plan's lines couldn't be loaded: " & ex.Message, False)
         End Try
     End Sub
 
     ''' <summary>Binds the grid to Dt (Nothing = empty) and remembers it for later postbacks.</summary>
     Private Sub BindGrid(Dt As DataTable)
+        ' A DataTable must have a name to be stored in ViewState
+        ' ("Cannot serialize the DataTable. DataTable name is not set.")
+        If Dt IsNot Nothing AndAlso String.IsNullOrEmpty(Dt.TableName) Then Dt.TableName = "PlanLines"
+
         GridView2Data = Dt
         GridView2.DataSource = Dt
         GridView2.DataBind()
@@ -180,13 +192,13 @@ Partial Class PaymentSchedule
     End Sub
 
     ''' <summary>
-    ''' Collects every Title currently in GridView2, so AddFormula.aspx can check
+    ''' Collects every Description currently in GridView2, so AddFormula.aspx can check
     ''' against them (e.g. to block adding a duplicate).
     ''' </summary>
     Private Function GetExistingTitles() As List(Of String)
         Dim titles As New List(Of String)
         Dim dt As DataTable = GridView2Data
-        If dt IsNot Nothing Then
+        If dt IsNot Nothing AndAlso dt.Columns.Contains("Description") Then
             For Each row As DataRow In dt.Rows
                 titles.Add(Convert.ToString(row("Description")))
             Next
@@ -196,8 +208,7 @@ Partial Class PaymentSchedule
 
     ''' <summary>
     ''' Runs when AddFormula closes with Save: appends the row it returned (key
-    ''' "OnePayment": Description, Formula, Comment) to the end of the grid. The grid's
-    ''' "#" numbers the rows in order, so the new row gets the next number.
+    ''' "OnePayment": Description, Formula, Comment) to the end of the grid.
     ''' </summary>
     Protected Sub btnAddExpRdc_Click(sender As Object, e As EventArgs) Handles btnAddExpRdc.Click
         Dim selectedRow As DataRow = TryCast(VendorPopupHelper.GetPopupReturnValue(Me, "OnePayment"), DataRow)
@@ -205,12 +216,11 @@ Partial Class PaymentSchedule
 
         Dim dt As DataTable = GridView2Data
         If dt Is Nothing Then
-            ' No plan loaded yet: start a table with the popup's columns
+            ' Nothing loaded yet: start a table with the popup's columns
             dt = selectedRow.Table.Clone()
         End If
 
-        ' Copy by column name, so it fits a plan's table too (whose DETAIL_ID stays empty
-        ' for a new line)
+        ' Copy by column name, so it fits a plan's table too (DETAIL_ID stays empty for a new line)
         Dim newRow As DataRow = dt.NewRow()
         For Each col As DataColumn In selectedRow.Table.Columns
             If dt.Columns.Contains(col.ColumnName) Then newRow(col.ColumnName) = selectedRow(col.ColumnName)
@@ -221,52 +231,9 @@ Partial Class PaymentSchedule
         lblScheduleMessage.Visible = False
     End Sub
 
-
-    '''' <summary>Binds the grid to Dt (Nothing = empty) and remembers it for later postbacks.</summary>
-    'Private Sub BindGrid(Dt As DataTable)
-    '    GridView2Data = Dt
-    '    GridView2.DataSource = Dt
-    '    GridView2.DataBind()
-    '    Session("ExistingPaymentTitles") = If(Dt Is Nothing, Nothing, GetExistingTitles())
-    'End Sub
-
-    '''' <summary>
-    '''' Fires when the user changes the Project dropdown. Re-loads GridView2 with
-    '''' whatever payment-schedule detail rows already exist for that project.
-    '''' </summary>
-    'Protected Sub ddlProject_SelectedIndexChanged(sender As Object, e As EventArgs) Handles ddlProject.SelectedIndexChanged
-    '    ShowScheduleMessage("", True)
-    '    LoadPaymentScheduleForProject(ddlProject.SelectedValue)
-    'End Sub
-
-    '''' <summary>
-    '''' Queries the schedule + detail tables for the given ProjectID and binds the
-    '''' result to GridView2. If no project is selected, the grid is cleared.
-    '''' </summary>
-    'Private Sub LoadPaymentScheduleForProject(projectId As String)
-    '    If String.IsNullOrEmpty(projectId) OrElse projectId = "NoValue" Then
-    '        BindGrid(Nothing)
-    '        Exit Sub
-    '    End If
-
-    '    ' Existing schedule detail rows for this project, most recent schedule first,
-    '    ' in their original row order.
-    '    Dim sql As String =
-    '        "SELECT d.TITLE AS Title, d.PAYMENT AS Payment, d.LCCOMMENT AS ""Comment"" " &
-    '        "FROM SELECT_PAYMENTSCHEDULEDETAIL d " &
-    '        "INNER JOIN Select_PaymentSchedule s ON s.SCHEDULEID = d.SCHEDULEID " &
-    '        "WHERE s.PROJECTID = '" & projectId.Replace("'", "''") & "' " &
-    '        "ORDER BY s.SCHEDULEID DESC, d.ROWORDER"
-
-    '    ' NOTE: UDF.GetDataTable is assumed to mirror UDF.GetSqlArray/UDF.GetNextID
-    '    ' (same UDF.EBDB_CS connection string), as in SetupPaymentSchedule.
-    '    BindGrid(UDF.GetDataTable(UDF.EBDB_CS, sql))
-    'End Sub
-
     ''' <summary>
     ''' The bin icon of a row (CommandName "DeleteRow", CommandArgument = the row's
-    ''' position): removes that row from the grid. The grid's "#" renumbers itself.
-    ''' Nothing is deleted from the database here - only from the grid being edited.
+    ''' position): removes that row from the grid only. The "#" column renumbers itself.
     ''' </summary>
     Protected Sub GridView2_RowCommand(sender As Object, e As GridViewCommandEventArgs) Handles GridView2.RowCommand
         If e.CommandName <> "DeleteRow" Then Exit Sub
@@ -283,48 +250,11 @@ Partial Class PaymentSchedule
         lblScheduleMessage.Visible = False
     End Sub
 
-    '''' <summary>
-    '''' Collects every Title currently in GridView2, so AddFormula.aspx can check
-    '''' against them (e.g. to block adding a duplicate).
-    '''' </summary>
-    'Private Function GetExistingTitles() As List(Of String)
-    '    Dim titles As New List(Of String)
-    '    Dim dt As DataTable = GridView2Data
-    '    If dt IsNot Nothing Then
-    '        For Each row As DataRow In dt.Rows
-    '            titles.Add(Convert.ToString(row("Title")))
-    '        Next
-    '    End If
-    '    Return titles
-    'End Function
-
-    '''' <summary>Runs when AddFormula closes: appends the row it returned (key "OnePayment").</summary>
-    'Protected Sub btnAddExpRdc_Click(sender As Object, e As EventArgs) Handles btnAddExpRdc.Click
-    '    Dim returnValue As Object = VendorPopupHelper.GetPopupReturnValue(Me, "OnePayment")
-    '    If returnValue Is Nothing Then Exit Sub
-
-    '    Dim selectedRow As DataRow = TryCast(returnValue, DataRow)
-    '    If selectedRow Is Nothing Then Exit Sub
-
-    '    Dim dt As DataTable = GridView2Data
-    '    If dt Is Nothing Then
-    '        ' First item added - start a new table with the same columns as the
-    '        ' popup's row, but none of its other rows.
-    '        dt = selectedRow.Table.Clone()
-    '    End If
-
-    '    dt.ImportRow(selectedRow)
-    '    BindGrid(dt)
-    '    ShowScheduleMessage("", True)
-    'End Sub
-
     ''' <summary>
     ''' Save, by option:
-    '''   Add New : creates the plan in UNITSHUB_PAYMENTPLAN (PLAN_ID = next in line,
-    '''             NAME = "New plan name"), then saves the grid as its lines.
+    '''   Add New : creates the plan (next PLAN_ID, NAME = "New plan name") and its lines.
     '''   Edit    : saves the grid as the selected plan's lines (the old lines are closed).
-    '''   Copy    : like Add New, with the lines shown in the grid - the copied plan's
-    '''             lines, plus any changes made to them.
+    '''   Copy    : like Add New, with the lines shown in the grid.
     ''' Afterwards the plan is shown in Edit mode.
     ''' </summary>
     Protected Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
@@ -363,17 +293,19 @@ Partial Class PaymentSchedule
             End If
         Next
 
+        Dim lineCount As String = dt.Rows.Count & If(dt.Rows.Count = 1, " line", " lines")
+
         ' --- Edit: replace the selected plan's lines ---
         If mode = "Edit" Then
             Dim planId As String = ddlExistingPlan.SelectedValue
+            Dim planName As String = ddlExistingPlan.SelectedItem.Text
             Dim problem As String = SavePlanLines(planId, dt)
             If problem <> "" Then
                 ShowScheduleMessage(problem, False)
                 Exit Sub
             End If
             LoadPlanDetails(planId)
-            ShowScheduleMessage(dt.Rows.Count & If(dt.Rows.Count = 1, " line", " lines") &
-                                " saved for " & ddlExistingPlan.SelectedItem.Text & ".", True)
+            ShowScheduleMessage(lineCount & " saved for " & planName & ".", True)
             Exit Sub
         End If
 
@@ -408,18 +340,17 @@ Partial Class PaymentSchedule
         ddlExistingPlan.SelectedValue = newPlanId
         txtNewPlanName.Text = ""
         LoadPlanDetails(newPlanId)
-        ShowScheduleMessage("Plan '" & newName & "' created (ID " & newPlanId & ") with " &
-                            dt.Rows.Count & If(dt.Rows.Count = 1, " line", " lines") & copiedFrom & ".", True)
+        ShowScheduleMessage("Plan '" & newName & "' created (ID " & newPlanId & ") with " & lineCount & copiedFrom & ".", True)
     End Sub
 
     ''' <summary>
     ''' Writes the grid as a plan's lines in UNITSHUB_PAYMENTPLANDETAILS:
     '''   DETAIL_ID = the row's # (1, 2, 3 ...), PLAN_ID = PlanId,
     '''   DESCRIPTION / FORMULA = the grid's columns,
-    '''   START_FROM = now in Unix seconds (UTC, the same for every row), END_IN = empty.
-    ''' Then the plan's previously active lines (END_IN empty) are closed with END_IN = the
-    ''' same moment. If an insert fails, this save's rows are removed and the old lines stay
-    ''' as they were. Returns "" when all went well, otherwise what went wrong.
+    '''   START_FROM = now in Unix seconds (UTC, same for every row), END_IN = NULL.
+    ''' Then the plan's previously active lines are closed with END_IN = the same moment.
+    ''' If an insert fails, this save's rows are removed and the old lines stay as they were.
+    ''' Returns "" when all went well, otherwise what went wrong.
     ''' </summary>
     Private Function SavePlanLines(PlanId As String, dt As DataTable) As String
         Dim safePlan As String = PlanId.Replace("'", "''")
@@ -449,10 +380,11 @@ Partial Class PaymentSchedule
             Return "The lines couldn't be saved (nothing was changed): " & ex.Message
         End Try
 
+        ' Close the previous active lines (same "active" rule as LoadPlanDetails)
         Try
             DB.ExecuteNonQuery(EBDB_CS,
                 "UPDATE UNITSHUB_PAYMENTPLANDETAILS SET END_IN = '" & startFrom & "' " &
-                "WHERE PLAN_ID = '" & safePlan & "' AND END_IN IS NULL " &
+                "WHERE PLAN_ID = '" & safePlan & "' AND " & ActiveLineCondition() & " " &
                 "AND (START_FROM IS NULL OR START_FROM <> '" & startFrom & "')")
         Catch ex As Exception
             Return "The new lines were saved, but the previous ones couldn't be closed: " & ex.Message

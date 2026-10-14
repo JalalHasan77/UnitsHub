@@ -1,8 +1,8 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="PaymentSchedule.aspx.vb" Inherits="PaymentSchedule" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
+<%@ Page Language="VB" AutoEventWireup="false" CodeFile="PaymentSchedule.aspx.vb" Inherits="PaymentSchedule" MaintainScrollPositionOnPostback="true" EnableEventValidation="false" %>
 
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head runat="server">
-    <title>Link Payment</title>
+    <title>Payment Schedule</title>
     <style type="text/css">
         *, ::after, ::before { box-sizing: border-box; }
 
@@ -15,12 +15,12 @@
             --bg: #eef1f8;
         }
 
-html, body, form {
-    width: 100%;
-    min-height: 100%;
-    margin: 0;
-    padding: 0;
-}
+        html, body, form {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            padding: 0;
+        }
 
         body {
             margin: 0;
@@ -28,7 +28,7 @@ html, body, form {
             background: var(--bg);
             color: var(--ink);
             font-family: Arial, 'Segoe UI', sans-serif;
-                min-height: 100vh;
+            min-height: 100vh;
         }
 
         .top-strip {
@@ -70,24 +70,23 @@ html, body, form {
             height: 20px;
         }
 
+        .page-container {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 0;
+        }
 
+        .reserve-card {
+            width: 100%;
+            min-height: calc(100vh - 58px);
+            margin: 0;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 28px 32px 30px;
+        }
 
-.page-container {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-}
-
-.reserve-card {
-    width: 100%;
-    min-height: calc(100vh - 58px);
-    margin: 0;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 28px 32px 30px;
-}
         .page-title {
             margin: 0 0 24px 0;
             font-size: 22px;
@@ -122,8 +121,6 @@ html, body, form {
             margin-bottom: 8px;
         }
 
-        /* Payments: "Payments:" (left) and "Link a payment" (right) on one line,
-           the grid underneath using the full width - no label column on the left */
         .payments-section {
             margin-bottom: 18px;
         }
@@ -142,8 +139,6 @@ html, body, form {
             color: var(--ink);
         }
 
-        /* Disabled links (Enabled = False renders class "aspNetDisabled"): grey, and
-           not clickable at all, so no script attached to them can run */
         .grid-link.aspNetDisabled,
         .grid-link[disabled] {
             color: var(--muted);
@@ -281,8 +276,7 @@ html, body, form {
             }
         }
 
-
-        /* ---------- Payment schedule (controls from SetupPaymentSchedule) ---------- */
+        /* ---------- Payment schedule ---------- */
         .select-input {
             width: 100%;
             max-width: 360px;

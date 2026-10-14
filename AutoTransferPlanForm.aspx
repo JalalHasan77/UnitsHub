@@ -1,4 +1,4 @@
-﻿<%@ Page Language="VB" AutoEventWireup="false" CodeFile="AutoTransferPlanForm.aspx.vb" Inherits="AutoTransferPlanForm" %>
+<%@ Page Language="VB" AutoEventWireup="false" CodeFile="AutoTransferPlanForm.aspx.vb" Inherits="AutoTransferPlanForm" %>
 
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -93,11 +93,22 @@
             font-size: 14px;
             font-family: inherit;
             color: var(--ink);
+            background: #ffffff;
         }
 
         .txt-input:focus { outline: none; border-color: var(--brand-1); }
+        select.txt-input:disabled { background: #f8fafc; color: var(--muted); cursor: not-allowed; }
 
         .field-label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+
+        /* Plan card: Plan name | Account group */
+        .plan-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 12px;
+            align-items: start;
+        }
+        .plan-row > div { min-width: 0; }
 
         .mini-form-row {
             display: grid;
@@ -106,13 +117,15 @@
             align-items: end;
         }
 
+        /* Account (from the plan's account group) | System | Debit | Credit | + */
         .detail-mini-form-row {
             display: grid;
-            grid-template-columns: 1.4fr 1fr 1fr 0.7fr 1fr 0.7fr 0.7fr auto;
+            grid-template-columns: 2.6fr 1fr 0.7fr 0.7fr auto;
             gap: 8px;
             align-items: end;
             padding: 12px 0 4px 0;
         }
+        .detail-mini-form-row > div { min-width: 0; }
 
         .btn {
             padding: 9px 16px;
@@ -207,12 +220,13 @@
         .detail-table td.num { text-align: right; }
 
         .row-actions { white-space: nowrap; }
-        .row-actions button {
+        .row-actions a {
+            display: inline-block;
             border: none; background: none; cursor: pointer; color: var(--muted);
-            font-size: 13px; padding: 0 3px;
+            font-size: 13px; padding: 2px 4px; text-decoration: none;
         }
-        .row-actions button:hover { color: var(--brand-1); }
-        .row-actions button.danger:hover { color: #dc2626; }
+        .row-actions a:hover { color: var(--brand-1); }
+        .row-actions a.danger:hover { color: #dc2626; }
 
         .detail-mini-form { padding: 4px 16px 14px 16px; }
 
@@ -233,6 +247,7 @@
             border: 1px solid #a7f3d0;
             font-size: 13.5px;
         }
+        .msg-success:empty { display: none; }
 
         .empty-hint { color: var(--muted); font-size: 13px; padding: 6px 0; }
 
@@ -279,11 +294,20 @@
         .mode-row > div { min-width: 0; }
 
         .msg-error { display: block; margin-top: 10px; color: #dc2626; font-size: 13px; }
+        .msg-error:empty { display: none; }
+
+        @media (max-width: 700px) {
+            .plan-row, .detail-mini-form-row { grid-template-columns: 1fr; }
+        }
 
     </style>
 </head>
 <body>
     <form id="form1" runat="server">
+        <%-- Changes on every page load; a click from an out-of-date page (double-click,
+             refresh/"Resend", Back) carries an old value and is ignored, so it can't add a row twice --%>
+        <asp:HiddenField ID="hdnPostToken" runat="server" />
+
         <div class="page-header">
             <h1 class="page-title"><asp:Label ID="lblFormTitle" runat="server" Text="Add Auto-Transfer Plan" /></h1>
             <asp:ImageButton ID="imgClose"
@@ -335,10 +359,21 @@
 
             <div class="content-card">
                 <div class="section-label">Plan (entered once)</div>
-                <span class="field-label">Plan name</span>
-                <asp:TextBox ID="txtPlanName" runat="server" CssClass="txt-input" placeholder="e.g. Sales team to process the entries in dedicated screens in ICBS" />
-                <asp:RequiredFieldValidator ID="rfvPlanName" runat="server" ControlToValidate="txtPlanName"
-                    ErrorMessage="Plan name is required." Display="Dynamic" ForeColor="#dc2626" Font-Size="12.5px" />
+                <div class="plan-row">
+                    <div>
+                        <span class="field-label">Plan name</span>
+                        <asp:TextBox ID="txtPlanName" runat="server" CssClass="txt-input" placeholder="e.g. Sales team to process the entries in dedicated screens in ICBS" />
+                        <asp:RequiredFieldValidator ID="rfvPlanName" runat="server" ControlToValidate="txtPlanName"
+                            ErrorMessage="Plan name is required." Display="Dynamic" ForeColor="#dc2626" Font-Size="12.5px" />
+                    </div>
+                    <div>
+                        <span class="field-label">Account group</span>
+                        <%-- Its accounts fill every group's "Account" dropdown below --%>
+                        <asp:DropDownList ID="ddlAccountGroup" runat="server" CssClass="txt-input"
+                            AutoPostBack="true" CausesValidation="false"
+                            OnSelectedIndexChanged="ddlAccountGroup_SelectedIndexChanged" />
+                    </div>
+                </div>
             </div>
 
             <div class="content-card">
@@ -399,7 +434,7 @@
                                             <td class="row-actions">
                                                 <asp:LinkButton ID="lnkMoveUp" runat="server" CommandName="MoveDetailUp" CommandArgument='<%# Eval("DetailId") %>' CausesValidation="false" ToolTip="Move up">&#9650;</asp:LinkButton>
                                                 <asp:LinkButton ID="lnkMoveDown" runat="server" CommandName="MoveDetailDown" CommandArgument='<%# Eval("DetailId") %>' CausesValidation="false" ToolTip="Move down">&#9660;</asp:LinkButton>
-                                                <asp:LinkButton ID="lnkRemoveDetail" runat="server" CssClass="danger" CommandName="RemoveDetail" CommandArgument='<%# Eval("DetailId") %>' CausesValidation="false" ToolTip="Remove row">&#10005;</asp:LinkButton>
+                                                <asp:LinkButton ID="lnkRemoveDetail" runat="server" CssClass="danger" CommandName="RemoveDetail" CommandArgument='<%# Eval("DetailId") %>' CausesValidation="false" ToolTip="Remove row" OnClientClick="return confirm('Remove this row?');">&#10005;</asp:LinkButton>
                                             </td>
                                         </tr>
                                 </ItemTemplate>
@@ -408,12 +443,11 @@
                                 </FooterTemplate>
                             </asp:Repeater>
 
+                            <%-- Add row: the account comes from the plan's Account group (shown as "Account (Account no.)");
+                                 its Account, Escrow type, Account no. and Branch go into the row as they are --%>
                             <div class="detail-mini-form">
                                 <div class="detail-mini-form-row">
-                                    <div><span class="field-label">Account</span><asp:TextBox ID="txtAccountDescription" runat="server" CssClass="txt-input" /></div>
-                                    <div><span class="field-label">Escrow type</span><asp:TextBox ID="txtTypeOfEscrow" runat="server" CssClass="txt-input" /></div>
-                                    <div><span class="field-label">Account no.</span><asp:TextBox ID="txtAccountNumber" runat="server" CssClass="txt-input" /></div>
-                                    <div><span class="field-label">Branch</span><asp:TextBox ID="txtBranch" runat="server" CssClass="txt-input" /></div>
+                                    <div><span class="field-label">Account</span><asp:DropDownList ID="ddlAccount" runat="server" CssClass="txt-input" /></div>
                                     <div><span class="field-label">System</span><asp:TextBox ID="txtSystemName" runat="server" CssClass="txt-input" /></div>
                                     <div><span class="field-label">Debit</span><asp:TextBox ID="txtDebit" runat="server" CssClass="txt-input" /></div>
                                     <div><span class="field-label">Credit</span><asp:TextBox ID="txtCredit" runat="server" CssClass="txt-input" /></div>
